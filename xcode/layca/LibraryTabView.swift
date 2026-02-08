@@ -12,18 +12,18 @@ struct LibraryTabView: View {
                 LiquidBackdrop()
                     .ignoresSafeArea()
 
-                VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Library")
-                            .font(.system(size: 30, weight: .bold, design: .rounded))
-                            .foregroundStyle(.black.opacity(0.9))
-                        Text("Switch and load saved chat sessions")
-                            .font(.subheadline)
-                            .foregroundStyle(.black.opacity(0.6))
-                    }
-
-                    ScrollView(showsIndicators: false) {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 14) {
+                        libraryHeader
                         VStack(spacing: 10) {
+                            if sessions.isEmpty {
+                                Text("No sessions yet")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.black.opacity(0.55))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.vertical, 4)
+                            }
+
                             ForEach(sessions) { session in
                                 Button {
                                     onSelectSession(session)
@@ -36,14 +36,28 @@ struct LibraryTabView: View {
                                 .buttonStyle(.plain)
                             }
                         }
+                        .padding(18)
+                        .liquidCard()
                     }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 18)
+                    .padding(.bottom, 30)
                 }
-                .padding(18)
-                .liquidCard()
-                .padding(.horizontal, 18)
             }
             .navigationBarHidden(true)
         }
+    }
+
+    private var libraryHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Library")
+                .font(.system(size: 36, weight: .bold, design: .rounded))
+                .foregroundStyle(.black.opacity(0.9))
+            Text("Switch and load saved chat sessions")
+                .font(.subheadline)
+                .foregroundStyle(.black.opacity(0.6))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var backgroundGradient: some View {

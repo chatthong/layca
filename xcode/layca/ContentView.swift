@@ -9,7 +9,6 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var isRecording = false
-    @State private var modelProgress = 0.68
     @State private var isExportPresented = false
 
     @State private var selectedLanguageCodes: Set<String> = ["en", "th"]
@@ -44,11 +43,11 @@ struct ContentView: View {
                 Tab("Chat", systemImage: "bubble.left.and.bubble.right.fill", value: AppTab.chat) {
                     ChatTabView(
                         isRecording: $isRecording,
-                        modelProgress: modelProgress,
                         activeSessionTitle: activeSessionTitle,
                         activeSessionDateText: activeSessionDateText,
                         liveChatItems: liveChatItems,
-                        onExportTap: { isExportPresented = true }
+                        onExportTap: { isExportPresented = true },
+                        onRenameSessionTitle: renameActiveSessionTitle
                     )
                 }
 
@@ -169,6 +168,21 @@ private extension ContentView {
     func activateSession(_ session: ChatSession) {
         activeSessionID = session.id
         liveChatItems = session.rows
+    }
+
+    func renameActiveSessionTitle(_ newTitle: String) {
+        let trimmedTitle = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else {
+            return
+        }
+        guard let activeSessionID else {
+            return
+        }
+        guard let index = sessions.firstIndex(where: { $0.id == activeSessionID }) else {
+            return
+        }
+
+        sessions[index].title = trimmedTitle
     }
 
     var activeSessionTitle: String {
@@ -427,7 +441,7 @@ struct LiquidBackdrop: View {
 
 struct ChatSession: Identifiable {
     let id: UUID
-    let title: String
+    var title: String
     let createdAt: Date
     let rows: [TranscriptRow]
 

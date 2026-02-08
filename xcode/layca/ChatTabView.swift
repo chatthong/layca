@@ -3,11 +3,15 @@ import SwiftUI
 struct ChatTabView: View {
     @Binding var isRecording: Bool
 
-    let modelProgress: Double
     let activeSessionTitle: String
     let activeSessionDateText: String
     let liveChatItems: [TranscriptRow]
     let onExportTap: () -> Void
+    let onRenameSessionTitle: (String) -> Void
+
+    @State private var titleDraft = ""
+    @State private var isEditingTitle = false
+    @FocusState private var isTitleFieldFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -34,6 +38,14 @@ struct ChatTabView: View {
                     .padding(.bottom, 10)
             }
         }
+        .onAppear {
+            titleDraft = activeSessionTitle
+        }
+        .onChange(of: activeSessionTitle) { _, newTitle in
+            if !isEditingTitle {
+                titleDraft = newTitle
+            }
+        }
     }
 
     private var backgroundGradient: some View {
@@ -51,15 +63,7 @@ struct ChatTabView: View {
 
     private var topToolbar: some View {
         HStack {
-            HStack(spacing: 8) {
-                Image(systemName: "bubble.left.and.bubble.right.fill")
-                Text(activeSessionTitle)
-                    .fontWeight(.semibold)
-            }
-            .font(.subheadline)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .glassCapsuleStyle()
+            sessionTitleControl
 
             Spacer()
 
@@ -76,6 +80,51 @@ struct ChatTabView: View {
             )
             .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 6)
         }
+    }
+
+    private var sessionTitleControl: some View {
+        Group {
+            if isEditingTitle {
+                HStack(spacing: 8) {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                        .foregroundStyle(.black.opacity(0.85))
+
+                    TextField("Chat name", text: $titleDraft)
+                        .textFieldStyle(.plain)
+                        .font(.subheadline.weight(.semibold))
+                        .submitLabel(.done)
+                        .focused($isTitleFieldFocused)
+                        .onSubmit {
+                            commitTitleRename()
+                        }
+
+                    Button(action: commitTitleRename) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green.opacity(0.9))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: cancelTitleRename) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.black.opacity(0.48))
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                Button(action: beginTitleRename) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                        Text(activeSessionTitle)
+                            .fontWeight(.semibold)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .glassCapsuleStyle()
     }
 
     private var recorderCard: some View {
@@ -99,14 +148,6 @@ struct ChatTabView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            HStack {
-                Text("Large v3 Turbo")
-                Spacer()
-                Text("\(Int(modelProgress * 100))% ready")
-            }
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.black.opacity(0.50))
         }
         .padding(16)
         .background(
@@ -308,5 +349,38 @@ struct ChatTabView: View {
         Text(item.time)
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.black.opacity(0.43))
+    }
+
+    private func beginTitleRename() {
+        titleDraft = activeSessionTitle
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.86)) {
+            isEditingTitle = true
+        }
+        DispatchQueue.main.async {
+            isTitleFieldFocused = true
+        }
+    }
+
+    private func commitTitleRename() {
+        let trimmedTitle = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTitle.isEmpty {
+            onRenameSessionTitle(trimmedTitle)
+            titleDraft = trimmedTitle
+        } else {
+            titleDraft = activeSessionTitle
+        }
+
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.86)) {
+            isEditingTitle = false
+        }
+        isTitleFieldFocused = false
+    }
+
+    private func cancelTitleRename() {
+        titleDraft = activeSessionTitle
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.86)) {
+            isEditingTitle = false
+        }
+        isTitleFieldFocused = false
     }
 }
