@@ -7,20 +7,24 @@
 
 ## High-Level Modules
 1. App Shell (SwiftUI)
-2. Session Recorder (`AVAudioRecorder`)
-3. Audio Processor (decode/resample to 16kHz mono PCM)
-4. Transcription Engine (`whisper.cpp` wrapper)
-5. Transcript Mapper (segment offsets to absolute timeline)
-6. Storage Layer (SwiftData + Filesystem)
-7. Playback + Export Layer (`AVPlayer` and Share Sheet)
+2. Navigation Layer (native grouped tab bar)
+3. Session Recorder (`AVAudioRecorder`)
+4. Audio Processor (decode/resample to 16kHz mono PCM)
+5. Transcription Engine (`whisper.cpp` wrapper)
+6. Transcript Mapper (segment offsets to absolute timeline)
+7. Storage Layer (SwiftData + Filesystem)
+8. Playback + Export Layer (`AVPlayer` and Share Sheet)
 
 ## Data Flow
 1. User starts recording.
 2. Audio is written to `full_recording.m4a` and buffered in PCM chunks.
 3. PCM chunks are passed to Whisper for segment generation.
 4. Segments are normalized and persisted to local database and JSON snapshot.
-5. UI consumes normalized segments for Chat and Notepad views.
-6. Tap on segment seeks to corresponding audio offset in master recording.
+5. Chat UI consumes normalized segments for timeline review.
+6. Native grouped tab bar routes to Chat, Setting, Library, and New Chat action tab.
+7. Export action is available from the Chat header icon (top-right).
+8. Tap on segment seeks to corresponding audio offset in master recording.
+9. Export pipeline can transform transcript into Notepad-style document formats.
 
 ## Folder Layout (Proposed)
 ```text

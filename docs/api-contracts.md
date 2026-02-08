@@ -29,5 +29,8 @@ Stops active playback.
 ### exportTranscript(sessionID: UUID, format: ExportFormat) -> URL
 Generates local export file and returns shareable URL.
 
+### exportTranscriptWithStyle(sessionID: UUID, format: ExportFormat, style: ExportStyle) -> URL
+Generates transcript export with style presets (for example: `chat`, `notepadMinutes`).
+
 ### exportAudio(sessionID: UUID) -> URL
 Returns URL for master audio recording.

@@ -27,4 +27,4 @@
 
 ## Export
 - Full session audio export: share `full_recording.m4a`.
-- Transcript export: markdown/pdf/text with optional timestamps.
+- Transcript export: markdown/pdf/text with optional timestamps and Notepad-style formatting preset.

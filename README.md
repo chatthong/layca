@@ -16,7 +16,7 @@
 **Key Differentiators:**
 
 1. **Tiny App Store Footprint:** The app installs quickly (<50MB). The heavy AI Brain (1.8GB) is downloaded by the user only when they are ready.
-2. **Dual-View Interface:** Switch instantly between a **"Group Chat"** view (who said what) and a **"Notepad"** view (clean text for editing).
+2. **Chat-First Simplicity:** A single **"Group Chat"** style experience with native grouped tab navigation.
 3. **Audio Sync:** Tap any sentence to hear exactly what was said at that moment.
 
 ---
@@ -56,25 +56,35 @@ Documents/
 
 ---
 
-## 3. UI/UX Strategy: "The Switch" 🔀
-
-Layca features a toggle at the top of the session view to switch modes instantly.
+## 3. UI/UX Strategy: Chat-First 💬
 
 ### Mode A: "Group Chat" Style (The Default) 💬
 
-- **Visual:** Bubbles (Left/Right aligned based on Speaker ID).
+- **Visual:** Bubbles aligned for speakers (simple transcript timeline).
 - **Interaction:**
   - **Tap-to-Play:** Tapping a bubble plays the specific audio slice for that sentence.
-  - **Export:** Export single bubble audio or text.
+  - **New Chat:** Start a fresh chat/session from the tab bar action tab.
+  - **Export Icon (Top Right):** Quick export action beside the active chat badge.
+  - **Setting / Library:** Access model management and session switching from the tab bar.
 - **Use Case:** Reviewing who said what, resolving arguments, checking translations.
 
-### Mode B: "Notepad" Style (The Editor) 📝
+### Navigation: Native Grouped Tab Bar
 
-- **Visual:** A continuous rich text document (like Apple Notes).
-- **Interaction:**
-  - Text is editable (fix typos, bold key points).
-  - Timestamps are hidden or small markers in the margin.
-- **Use Case:** Creating Meeting Minutes, copying to email, summarizing.
+- **Group 1:** `Chat`, `Setting`, `Library`
+- **Group 2:** `New Chat` (special role tab in a separate right-side group)
+- **Header Action:** `Export` icon at top-right of Chat screen (next to active chat badge)
+- **Note:** On some device sizes, iOS may render the special-role tab as icon-focused even when a title is provided.
+
+### Library (Session Switch)
+
+- `Library` shows saved chat sessions.
+- Tapping a session loads it directly into `Chat`.
+- `New Chat` creates a fresh session and returns focus to `Chat`.
+
+### Export-Only Notepad Style 📝
+
+- Notepad formatting is available **only during export** (Markdown/PDF/Text templates).
+- The in-app experience remains chat-only to keep navigation simple.
 
 ---
 
@@ -127,9 +137,9 @@ Layca features a toggle at the top of the session view to switch modes instantly
 
 ### Phase 3: The UI Polish (Skin) 🎨
 
-- [ ] **Dual Views:** Build `ChatView` and `NoteView` and the toggle logic.
+- [ ] **Chat Experience:** Polish chat timeline, speaker chips, and "New Chat" flow.
 - [ ] **Speaker Labels:** Simple "Speaker A/B" assignment.
-- [ ] **Export:** Generate a PDF or Markdown file from the Notepad view.
+- [ ] **Export:** Generate PDF/Markdown/Text with optional Notepad-style formatting templates.
 
 ---
 
@@ -158,4 +168,6 @@ func downloadBrain() {
 - [Model Management](docs/model-management.md)
 - [Audio Pipeline](docs/audio-pipeline.md)
 - [API Contracts](docs/api-contracts.md)
+- [Tab Navigation](docs/tab-navigation.md)
+- [Export Notepad Style](docs/export-notepad-style.md)
 - [Roadmap](docs/roadmap.md)

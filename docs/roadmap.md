@@ -11,9 +11,11 @@
 - Build playback seek-to-segment behavior.
 
 ## Phase 3 - UX Polish
-- Build Chat and Notepad dual-mode views.
+- Polish Chat timeline and grouped native tab-bar flow.
+- Add Library session switch list and fast chat loading.
+- Keep New Chat as separate special-role tab action.
 - Add basic speaker labeling and editing actions.
-- Add transcript/audio export options.
+- Add transcript/audio export options with Notepad-style export templates.
 
 ## Phase 4 - Quality + Hardening
 - Failure recovery for interrupted sessions.
