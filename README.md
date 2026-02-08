@@ -3,179 +3,158 @@
 > **The Ultimate Offline Polyglot Meeting Secretary**
 
 **Project Codename:** `Layca-Core`  
-**Version:** 0.2.0 (Refined Architecture)  
+**Version:** 0.3.0 (Dynamic Pipeline + Model Catalog Update)  
 **Platforms:** iOS, iPadOS, tvOS, visionOS  
-**Core Philosophy:** 100% Offline (after setup), Privacy First, "Simple Stack"
+**Core Philosophy:** Offline-first after model setup, privacy-first, chat-first UX
 
 ---
 
 ## 1. Executive Summary 🚀
 
-**Layca** (pun on Thai word "Le-kha/เลขา") is a native Apple ecosystem app designed to record, transcribe, and organize multi-language meetings.
+**Layca** is a native Apple app for recording meetings, generating transcripts, and reviewing them in a chat-style timeline.
 
 **Key Differentiators:**
 
-1. **Tiny App Store Footprint:** The app installs quickly (<50MB). The heavy AI Brain (1.8GB) is downloaded by the user only when they are ready.
-2. **Chat-First Simplicity:** A single **"Group Chat"** style experience with native grouped tab navigation.
-3. **Audio Sync:** Tap any sentence to hear exactly what was said at that moment.
+1. **Tiny install + on-demand AI model:** App stays light; model files are installed later.
+2. **Chat-first review:** Transcript appears as speaker bubbles in one timeline.
+3. **Audio-linked workflow:** Session audio is stored with transcript metadata for playback/export flows.
 
 ---
 
-## 2. Tech Stack (The "Easy Dev" Stack) 🛠️
+## 2. Tech Stack 🛠️
 
 ### A. Core Engine & Model Strategy
 
-- **Inference:** `whisper.cpp` (Swift Package).
-- **Model Management (On-Demand):**
-  - **Target Model:** `ggml-large-v3-turbo-q8_0.bin` (~1.8 GB).
-  - **Logic:** The app ships *without* the model. On first launch, the `ModelManager` downloads the `.bin` and `.mlmodelc` files from a remote source (e.g., Hugging Face or S3) to the user's `Library/Application Support` directory.
-  - **Fallback:** Users can choose smaller models (Base/Small) if they have low storage.
+- **Inference target:** `whisper.cpp` integration path (current backend uses simulation hooks).
+- **Dynamic model catalog (from Settings):**
+  - **Normal AI**
+    - file: `ggml-large-v3-turbo-q8_0.bin`
+    - URL: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin?download=true`
+  - **Light AI**
+    - file: `ggml-large-v3-turbo-q5_0.bin`
+    - URL: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin?download=true`
+  - **High Detail AI**
+    - file: `ggml-large-v3-turbo.bin`
+    - URL: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true`
+- **Model resolution path:** `Documents/Models/`
+- **Pre-flight behavior:** selected model is validated before recording; missing model can fallback to installed model or block recording.
 
-### B. Audio Stack (The Native Apple Way) 🍏
+### B. Audio Stack
 
-- **Recorder:** `AVAudioRecorder`.
-  - **Format:** High-Efficiency AAC (`.m4a`) or ALAC for storage (saves space).
-  - **Processing:** Decode audio to PCM 16kHz 16-bit Mono on-the-fly for Whisper consumption.
-- **Playback:** `AVAudioPlayer` / `AVPlayer` with seeking capabilities.
+- **Current backend:** Dynamic live pipeline simulator for waveform, VAD-like chunking, transcript merge, and persistence.
+- **Planned production stack:**
+  - `AVAudioEngine` for live input + waveform stream
+  - VAD (Silero or equivalent) for chunk boundary detection
+  - Whisper inference on chunked PCM
 
 ### C. Data Layer
 
-- **Persistence:** `SwiftData` (iOS 17+).
-- **Storage Structure:**
+- **Current runtime persistence:** actor-based `SessionStore` + filesystem.
+- **Planned long-term persistence:** `SwiftData`.
 
 ```text
 Documents/
-├── Models/                 <-- Downloaded AI Brains live here
+├── Models/
 │   ├── ggml-large-v3-turbo-q8_0.bin
-│   └── coreml-encoder/
-├── Sessions/
-│   ├── {UUID}/
-│   │   ├── full_recording.m4a  <-- The Master Audio
-│   │   └── segments.json       <-- Metadata (timestamps)
+│   ├── ggml-large-v3-turbo-q5_0.bin
+│   └── ggml-large-v3-turbo.bin
+└── Sessions/
+    └── {UUID}/
+        ├── session_full.m4a
+        └── segments.json
 ```
 
 ---
 
 ## 3. UI/UX Strategy: Chat-First 💬
 
-### Mode A: "Group Chat" Style (The Default) 💬
-
-- **Visual:** Bubbles aligned for speakers (simple transcript timeline).
-- **Interaction:**
-  - **Tap-to-Play:** Tapping a bubble plays the specific audio slice for that sentence.
-  - **New Chat:** Start a fresh chat/session from the tab bar action tab.
-  - **Export Icon (Top Right):** Quick export action beside the active chat badge.
-  - **Setting / Library:** Access model management and session switching from the tab bar.
-- **Use Case:** Reviewing who said what, resolving arguments, checking translations.
-
-### Navigation: Native Grouped Tab Bar
-
-- **Group 1:** `Chat`, `Setting`, `Library`
-- **Group 2:** `New Chat` (special role tab in a separate right-side group)
-- **Header Action:** `Export` icon at top-right of Chat screen (next to active chat badge)
-- **Note:** On some device sizes, iOS may render the special-role tab as icon-focused even when a title is provided.
-
-### Tab Component Split
-
-- `ContentView`: app-level state coordinator and tab routing.
-- `ChatTabView`: chat timeline, recording card, transcript list, export trigger.
-- `SettingTabView`: hours credit, language focus, model selection/download, iCloud and restore purchase card.
-- `LibraryTabView`: session list and active-chat switching.
-
-### Library (Session Switch)
-
-- `Library` shows saved chat sessions.
-- Tapping a session loads it directly into `Chat`.
-- `New Chat` creates a fresh session and returns focus to `Chat`.
-
-### Setting Highlights
-
-- **Language Focus:** multi-select list with search and compact scroll area.
-- **Model Change:** single active model with download status/loading indicator.
-- **Hours Credit:** top card shows hour balance/usage.
-- **iCloud & Purchases:** sync toggle and restore purchases action.
-
-### Export-Only Notepad Style 📝
-
-- Notepad formatting is available **only during export** (Markdown/PDF/Text templates).
-- The in-app experience remains chat-only to keep navigation simple.
+- **Chat tab:** Recorder card + live transcript bubbles.
+- **Header:** Active chat title supports inline rename.
+- **Setting tab:** Hours credit, language focus, model selection/download state, iCloud toggle.
+- **Library tab:** Session switcher.
+- **New Chat tab role:** Action tab to create a fresh session and return to Chat.
+- **Export:** Separate sheet; Notepad-style formatting is export-only.
 
 ---
 
 ## 4. Architecture & Workflow 🌭
 
-### Phase 1: Native Recording (The Input)
+### Phase 1: Pre-Flight
 
-1. **User taps Record:**
-   - `AVAudioRecorder` starts saving to `Documents/Sessions/{UUID}/full_recording.m4a`.
-   - **Constraint:** Use iOS Background Modes (Audio) to ensure recording continues even if the screen is locked.
+1. Check credit balance.
+2. Resolve selected model from dynamic catalog.
+3. Validate installed model path in `Documents/Models/`.
+4. Build language prompt from Language Focus.
 
-### Phase 2: The "Sausage Slicer" (Processing)
+### Phase 2: Live Pipeline (Concurrent)
 
-*Since we need to match audio to chat, we cannot just feed the stream blindly.*
+1. **Track 1: Input + Waveform**
+   - Capture stream, emit waveform ticks (~0.05s).
+   - Keep session master audio file (`session_full.m4a`).
+2. **Track 2: VAD slicer**
+   - Detect speech/silence, cut chunk after sustained silence.
+3. **Track 3: Dual AI branch**
+   - Branch A: transcription + language ID.
+   - Branch B: speaker matching / new speaker assignment.
+4. **Track 4: Merger**
+   - Merge branch results into one transcript item.
 
-1. **Buffer Handling:**
-   - Monitor the `AVAudioRecorder` input tap.
-   - Buffer audio data (PCM) in memory (e.g., every 30 seconds or on VAD silence).
-2. **Transcription:**
-   - Pass the PCM buffer to **Whisper Large v3 Turbo (Q8)**.
-   - **Important:** Whisper returns `segments` with `startTime` and `endTime`.
-   - **Offset Math:** Add the `SessionStartTime` to the `SegmentTime` to get the absolute timestamp in the master audio file.
-3. **Saving:**
-   - Create a `TranscriptSegment` object:
-     - `text`: "Hello world"
-     - `audioStartOffset`: 10.5 (seconds)
-     - `audioEndOffset`: 12.0 (seconds)
-     - `speakerID`: "Speaker A"
+### Phase 3: Persist + Reactive UI
 
-### Phase 3: Playback & Export
-
-- **Audio Match:** When user taps a chat bubble -> `player.currentTime = segment.audioStartOffset` -> `player.play()`.
-- **Full Download:** User can share the `.m4a` file directly via AirDrop/Share Sheet.
+1. Append transcript into store.
+2. UI updates bubbles reactively.
+3. Deduct used credit by chunk duration.
+4. Optional sync hook runs in background.
 
 ---
 
-## 5. Development Roadmap 🗺️
+## 5. Current Implementation Status 🗺️
 
-### Phase 1: The Foundation (Skeleton) 🦴
+### Implemented
 
-- [ ] **Model Downloader:** Create a download manager with a progress bar. (Don't let the user record until the brain is installed).
-- [ ] **Native Recorder:** Setup `AVAudioRecorder` with background execution permissions.
-- [ ] **File System:** Logic to create session folders and save `.m4a` files.
+#### Dynamic Pre-Flight Backend (Credits + Model Readiness + Language Prompt)
+- `AppBackend.swift`
+- `ModelManager` resolves model `.bin` paths in `Documents/Models/`, tracks installed/loaded models, and supports fallback model selection.
+- `PreflightService` checks remaining credit and builds prompt text like `This is a meeting in English, Thai.`.
 
-### Phase 2: The Brain & Sync (Core) 🧠
+#### Live Pipeline Backend (4-Track Style, Concurrent)
+- `AppBackend.swift`
+- `LiveSessionPipeline` actor emits:
+  - waveform updates (visualizer timing)
+  - VAD-like chunking behavior
+  - parallel Whisper branch + Speaker-ID branch
+  - merged transcript events (`speaker`, `language`, `text`, `timestamp`)
+- Current implementation is backend-ready simulation and is structured for replacing internals with real `AVAudioEngine` + Silero VAD + `whisper.cpp`.
 
-- [ ] **Whisper Integration:** Connect recorded audio buffers to `whisper.cpp`.
-- [ ] **Timestamp Logic:** Ensure the text accurately maps to the audio seconds.
-- [ ] **Audio Player:** Implement "Seek to time" logic.
+#### Storage, Update, and Sync Hooks
+- `AppBackend.swift`
+- `SessionStore` creates `session_full.m4a` + `segments.json`.
+- Appends transcript rows, persists segment snapshots, and keeps stable speaker profile (color/avatar) per session.
+- Credit deduction per chunk and iCloud-sync hook point are included.
 
-### Phase 3: The UI Polish (Skin) 🎨
+#### App Orchestration + UI Wiring
+- `AppBackend.swift`, `ContentView.swift`, `ChatTabView.swift`
+- `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and model/language settings.
+- Record button uses backend pipeline; chat bubbles update reactively from backend rows.
+- Language tag in bubble uses pipeline language code; speaker style is session-stable.
+- Recorder card hit-testing fix applied so `Record` is tappable.
 
-- [ ] **Chat Experience:** Polish chat timeline, speaker chips, and "New Chat" flow.
-- [ ] **Speaker Labels:** Simple "Speaker A/B" assignment.
-- [ ] **Export:** Generate PDF/Markdown/Text with optional Notepad-style formatting templates.
+#### Tests Added
+- `AppBackendTests.swift`
+- Covered:
+  - prompt building from selected languages
+  - model fallback behavior
+  - speaker profile stability across chunks
+
+### Next
+
+- Replace simulated pipeline internals with real `AVAudioEngine` + VAD + Whisper runtime.
+- Replace placeholder model install with real `URLSessionDownloadTask` using catalog URLs.
+- Add playback seek-by-segment path in app flow.
 
 ---
 
-## 6. Implementation Notes (Tips for Dev) 💡
-
-### Model Downloading Logic (Swift)
-
-```swift
-func downloadBrain() {
-    let url = URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin")!
-    let destination = FileManager.default
-        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("Models/brain.bin")
-
-    // Use URLSessionDownloadTask to handle background downloading
-    // Show a "Downloading AI Brain... (1.8 GB)" progress bar
-}
-```
-
----
-
-## Documentation
+## 6. Documentation
 
 - [Architecture Overview](docs/architecture.md)
 - [Database Design](docs/database.md)

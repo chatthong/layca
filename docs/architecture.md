@@ -1,61 +1,54 @@
 # Architecture Overview
 
 ## Goals
-- Offline-first transcription and meeting assistant for Apple platforms.
-- Privacy-by-design with local processing after model setup.
-- Consistent UX across iOS, iPadOS, tvOS, and visionOS.
+- Offline-first meeting assistant with local-first processing.
+- Dynamic configuration from Settings (model + language focus + sync toggle).
+- Reactive chat UI driven by backend state.
 
 ## High-Level Modules
 1. App Shell + State Coordinator (`ContentView`)
 2. Tab Components (`ChatTabView`, `SettingTabView`, `LibraryTabView`)
-3. Navigation Layer (native grouped tab bar + special action tab)
-4. Session Recorder (`AVAudioRecorder`)
-5. Audio Processor (decode/resample to 16kHz mono PCM)
-6. Transcription Engine (`whisper.cpp` wrapper)
-7. Transcript Mapper (segment offsets to absolute timeline)
-8. Storage Layer (SwiftData + Filesystem)
-9. Playback + Export Layer (`AVPlayer` and Share Sheet)
+3. Backend Orchestrator (`AppBackend`)
+4. Model Layer (`ModelManager`, `PreflightService`)
+5. Live Pipeline (`LiveSessionPipeline`)
+6. Storage Layer (`SessionStore` + filesystem)
+7. Playback + Export layer (planned/partial)
 
-## Data Flow
-1. User starts recording.
-2. Audio is written to `full_recording.m4a` and buffered in PCM chunks.
-3. PCM chunks are passed to Whisper for segment generation.
-4. Segments are normalized and persisted to local database and JSON snapshot.
-5. Chat UI consumes normalized segments for timeline review.
-6. Native grouped tab bar routes to Chat, Setting, Library, and New Chat action tab.
-7. Export action is available from the Chat header icon (top-right).
-8. Tap on segment seeks to corresponding audio offset in master recording.
-9. Export pipeline can transform transcript into Notepad-style document formats.
+## Model Catalog (Current)
+- `Normal AI` -> `ggml-large-v3-turbo-q8_0.bin`
+- `Light AI` -> `ggml-large-v3-turbo-q5_0.bin`
+- `High Detail AI` -> `ggml-large-v3-turbo.bin`
 
-## Folder Layout (Proposed)
-```text
-Layca/
-├── App/
-├── Features/
-│   ├── Session/
-│   ├── Transcript/
-│   ├── Playback/
-│   └── Export/
-├── Core/
-│   ├── Audio/
-│   ├── Whisper/
-│   ├── Storage/
-│   └── ModelManager/
-├── Resources/
-└── docs/
-```
+Model URLs are stored in backend model metadata and selected from Settings.
 
-## Current UI File Layout
+## Runtime Flow
+1. User taps record.
+2. Pre-flight checks credit, resolves model, prepares language prompt.
+3. Live pipeline runs concurrent tracks:
+   - waveform/input stream
+   - VAD-like chunk slicing
+   - transcription branch + speaker branch
+   - merge branch
+4. Transcript item is appended to store.
+5. Chat list updates reactively.
+6. Chunk duration deducts credit.
+7. Optional sync hook runs.
+
+## Current Implementation Note
+- Pipeline internals are structured as production-ready backend services.
+- Audio capture/VAD/Whisper internals are currently simulated to keep UI and data contracts stable.
+
+## Folder Layout (Current)
 ```text
 xcode/layca/
-├── ContentView.swift      <-- Shared state + tab routing
-├── ChatTabView.swift      <-- Chat screen component
-├── SettingTabView.swift   <-- Settings screen component
-└── LibraryTabView.swift   <-- Session library component
+├── ContentView.swift
+├── ChatTabView.swift
+├── SettingTabView.swift
+├── LibraryTabView.swift
+└── AppBackend.swift
 ```
 
 ## Non-Functional Constraints
-- Recording reliability with screen locked.
-- Controlled memory usage during chunk buffering.
-- Graceful degradation on lower storage devices.
-- No required cloud dependency for core operation.
+- Keep memory bounded during live stream/chunk processing.
+- Keep per-session speaker identity stable (color/avatar consistency).
+- Keep recording controls gated by model readiness and credit status.

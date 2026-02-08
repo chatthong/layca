@@ -1,11 +1,15 @@
 import SwiftUI
 
 struct ChatTabView: View {
-    @Binding var isRecording: Bool
+    let isRecording: Bool
+    let recordingTimeText: String
+    let waveformBars: [Double]
 
     let activeSessionTitle: String
     let activeSessionDateText: String
     let liveChatItems: [TranscriptRow]
+    let preflightMessage: String?
+    let onRecordTap: () -> Void
     let onExportTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
 
@@ -137,7 +141,7 @@ struct ChatTabView: View {
                         .font(.headline)
                         .foregroundStyle(.black.opacity(0.72))
 
-                    Text(isRecording ? "00:12:31" : "00:00:00")
+                    Text(recordingTimeText)
                         .font(.system(size: 46, weight: .semibold, design: .rounded))
                         .foregroundStyle(.black.opacity(0.85))
                         .monospacedDigit()
@@ -145,6 +149,16 @@ struct ChatTabView: View {
                         .minimumScaleFactor(0.75)
 
                     recorderActionControl
+
+                    Text(activeSessionDateText)
+                        .font(.caption)
+                        .foregroundStyle(.black.opacity(0.5))
+
+                    if let preflightMessage {
+                        Text(preflightMessage)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.red.opacity(0.85))
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -153,10 +167,12 @@ struct ChatTabView: View {
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(.ultraThinMaterial)
+                .allowsHitTesting(false)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .stroke(.white.opacity(0.55), lineWidth: 0.9)
+                .allowsHitTesting(false)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -167,6 +183,7 @@ struct ChatTabView: View {
                         endPoint: .bottomTrailing
                     )
                 )
+                .allowsHitTesting(false)
         )
         .shadow(color: .black.opacity(0.08), radius: 20, x: 0, y: 12)
     }
@@ -186,10 +203,10 @@ struct ChatTabView: View {
                 )
 
             HStack(alignment: .center, spacing: 3) {
-                ForEach([8, 14, 24, 34, 26, 16, 12, 18, 10], id: \.self) { barHeight in
+                ForEach(Array(waveformBars.enumerated()), id: \.offset) { _, level in
                     Capsule(style: .continuous)
                         .fill(Color.red.opacity(0.78))
-                        .frame(width: 2.4, height: CGFloat(barHeight))
+                        .frame(width: 2.4, height: max(CGFloat(level) * 34, 8))
                 }
             }
 
@@ -218,9 +235,7 @@ struct ChatTabView: View {
 
     private var recorderActionControl: some View {
         Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                isRecording.toggle()
-            }
+            onRecordTap()
         } label: {
             HStack(spacing: 9) {
                 Image(systemName: isRecording ? "pause.fill" : "record.circle.fill")
@@ -249,6 +264,7 @@ struct ChatTabView: View {
             )
         }
         .buttonStyle(.plain)
+        .contentShape(Capsule(style: .continuous))
     }
 
     private var liveSegmentsCard: some View {

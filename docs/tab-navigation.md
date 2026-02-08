@@ -11,6 +11,8 @@
   - `Library`
 - Group 2 tab:
   - `New Chat` (special role, isolated in right-side group)
+- Header identity:
+  - Active chat badge (`Chat N`) supports tap-to-rename inline editing.
 - Header action:
   - `Export` icon (top-right on Chat, next to active chat badge)
 
@@ -30,6 +32,9 @@
 - `Library` acts as session switcher:
   - Shows available chat sessions.
   - Tapping a session loads it and switches to `Chat`.
+- Active chat badge supports inline rename:
+  - Tap chat title in the Chat header to edit.
+  - Saved title appears in both Chat and Library.
 - `Export` opens from the Chat header icon instead of a tab.
 - On some compact layouts, iOS may prioritize icon rendering for special-role grouped tabs even if text is provided.
 

@@ -1,61 +1,62 @@
 # Database Design
 
-## Persistence Choice
-- `SwiftData` (iOS 17+) for app entities and query support.
-- Filesystem for large binary assets and audio recordings.
+## Current Runtime Persistence
+- **Primary runtime store:** in-memory actor store (`SessionStore`) for session/transcript state.
+- **Primary durable store:** filesystem (`Documents/Models`, `Documents/Sessions`).
+- **Planned:** migrate/extend to `SwiftData` for long-term query/index workflows.
 
-## Core Entities
+## Runtime Entities (Current)
 
-### Session
+### Session (runtime model)
 - `id: UUID`
-- `createdAt: Date`
-- `startedAt: Date`
-- `endedAt: Date?`
 - `title: String`
+- `createdAt: Date`
 - `languageHints: [String]`
+- `modelID: String`
 - `audioFilePath: String`
+- `segmentsFilePath: String`
 - `durationSeconds: Double`
 - `status: SessionStatus` (`recording`, `processing`, `ready`, `failed`)
 
-### TranscriptSegment
+### Transcript Row (runtime model)
 - `id: UUID`
-- `sessionID: UUID`
-- `index: Int`
-- `speakerID: String`
+- `speaker: String`
 - `text: String`
-- `audioStartOffset: Double`
-- `audioEndOffset: Double`
-- `confidence: Double?`
-- `createdAt: Date`
+- `time: String` (`HH:mm:ss`)
+- `language: String` (e.g., `EN`, `TH`)
+- `avatarSymbol: String`
+- `avatarPalette: [Color]`
 
-### Speaker
-- `id: UUID`
-- `sessionID: UUID`
-- `label: String` (e.g., Speaker A)
-- `colorHex: String?`
+### Speaker Profile (session-scoped)
+- `label: String` (e.g., `Speaker A`)
+- `colorHex: String`
+- `avatarSymbol: String`
 
-### ModelInstall
-- `id: UUID`
-- `modelName: String`
-- `modelVersion: String`
-- `localPath: String`
-- `sizeBytes: Int64`
-- `isActive: Bool`
-- `installedAt: Date`
-
-## Storage Separation
-- DB stores metadata and indices.
-- `Documents/Sessions/{UUID}/full_recording.m4a` stores source audio.
-- `Documents/Sessions/{UUID}/segments.json` stores portable transcript snapshot.
-- `Library/Application Support/Models/` stores downloaded model binaries.
-
-## Indexing Guidance
-- Index by `sessionID` + `index` for segment rendering.
-- Index by `startedAt` for list sorting.
-- Index `status` for in-progress and failed recovery screens.
+## Filesystem Layout
+```text
+Documents/
+├── Models/
+│   ├── ggml-large-v3-turbo-q8_0.bin
+│   ├── ggml-large-v3-turbo-q5_0.bin
+│   └── ggml-large-v3-turbo.bin
+└── Sessions/
+    └── {UUID}/
+        ├── session_full.m4a
+        └── segments.json
+```
 
 ## Data Lifecycle
-1. Create session row when recording starts.
-2. Append segments incrementally while transcribing.
-3. Finalize session metadata when processing completes.
-4. On delete, remove DB rows first, then filesystem assets.
+1. Create session directory and base files on new chat/session.
+2. On each merged transcript event:
+   - append row to session runtime store
+   - refresh session duration
+   - rewrite `segments.json` snapshot
+3. On recording stop:
+   - mark session status to `ready`
+4. On future deletion flow:
+   - remove session row/state first, then filesystem assets.
+
+## Consistency Rules Implemented
+- Speaker appearance remains stable within session once assigned.
+- Transcript updates are append-only during a running session.
+- UI consumes state reactively from backend-published session snapshots.

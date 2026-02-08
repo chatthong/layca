@@ -8,56 +8,36 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var isRecording = false
+    @StateObject private var backend = AppBackend()
     @State private var isExportPresented = false
 
-    @State private var selectedLanguageCodes: Set<String> = ["en", "th"]
-    @State private var languageSearchText = ""
-    @State private var selectedModelID = "large-v3-turbo-q8"
-    @State private var downloadedModelIDs: Set<String> = ["large-v3-turbo-q8"]
-    @State private var downloadingModelID: String?
-    @State private var modelDownloadProgress = 0.0
-    @State private var totalHours = 40.0
-    @State private var usedHours = 12.6
-    @State private var isICloudSyncEnabled = true
-    @State private var isRestoringPurchases = false
-    @State private var restoreStatusMessage: String?
-
-    @State private var liveChatItems: [TranscriptRow]
-    @State private var sessions: [ChatSession]
-    @State private var activeSessionID: UUID?
-    @State private var chatCount: Int
     @State private var selectedTab: AppTab = .chat
-
-    init() {
-        let firstSession = ChatSession.makeDemoSession(chatNumber: 1)
-        _liveChatItems = State(initialValue: firstSession.rows)
-        _sessions = State(initialValue: [firstSession])
-        _activeSessionID = State(initialValue: firstSession.id)
-        _chatCount = State(initialValue: 1)
-    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
             TabSection {
                 Tab("Chat", systemImage: "bubble.left.and.bubble.right.fill", value: AppTab.chat) {
                     ChatTabView(
-                        isRecording: $isRecording,
-                        activeSessionTitle: activeSessionTitle,
-                        activeSessionDateText: activeSessionDateText,
-                        liveChatItems: liveChatItems,
+                        isRecording: backend.isRecording,
+                        recordingTimeText: backend.recordingTimeText,
+                        waveformBars: backend.waveformBars,
+                        activeSessionTitle: backend.activeSessionTitle,
+                        activeSessionDateText: backend.activeSessionDateText,
+                        liveChatItems: backend.activeTranscriptRows,
+                        preflightMessage: backend.preflightStatusMessage,
+                        onRecordTap: backend.toggleRecording,
                         onExportTap: { isExportPresented = true },
-                        onRenameSessionTitle: renameActiveSessionTitle
+                        onRenameSessionTitle: backend.renameActiveSessionTitle
                     )
                 }
 
                 Tab("Library", systemImage: "books.vertical.fill", value: AppTab.library) {
                     LibraryTabView(
-                        sessions: sessions,
-                        activeSessionID: activeSessionID,
+                        sessions: backend.sessions,
+                        activeSessionID: backend.activeSessionID,
                         onSelectSession: { session in
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
-                                activateSession(session)
+                                backend.activateSession(session)
                                 selectedTab = .chat
                             }
                         }
@@ -66,22 +46,22 @@ struct ContentView: View {
 
                 Tab("Setting", systemImage: "square.stack.3d.up", value: AppTab.setting) {
                     SettingTabView(
-                        totalHours: totalHours,
-                        usedHours: usedHours,
-                        selectedLanguageCodes: $selectedLanguageCodes,
-                        languageSearchText: $languageSearchText,
+                        totalHours: backend.totalHours,
+                        usedHours: backend.usedHours,
+                        selectedLanguageCodes: selectedLanguageCodesBinding,
+                        languageSearchText: languageSearchTextBinding,
                         filteredFocusLanguages: filteredFocusLanguages,
                         modelCatalog: modelCatalog,
-                        selectedModelID: selectedModelID,
-                        downloadedModelIDs: downloadedModelIDs,
-                        downloadingModelID: downloadingModelID,
-                        modelDownloadProgress: modelDownloadProgress,
-                        isICloudSyncEnabled: $isICloudSyncEnabled,
-                        isRestoringPurchases: isRestoringPurchases,
-                        restoreStatusMessage: restoreStatusMessage,
-                        onToggleLanguage: toggleLanguageFocus,
-                        onSelectModel: selectModel,
-                        onRestorePurchases: restorePurchases
+                        selectedModelID: backend.selectedModelID,
+                        downloadedModelIDs: backend.downloadedModelIDs,
+                        downloadingModelID: backend.downloadingModelID,
+                        modelDownloadProgress: backend.modelDownloadProgress,
+                        isICloudSyncEnabled: iCloudSyncBinding,
+                        isRestoringPurchases: backend.isRestoringPurchases,
+                        restoreStatusMessage: backend.restoreStatusMessage,
+                        onToggleLanguage: backend.toggleLanguageFocus,
+                        onSelectModel: backend.selectModel,
+                        onRestorePurchases: backend.restorePurchases
                     )
                 }
             }
@@ -99,7 +79,7 @@ struct ContentView: View {
         .toolbarBackground(.ultraThinMaterial, for: .tabBar)
         .onChange(of: selectedTab) { _, newTab in
             if newTab == .newChat {
-                startNewChat()
+                backend.startNewChat()
                 selectedTab = .chat
             }
         }
@@ -156,45 +136,29 @@ private extension ContentView {
         }
     }
 
-    func startNewChat() {
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
-            chatCount += 1
-            let newSession = ChatSession.makeDemoSession(chatNumber: chatCount)
-            sessions.insert(newSession, at: 0)
-            activateSession(newSession)
-        }
+    var selectedLanguageCodesBinding: Binding<Set<String>> {
+        Binding(
+            get: { backend.selectedLanguageCodes },
+            set: { backend.selectedLanguageCodes = $0 }
+        )
     }
 
-    func activateSession(_ session: ChatSession) {
-        activeSessionID = session.id
-        liveChatItems = session.rows
+    var languageSearchTextBinding: Binding<String> {
+        Binding(
+            get: { backend.languageSearchText },
+            set: { backend.languageSearchText = $0 }
+        )
     }
 
-    func renameActiveSessionTitle(_ newTitle: String) {
-        let trimmedTitle = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else {
-            return
-        }
-        guard let activeSessionID else {
-            return
-        }
-        guard let index = sessions.firstIndex(where: { $0.id == activeSessionID }) else {
-            return
-        }
-
-        sessions[index].title = trimmedTitle
-    }
-
-    var activeSessionTitle: String {
-        sessions.first(where: { $0.id == activeSessionID })?.title ?? "Chat"
-    }
-
-    var activeSessionDateText: String {
-        sessions.first(where: { $0.id == activeSessionID })?.formattedDate ?? "No active chat"
+    var iCloudSyncBinding: Binding<Bool> {
+        Binding(
+            get: { backend.isICloudSyncEnabled },
+            set: { backend.isICloudSyncEnabled = $0 }
+        )
     }
 
     var filteredFocusLanguages: [FocusLanguage] {
-        let query = languageSearchText
+        let query = backend.languageSearchText
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
 
@@ -301,68 +265,7 @@ private extension ContentView {
     }
 
     var modelCatalog: [ModelOption] {
-        [
-            ModelOption(id: "large-v3-turbo-q8", name: "Large v3 Turbo (Q8)", sizeLabel: "1.8 GB"),
-            ModelOption(id: "medium-q8", name: "Medium (Q8)", sizeLabel: "780 MB"),
-            ModelOption(id: "small-q8", name: "Small (Q8)", sizeLabel: "260 MB"),
-            ModelOption(id: "base-q8", name: "Base (Q8)", sizeLabel: "150 MB")
-        ]
-    }
-
-    func toggleLanguageFocus(_ code: String) {
-        let normalizedCode = code.lowercased()
-        if selectedLanguageCodes.contains(normalizedCode) {
-            selectedLanguageCodes.remove(normalizedCode)
-        } else {
-            selectedLanguageCodes.insert(normalizedCode)
-        }
-    }
-
-    func selectModel(_ model: ModelOption) {
-        if downloadingModelID != nil {
-            return
-        }
-
-        if downloadedModelIDs.contains(model.id) {
-            selectedModelID = model.id
-            return
-        }
-
-        downloadingModelID = model.id
-        modelDownloadProgress = 0
-
-        Task {
-            for step in 1...12 {
-                try? await Task.sleep(nanoseconds: 220_000_000)
-                await MainActor.run {
-                    modelDownloadProgress = Double(step) / 12.0
-                }
-            }
-
-            await MainActor.run {
-                downloadedModelIDs.insert(model.id)
-                selectedModelID = model.id
-                downloadingModelID = nil
-                modelDownloadProgress = 0
-            }
-        }
-    }
-
-    func restorePurchases() {
-        if isRestoringPurchases {
-            return
-        }
-
-        isRestoringPurchases = true
-        restoreStatusMessage = nil
-
-        Task {
-            try? await Task.sleep(nanoseconds: 1_400_000_000)
-            await MainActor.run {
-                isRestoringPurchases = false
-                restoreStatusMessage = "Restore complete. iCloud and purchases are synced."
-            }
-        }
+        backend.modelCatalog
     }
 }
 
@@ -413,6 +316,7 @@ struct ModelOption: Identifiable {
     let id: String
     let name: String
     let sizeLabel: String
+    let remoteDownloadURL: String
 }
 
 struct LiquidBackdrop: View {
@@ -460,7 +364,7 @@ struct ChatSession: Identifiable {
 }
 
 struct TranscriptRow: Identifiable {
-    let id = UUID()
+    let id: UUID = UUID()
     let speaker: String
     let text: String
     let time: String

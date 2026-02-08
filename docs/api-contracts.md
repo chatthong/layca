@@ -1,36 +1,67 @@
 # API Contracts (Internal)
 
-## RecorderService
+## AppBackend (UI-facing)
 
-### startSession() -> Session
-Creates a new session, prepares filesystem paths, and begins recording.
+### `toggleRecording() -> Void`
+- Starts or stops recording flow.
+- On start, runs pre-flight before pipeline starts.
 
-### stopSession(sessionID: UUID) -> Void
-Stops recording and marks session as ready for processing.
+### `startNewChat() -> Void`
+- Creates a new session and switches active session.
 
-## TranscriptionService
+### `activateSession(_ session: ChatSession) -> Void`
+- Sets active session and pushes its rows to chat UI.
 
-### transcribeChunk(sessionID: UUID, pcmData: Data, chunkStartOffset: Double) -> [TranscriptSegment]
-Runs local inference and returns normalized segments with absolute offsets.
+### `renameActiveSessionTitle(_ newTitle: String) -> Void`
+- Renames active session title (used by Chat header inline rename).
 
-### finalizeSession(sessionID: UUID) -> Void
-Flushes pending buffers and marks processing completion.
+### `selectModel(_ option: ModelOption) -> Void`
+- Changes active model or triggers model install simulation.
 
-## PlaybackService
+### `toggleLanguageFocus(_ code: String) -> Void`
+- Adds/removes language code used to build pre-flight prompt.
 
-### playSegment(sessionID: UUID, segmentID: UUID) -> Void
-Loads session audio and seeks to segment start offset.
+## PreflightService
 
-### stop() -> Void
-Stops active playback.
+### `prepare(selectedModelID:languageCodes:remainingCreditSeconds:modelManager:) async throws -> PreflightConfig`
+- Validates credits.
+- Resolves selected model (with fallback if selected is missing but another installed model exists).
+- Ensures model is loadable.
+- Builds prompt string from language focus.
 
-## ExportService
+## ModelManager
 
-### exportTranscript(sessionID: UUID, format: ExportFormat) -> URL
-Generates local export file and returns shareable URL.
+### `installedModels() -> Set<BackendModel>`
+- Returns models found in `Documents/Models/`.
 
-### exportTranscriptWithStyle(sessionID: UUID, format: ExportFormat, style: ExportStyle) -> URL
-Generates transcript export with style presets (for example: `chat`, `notepadMinutes`).
+### `ensureLoaded(_ model: BackendModel) async throws -> URL`
+- Verifies model file exists and marks model as loaded.
 
-### exportAudio(sessionID: UUID) -> URL
-Returns URL for master audio recording.
+### `installPlaceholderModel(_ model: BackendModel) throws`
+- Current simulated install path for UI/testing.
+
+## LiveSessionPipeline
+
+### `start(config: LivePipelineConfig) -> AsyncStream<PipelineEvent>`
+- Starts concurrent live pipeline and streams events:
+  - waveform
+  - timer
+  - transcript merged events
+  - stopped
+
+### `stop() -> Void`
+- Stops pipeline and ends stream.
+
+## SessionStore
+
+### `createSession(title:languageHints:modelID:) throws -> UUID`
+- Creates session files and runtime row.
+
+### `appendTranscript(sessionID:event:) -> Void`
+- Appends transcript row, updates duration, persists `segments.json` snapshot.
+
+### `snapshotSessions() -> [ChatSession]`
+- Returns session list for Library UI.
+
+### `transcriptRows(for:) -> [TranscriptRow]`
+- Returns rows for active chat timeline.

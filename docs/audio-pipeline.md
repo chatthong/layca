@@ -1,30 +1,39 @@
 # Audio Pipeline
 
 ## Capture
-- Use `AVAudioRecorder` to persist session recording as `.m4a`.
-- Enable background audio mode for long meetings.
+- Recorder is represented by a live stream track in backend.
+- Waveform values are emitted every ~`0.05s` for UI visualizer updates.
+- Session audio file path is reserved as `Documents/Sessions/{UUID}/session_full.m4a`.
 
-## Processing Pipeline
-1. Read captured audio stream.
-2. Decode and convert to PCM 16kHz 16-bit mono.
-3. Buffer by fixed window (e.g., 30s) or VAD boundaries.
-4. Send chunk to Whisper engine.
-5. Persist transcript segments with relative offsets.
+## Live Processing Pipeline
+
+### Track 1: Input + Visualizer
+- Produce amplitude ticks for UI waveform bars.
+- Keep master session recording path alive.
+
+### Track 2: Slicer (VAD-like)
+- Buffer frames while speech is active.
+- End chunk when silence reaches threshold (`~0.5s`).
+
+### Track 3: Dual AI Branch
+- Branch A: transcription + language code.
+- Branch B: speaker identification/matching for session speaker labels.
+
+### Track 4: Merger
+- Merge branch A + branch B output into one transcript event.
+- Persist speaker label, language tag, text, and start/end offsets.
 
 ## Timestamp Mapping
-- Whisper returns chunk-relative `start`/`end` timestamps.
-- Convert to session-global offsets by adding chunk start offset.
-- Example:
-  - chunk starts at 120.0s
-  - segment is 2.4s -> 4.1s
-  - stored segment offset is 122.4s -> 124.1s
+- Pipeline tracks elapsed session seconds.
+- Chunk-relative timings are converted into session-global offsets.
+- Transcript row timestamp is stored as formatted `HH:mm:ss`.
 
-## Playback Sync
-- On transcript tap:
-  - set `player.currentTime = audioStartOffset`
-  - start playback
-- Optional: auto-stop at `audioEndOffset` for per-segment playback.
+## Persistence + UI
+1. Append event to session store.
+2. Write `segments.json` snapshot.
+3. Deduct usage credit from chunk duration.
+4. Push reactive update to Chat bubble list.
 
-## Export
-- Full session audio export: share `full_recording.m4a`.
-- Transcript export: markdown/pdf/text with optional timestamps and Notepad-style formatting preset.
+## Current vs Planned
+- **Current:** simulated backend pipeline to stabilize architecture and UI contracts.
+- **Planned:** swap internals with real `AVAudioEngine` + VAD + whisper inference without changing external contracts.
