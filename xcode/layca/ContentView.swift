@@ -11,6 +11,19 @@ struct ContentView: View {
     @State private var isRecording = false
     @State private var modelProgress = 0.68
     @State private var isExportPresented = false
+
+    @State private var selectedLanguageCodes: Set<String> = ["en", "th"]
+    @State private var languageSearchText = ""
+    @State private var selectedModelID = "large-v3-turbo-q8"
+    @State private var downloadedModelIDs: Set<String> = ["large-v3-turbo-q8"]
+    @State private var downloadingModelID: String?
+    @State private var modelDownloadProgress = 0.0
+    @State private var totalHours = 40.0
+    @State private var usedHours = 12.6
+    @State private var isICloudSyncEnabled = true
+    @State private var isRestoringPurchases = false
+    @State private var restoreStatusMessage: String?
+
     @State private var liveChatItems: [TranscriptRow]
     @State private var sessions: [ChatSession]
     @State private var activeSessionID: UUID?
@@ -29,15 +42,48 @@ struct ContentView: View {
         TabView(selection: $selectedTab) {
             TabSection {
                 Tab("Chat", systemImage: "bubble.left.and.bubble.right.fill", value: AppTab.chat) {
-                    chatScreen
-                }
-
-                Tab("Setting", systemImage: "square.stack.3d.up", value: AppTab.setting) {
-                    settingScreen
+                    ChatTabView(
+                        isRecording: $isRecording,
+                        modelProgress: modelProgress,
+                        activeSessionTitle: activeSessionTitle,
+                        activeSessionDateText: activeSessionDateText,
+                        liveChatItems: liveChatItems,
+                        onExportTap: { isExportPresented = true }
+                    )
                 }
 
                 Tab("Library", systemImage: "books.vertical.fill", value: AppTab.library) {
-                    libraryScreen
+                    LibraryTabView(
+                        sessions: sessions,
+                        activeSessionID: activeSessionID,
+                        onSelectSession: { session in
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                                activateSession(session)
+                                selectedTab = .chat
+                            }
+                        }
+                    )
+                }
+
+                Tab("Setting", systemImage: "square.stack.3d.up", value: AppTab.setting) {
+                    SettingTabView(
+                        totalHours: totalHours,
+                        usedHours: usedHours,
+                        selectedLanguageCodes: $selectedLanguageCodes,
+                        languageSearchText: $languageSearchText,
+                        filteredFocusLanguages: filteredFocusLanguages,
+                        modelCatalog: modelCatalog,
+                        selectedModelID: selectedModelID,
+                        downloadedModelIDs: downloadedModelIDs,
+                        downloadingModelID: downloadingModelID,
+                        modelDownloadProgress: modelDownloadProgress,
+                        isICloudSyncEnabled: $isICloudSyncEnabled,
+                        isRestoringPurchases: isRestoringPurchases,
+                        restoreStatusMessage: restoreStatusMessage,
+                        onToggleLanguage: toggleLanguageFocus,
+                        onSelectModel: selectModel,
+                        onRestorePurchases: restorePurchases
+                    )
                 }
             }
 
@@ -69,32 +115,20 @@ struct ContentView: View {
 }
 
 private extension ContentView {
-    var chatScreen: some View {
-        NavigationStack {
-            ZStack {
-                backgroundGradient
-                LiquidBackdrop()
-                    .ignoresSafeArea()
-
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 18) {
-                        header
-                        recorderCard
-                        liveSegmentsCard
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 18)
-                    .padding(.bottom, 30)
-                }
-            }
-            .navigationBarHidden(true)
-        }
-    }
-
     var exportScreen: some View {
         NavigationStack {
             ZStack {
-                backgroundGradient
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.88, green: 0.95, blue: 1.0),
+                        Color(red: 0.95, green: 0.98, blue: 1.0),
+                        Color(red: 0.90, green: 0.96, blue: 0.95)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
                 LiquidBackdrop()
                     .ignoresSafeArea()
 
@@ -123,227 +157,6 @@ private extension ContentView {
         }
     }
 
-    var settingScreen: some View {
-        NavigationStack {
-            ZStack {
-                backgroundGradient
-                LiquidBackdrop()
-                    .ignoresSafeArea()
-
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Setting")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundStyle(.black.opacity(0.9))
-
-                    HStack {
-                        Text("Large v3 Turbo")
-                            .font(.headline)
-                        Spacer()
-                        Text("\(Int(modelProgress * 100))%")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.black.opacity(0.6))
-                    }
-
-                    ProgressView(value: modelProgress)
-                        .tint(.black.opacity(0.6))
-
-                    Text("Chat remains simple. Model settings live here.")
-                        .font(.subheadline)
-                        .foregroundStyle(.black.opacity(0.6))
-                }
-                .padding(18)
-                .liquidCard()
-                .padding(.horizontal, 18)
-            }
-            .navigationBarHidden(true)
-        }
-    }
-
-    var libraryScreen: some View {
-        NavigationStack {
-            ZStack {
-                backgroundGradient
-                LiquidBackdrop()
-                    .ignoresSafeArea()
-
-                VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Library")
-                            .font(.system(size: 30, weight: .bold, design: .rounded))
-                            .foregroundStyle(.black.opacity(0.9))
-                        Text("Switch and load saved chat sessions")
-                            .font(.subheadline)
-                            .foregroundStyle(.black.opacity(0.6))
-                    }
-
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 10) {
-                            ForEach(sessions) { session in
-                                Button {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
-                                        activateSession(session)
-                                        selectedTab = .chat
-                                    }
-                                } label: {
-                                    SessionRow(
-                                        session: session,
-                                        isActive: session.id == activeSessionID
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-                .padding(18)
-                .liquidCard()
-                .padding(.horizontal, 18)
-            }
-            .navigationBarHidden(true)
-        }
-    }
-
-    var backgroundGradient: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.88, green: 0.95, blue: 1.0),
-                Color(red: 0.95, green: 0.98, blue: 1.0),
-                Color(red: 0.90, green: 0.96, blue: 0.95)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
-    }
-
-    var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Layca")
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .foregroundStyle(.black.opacity(0.9))
-                    Text("Offline meeting secretary")
-                        .font(.headline)
-                        .foregroundStyle(.black.opacity(0.65))
-                }
-
-                Spacer()
-
-                HStack(spacing: 8) {
-                    Image(systemName: "bubble.left.and.bubble.right.fill")
-                    Text(activeSessionTitle)
-                        .fontWeight(.semibold)
-                }
-                .font(.subheadline)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .glassCapsuleStyle()
-
-                Button {
-                    isExportPresented = true
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(width: 38, height: 38)
-                }
-                .buttonStyle(.plain)
-                .glassCapsuleStyle()
-            }
-
-            Text(activeSessionDateText)
-                .font(.subheadline)
-                .foregroundStyle(.black.opacity(0.5))
-        }
-    }
-
-    var recorderCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label("Session Ready", systemImage: "waveform.and.mic")
-                    .font(.headline)
-                    .foregroundStyle(.black.opacity(0.75))
-
-                Spacer()
-
-                Text(isRecording ? "REC" : "IDLE")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(isRecording ? .red : .black.opacity(0.55))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(.white.opacity(0.65))
-                    )
-            }
-
-            HStack(alignment: .bottom, spacing: 10) {
-                Text(isRecording ? "00:12:42" : "00:00:00")
-                    .font(.system(size: 42, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.black.opacity(0.86))
-                    .monospacedDigit()
-
-                Spacer()
-
-                Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                        isRecording.toggle()
-                    }
-                } label: {
-                    Image(systemName: isRecording ? "stop.fill" : "record.circle.fill")
-                        .font(.system(size: 30, weight: .semibold))
-                        .foregroundStyle(isRecording ? .black.opacity(0.82) : .red)
-                        .frame(width: 60, height: 60)
-                        .background(
-                            Circle()
-                                .fill(.white.opacity(0.72))
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-
-            VStack(alignment: .leading, spacing: 7) {
-                HStack {
-                    Text("Large v3 Turbo")
-                    Spacer()
-                    Text("\(Int(modelProgress * 100))%")
-                }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.black.opacity(0.55))
-
-                ProgressView(value: modelProgress)
-                    .tint(.black.opacity(0.5))
-                    .progressViewStyle(.linear)
-            }
-        }
-        .padding(18)
-        .liquidCard()
-    }
-
-    var liveSegmentsCard: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            HStack {
-                Text("Latest Transcript")
-                    .font(.headline)
-                    .foregroundStyle(.black.opacity(0.75))
-                Spacer()
-                Label("Live", systemImage: "dot.radiowaves.left.and.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.black.opacity(0.55))
-            }
-
-            ForEach(liveChatItems) { item in
-                HStack(alignment: .top, spacing: 10) {
-                    avatarView(for: item)
-                    messageBubble(for: item)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-        }
-        .padding(18)
-        .liquidCard()
-    }
-
     func startNewChat() {
         withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
             chatCount += 1
@@ -366,79 +179,176 @@ private extension ContentView {
         sessions.first(where: { $0.id == activeSessionID })?.formattedDate ?? "No active chat"
     }
 
-    func avatarView(for item: TranscriptRow) -> some View {
-        ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: item.avatarPalette,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+    var filteredFocusLanguages: [FocusLanguage] {
+        let query = languageSearchText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
 
-            Image(systemName: item.avatarSymbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.95))
+        if query.isEmpty {
+            return focusLanguages
         }
-        .frame(width: 34, height: 34)
-        .overlay(
-            Circle()
-                .stroke(.white.opacity(0.6), lineWidth: 0.8)
-        )
-        .shadow(color: .black.opacity(0.12), radius: 7, x: 0, y: 4)
+
+        return focusLanguages.filter { language in
+            language.name.lowercased().contains(query)
+                || language.code.contains(query)
+                || language.iso3.contains(query)
+        }
     }
 
-    func messageBubble(for item: TranscriptRow) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 8) {
-                speakerMeta(for: item)
-                Spacer(minLength: 8)
-                timestampView(for: item)
+    var focusLanguages: [FocusLanguage] {
+        [
+            FocusLanguage(name: "Russian", code: "ru", iso3: "rus"),
+            FocusLanguage(name: "Polish", code: "pl", iso3: "pol"),
+            FocusLanguage(name: "Sindhi", code: "sd", iso3: "snd"),
+            FocusLanguage(name: "Javanese", code: "jv", iso3: "jav"),
+            FocusLanguage(name: "Spanish", code: "es", iso3: "spa"),
+            FocusLanguage(name: "Slovak", code: "sk", iso3: "slk"),
+            FocusLanguage(name: "Romanian", code: "ro", iso3: "ron"),
+            FocusLanguage(name: "Portuguese", code: "pt", iso3: "por"),
+            FocusLanguage(name: "Nynorsk", code: "nn", iso3: "nno"),
+            FocusLanguage(name: "Norwegian", code: "no", iso3: "nor"),
+            FocusLanguage(name: "Lithuanian", code: "lt", iso3: "lit"),
+            FocusLanguage(name: "Galician", code: "gl", iso3: "glg"),
+            FocusLanguage(name: "Swedish", code: "sv", iso3: "swe"),
+            FocusLanguage(name: "English", code: "en", iso3: "eng"),
+            FocusLanguage(name: "Italian", code: "it", iso3: "ita"),
+            FocusLanguage(name: "Hebrew", code: "he", iso3: "heb"),
+            FocusLanguage(name: "French", code: "fr", iso3: "fra"),
+            FocusLanguage(name: "Bulgarian", code: "bg", iso3: "bul"),
+            FocusLanguage(name: "Japanese", code: "ja", iso3: "jpn"),
+            FocusLanguage(name: "Indonesian", code: "id", iso3: "ind"),
+            FocusLanguage(name: "Azerbaijani", code: "az", iso3: "aze"),
+            FocusLanguage(name: "Ukrainian", code: "uk", iso3: "ukr"),
+            FocusLanguage(name: "Serbian", code: "sr", iso3: "srp"),
+            FocusLanguage(name: "Malay", code: "ms", iso3: "msa"),
+            FocusLanguage(name: "Macedonian", code: "mk", iso3: "mkd"),
+            FocusLanguage(name: "Korean", code: "ko", iso3: "kor"),
+            FocusLanguage(name: "Bengali", code: "bn", iso3: "ben"),
+            FocusLanguage(name: "Arabic", code: "ar", iso3: "ara"),
+            FocusLanguage(name: "German", code: "de", iso3: "deu"),
+            FocusLanguage(name: "Dutch", code: "nl", iso3: "nld"),
+            FocusLanguage(name: "Vietnamese", code: "vi", iso3: "vie"),
+            FocusLanguage(name: "Turkish", code: "tr", iso3: "tur"),
+            FocusLanguage(name: "Thai", code: "th", iso3: "tha"),
+            FocusLanguage(name: "Slovenian", code: "sl", iso3: "slv"),
+            FocusLanguage(name: "Hungarian", code: "hu", iso3: "hun"),
+            FocusLanguage(name: "Finnish", code: "fi", iso3: "fin"),
+            FocusLanguage(name: "Welsh", code: "cy", iso3: "cym"),
+            FocusLanguage(name: "Tagalog", code: "tl", iso3: "tgl"),
+            FocusLanguage(name: "Bashkir", code: "ba", iso3: "bak"),
+            FocusLanguage(name: "Icelandic", code: "is", iso3: "isl"),
+            FocusLanguage(name: "Bosnian", code: "bs", iso3: "bos"),
+            FocusLanguage(name: "Urdu", code: "ur", iso3: "urd"),
+            FocusLanguage(name: "Turkmen", code: "tk", iso3: "tuk"),
+            FocusLanguage(name: "Telugu", code: "te", iso3: "tel"),
+            FocusLanguage(name: "Shona", code: "sn", iso3: "sna"),
+            FocusLanguage(name: "Persian", code: "fa", iso3: "fas"),
+            FocusLanguage(name: "Maori", code: "mi", iso3: "mri"),
+            FocusLanguage(name: "Latin", code: "la", iso3: "lat"),
+            FocusLanguage(name: "Lao", code: "lo", iso3: "lao"),
+            FocusLanguage(name: "Kazakh", code: "kk", iso3: "kaz"),
+            FocusLanguage(name: "Greek", code: "el", iso3: "ell"),
+            FocusLanguage(name: "Tamil", code: "ta", iso3: "tam"),
+            FocusLanguage(name: "Punjabi", code: "pa", iso3: "pan"),
+            FocusLanguage(name: "Luxembourgish", code: "lb", iso3: "ltz"),
+            FocusLanguage(name: "Danish", code: "da", iso3: "dan"),
+            FocusLanguage(name: "Croatian", code: "hr", iso3: "hrv"),
+            FocusLanguage(name: "Catalan", code: "ca", iso3: "cat"),
+            FocusLanguage(name: "Armenian", code: "hy", iso3: "hye"),
+            FocusLanguage(name: "Albanian", code: "sq", iso3: "sqi"),
+            FocusLanguage(name: "Chinese", code: "zh", iso3: "zho"),
+            FocusLanguage(name: "Belarusian", code: "be", iso3: "bel"),
+            FocusLanguage(name: "Tibetan", code: "bo", iso3: "bod"),
+            FocusLanguage(name: "Khmer", code: "km", iso3: "khm"),
+            FocusLanguage(name: "Kannada", code: "kn", iso3: "kan"),
+            FocusLanguage(name: "Hawaiian", code: "haw", iso3: "haw"),
+            FocusLanguage(name: "Yiddish", code: "yi", iso3: "yid"),
+            FocusLanguage(name: "Tajik", code: "tg", iso3: "tgk"),
+            FocusLanguage(name: "Sundanese", code: "su", iso3: "sun"),
+            FocusLanguage(name: "Somali", code: "so", iso3: "som"),
+            FocusLanguage(name: "Sinhala", code: "si", iso3: "sin"),
+            FocusLanguage(name: "Sanskrit", code: "sa", iso3: "san"),
+            FocusLanguage(name: "Pashto", code: "ps", iso3: "pus"),
+            FocusLanguage(name: "Myanmar (Burmese)", code: "my", iso3: "mya"),
+            FocusLanguage(name: "Mongolian", code: "mn", iso3: "mon"),
+            FocusLanguage(name: "Maltese", code: "mt", iso3: "mlt"),
+            FocusLanguage(name: "Lingala", code: "ln", iso3: "lin"),
+            FocusLanguage(name: "Latvian", code: "lv", iso3: "lav"),
+            FocusLanguage(name: "Hausa", code: "ha", iso3: "hau"),
+            FocusLanguage(name: "Haitian Creole", code: "ht", iso3: "hat"),
+            FocusLanguage(name: "Gujarati", code: "gu", iso3: "guj"),
+            FocusLanguage(name: "Faroese", code: "fo", iso3: "fao"),
+            FocusLanguage(name: "Breton", code: "br", iso3: "bre"),
+            FocusLanguage(name: "Basque", code: "eu", iso3: "eus"),
+            FocusLanguage(name: "Amharic", code: "am", iso3: "amh"),
+            FocusLanguage(name: "Nepali", code: "ne", iso3: "nep"),
+            FocusLanguage(name: "Czech", code: "cs", iso3: "ces")
+        ]
+    }
+
+    var modelCatalog: [ModelOption] {
+        [
+            ModelOption(id: "large-v3-turbo-q8", name: "Large v3 Turbo (Q8)", sizeLabel: "1.8 GB"),
+            ModelOption(id: "medium-q8", name: "Medium (Q8)", sizeLabel: "780 MB"),
+            ModelOption(id: "small-q8", name: "Small (Q8)", sizeLabel: "260 MB"),
+            ModelOption(id: "base-q8", name: "Base (Q8)", sizeLabel: "150 MB")
+        ]
+    }
+
+    func toggleLanguageFocus(_ code: String) {
+        let normalizedCode = code.lowercased()
+        if selectedLanguageCodes.contains(normalizedCode) {
+            selectedLanguageCodes.remove(normalizedCode)
+        } else {
+            selectedLanguageCodes.insert(normalizedCode)
+        }
+    }
+
+    func selectModel(_ model: ModelOption) {
+        if downloadingModelID != nil {
+            return
+        }
+
+        if downloadedModelIDs.contains(model.id) {
+            selectedModelID = model.id
+            return
+        }
+
+        downloadingModelID = model.id
+        modelDownloadProgress = 0
+
+        Task {
+            for step in 1...12 {
+                try? await Task.sleep(nanoseconds: 220_000_000)
+                await MainActor.run {
+                    modelDownloadProgress = Double(step) / 12.0
+                }
             }
 
-            Text(item.text)
-                .font(.body)
-                .foregroundStyle(.black.opacity(0.82))
-                .multilineTextAlignment(.leading)
-        }
-        .padding(.horizontal, 13)
-        .padding(.vertical, 11)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.white.opacity(0.50))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(.white.opacity(0.55), lineWidth: 0.8)
-        )
-    }
-
-    func speakerMeta(for item: TranscriptRow) -> some View {
-        HStack(spacing: 6) {
-            Text(item.speaker)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.black.opacity(0.60))
-            HStack(spacing: 3) {
-                Image(systemName: "globe")
-                    .font(.caption2.weight(.bold))
-                Text(item.language)
-                    .font(.caption2.weight(.semibold))
+            await MainActor.run {
+                downloadedModelIDs.insert(model.id)
+                selectedModelID = model.id
+                downloadingModelID = nil
+                modelDownloadProgress = 0
             }
-            .foregroundStyle(.black.opacity(0.45))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(.white.opacity(0.52))
-            )
         }
     }
 
-    func timestampView(for item: TranscriptRow) -> some View {
-        Text(item.time)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.black.opacity(0.43))
+    func restorePurchases() {
+        if isRestoringPurchases {
+            return
+        }
+
+        isRestoringPurchases = true
+        restoreStatusMessage = nil
+
+        Task {
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            await MainActor.run {
+                isRestoringPurchases = false
+                restoreStatusMessage = "Restore complete. iCloud and purchases are synced."
+            }
+        }
     }
 }
 
@@ -477,56 +387,21 @@ private struct ExportRow: View {
     }
 }
 
-private struct SessionRow: View {
-    let session: ChatSession
-    let isActive: Bool
+struct FocusLanguage: Identifiable {
+    let name: String
+    let code: String
+    let iso3: String
 
-    var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(isActive ? Color.cyan.opacity(0.95) : Color.white.opacity(0.66))
-                Image(systemName: isActive ? "checkmark.bubble.fill" : "bubble.left.and.bubble.right")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(isActive ? .white : .black.opacity(0.62))
-            }
-            .frame(width: 36, height: 36)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.title)
-                    .font(.headline)
-                    .foregroundStyle(.black.opacity(0.82))
-                Text(session.formattedDate)
-                    .font(.caption)
-                    .foregroundStyle(.black.opacity(0.58))
-            }
-
-            Spacer()
-
-            Text("\(session.rows.count)")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.black.opacity(0.55))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(.white.opacity(0.58))
-                )
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isActive ? .white.opacity(0.68) : .white.opacity(0.50))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(.white.opacity(0.60), lineWidth: 0.8)
-        )
-    }
+    var id: String { code }
 }
 
-private struct LiquidBackdrop: View {
+struct ModelOption: Identifiable {
+    let id: String
+    let name: String
+    let sizeLabel: String
+}
+
+struct LiquidBackdrop: View {
     var body: some View {
         ZStack {
             Circle()
@@ -550,7 +425,7 @@ private struct LiquidBackdrop: View {
     }
 }
 
-private struct ChatSession: Identifiable {
+struct ChatSession: Identifiable {
     let id: UUID
     let title: String
     let createdAt: Date
@@ -570,7 +445,7 @@ private struct ChatSession: Identifiable {
     }
 }
 
-private struct TranscriptRow: Identifiable {
+struct TranscriptRow: Identifiable {
     let id = UUID()
     let speaker: String
     let text: String
@@ -650,7 +525,7 @@ private struct TranscriptRow: Identifiable {
     }
 }
 
-private extension View {
+extension View {
     func liquidCard() -> some View {
         self
             .background(

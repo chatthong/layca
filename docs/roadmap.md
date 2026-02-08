@@ -14,6 +14,7 @@
 - Polish Chat timeline and grouped native tab-bar flow.
 - Add Library session switch list and fast chat loading.
 - Keep New Chat as separate special-role tab action.
+- Split top-level tabs into dedicated SwiftUI component files for maintainability.
 - Add basic speaker labeling and editing actions.
 - Add transcript/audio export options with Notepad-style export templates.
 

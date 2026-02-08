@@ -17,6 +17,11 @@
 ## Implementation Detail
 - SwiftUI `TabView` with `TabSection` groups.
 - `New Chat` uses a special tab role to stay in a separate group.
+- Tabs are split into dedicated files:
+  - `ChatTabView.swift`
+  - `SettingTabView.swift`
+  - `LibraryTabView.swift`
+- `ContentView.swift` keeps shared state and dispatches actions across tab components.
 
 ## UX Notes
 - `New Chat` acts like an action tab:

@@ -6,14 +6,15 @@
 - Consistent UX across iOS, iPadOS, tvOS, and visionOS.
 
 ## High-Level Modules
-1. App Shell (SwiftUI)
-2. Navigation Layer (native grouped tab bar)
-3. Session Recorder (`AVAudioRecorder`)
-4. Audio Processor (decode/resample to 16kHz mono PCM)
-5. Transcription Engine (`whisper.cpp` wrapper)
-6. Transcript Mapper (segment offsets to absolute timeline)
-7. Storage Layer (SwiftData + Filesystem)
-8. Playback + Export Layer (`AVPlayer` and Share Sheet)
+1. App Shell + State Coordinator (`ContentView`)
+2. Tab Components (`ChatTabView`, `SettingTabView`, `LibraryTabView`)
+3. Navigation Layer (native grouped tab bar + special action tab)
+4. Session Recorder (`AVAudioRecorder`)
+5. Audio Processor (decode/resample to 16kHz mono PCM)
+6. Transcription Engine (`whisper.cpp` wrapper)
+7. Transcript Mapper (segment offsets to absolute timeline)
+8. Storage Layer (SwiftData + Filesystem)
+9. Playback + Export Layer (`AVPlayer` and Share Sheet)
 
 ## Data Flow
 1. User starts recording.
@@ -42,6 +43,15 @@ Layca/
 │   └── ModelManager/
 ├── Resources/
 └── docs/
+```
+
+## Current UI File Layout
+```text
+xcode/layca/
+├── ContentView.swift      <-- Shared state + tab routing
+├── ChatTabView.swift      <-- Chat screen component
+├── SettingTabView.swift   <-- Settings screen component
+└── LibraryTabView.swift   <-- Session library component
 ```
 
 ## Non-Functional Constraints

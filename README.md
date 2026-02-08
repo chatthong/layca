@@ -75,11 +75,25 @@ Documents/
 - **Header Action:** `Export` icon at top-right of Chat screen (next to active chat badge)
 - **Note:** On some device sizes, iOS may render the special-role tab as icon-focused even when a title is provided.
 
+### Tab Component Split
+
+- `ContentView`: app-level state coordinator and tab routing.
+- `ChatTabView`: chat timeline, recording card, transcript list, export trigger.
+- `SettingTabView`: hours credit, language focus, model selection/download, iCloud and restore purchase card.
+- `LibraryTabView`: session list and active-chat switching.
+
 ### Library (Session Switch)
 
 - `Library` shows saved chat sessions.
 - Tapping a session loads it directly into `Chat`.
 - `New Chat` creates a fresh session and returns focus to `Chat`.
+
+### Setting Highlights
+
+- **Language Focus:** multi-select list with search and compact scroll area.
+- **Model Change:** single active model with download status/loading indicator.
+- **Hours Credit:** top card shows hour balance/usage.
+- **iCloud & Purchases:** sync toggle and restore purchases action.
 
 ### Export-Only Notepad Style 📝
 
