@@ -53,16 +53,10 @@ struct ContentView: View {
                         selectedLanguageCodes: selectedLanguageCodesBinding,
                         languageSearchText: languageSearchTextBinding,
                         filteredFocusLanguages: filteredFocusLanguages,
-                        modelCatalog: modelCatalog,
-                        selectedModelID: backend.selectedModelID,
-                        downloadedModelIDs: backend.downloadedModelIDs,
-                        downloadingModelID: backend.downloadingModelID,
-                        modelDownloadProgress: backend.modelDownloadProgress,
                         isICloudSyncEnabled: iCloudSyncBinding,
                         isRestoringPurchases: backend.isRestoringPurchases,
                         restoreStatusMessage: backend.restoreStatusMessage,
                         onToggleLanguage: backend.toggleLanguageFocus,
-                        onSelectModel: backend.selectModel,
                         onRestorePurchases: backend.restorePurchases
                     )
                 }
@@ -265,10 +259,6 @@ private extension ContentView {
             FocusLanguage(name: "Czech", code: "cs", iso3: "ces")
         ]
     }
-
-    var modelCatalog: [ModelOption] {
-        backend.modelCatalog
-    }
 }
 
 private enum AppTab: Hashable {
@@ -312,13 +302,6 @@ struct FocusLanguage: Identifiable {
     let iso3: String
 
     var id: String { code }
-}
-
-struct ModelOption: Identifiable {
-    let id: String
-    let name: String
-    let sizeLabel: String
-    let remoteDownloadURL: String
 }
 
 struct LiquidBackdrop: View {
@@ -402,13 +385,13 @@ struct TranscriptRow: Identifiable {
         let baseMessages: [BaseMessage] = [
             BaseMessage(
                 speaker: "Speaker A",
-                text: "Chat \(chatNumber): Let's lock the roadmap for model download before we ship.",
+                text: "Chat \(chatNumber): Let's lock the roadmap and keep settings focused.",
                 time: "00:04:32",
                 language: "EN"
             ),
             BaseMessage(
                 speaker: "Speaker B",
-                text: "Agreed. Keep install optional and show clear storage impact.",
+                text: "Agreed. Then we can add VAD controls in the next pass.",
                 time: "00:04:47",
                 language: "TH"
             ),

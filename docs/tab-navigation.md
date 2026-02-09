@@ -32,6 +32,10 @@
 - `Library` acts as session switcher:
   - Shows available chat sessions.
   - Tapping a session loads it and switches to `Chat`.
+- `Setting` currently contains:
+  - Hours credit
+  - Language focus
+  - iCloud sync + restore purchases
 - Active chat badge supports inline rename:
   - Tap chat title in the Chat header to edit.
   - Saved title appears in both Chat and Library.

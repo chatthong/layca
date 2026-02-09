@@ -28,10 +28,10 @@
 ## Example Snippet
 ```text
 [00:04:32] Speaker A (EN)
-Let's lock the roadmap for model download before we ship.
+Let's lock the roadmap and keep the settings page minimal.
 
 [00:04:47] Speaker B (TH)
-Agreed. Keep install optional and show clear storage impact.
+Agreed. We can add VAD options after cleanup.
 ```
 
 ## Implementation Notes

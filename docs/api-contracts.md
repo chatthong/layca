@@ -15,9 +15,6 @@
 ### `renameActiveSessionTitle(_ newTitle: String) -> Void`
 - Renames active session title (used by Chat header inline rename).
 
-### `selectModel(_ option: ModelOption) -> Void`
-- Changes active model or triggers real model download/install.
-
 ### `toggleLanguageFocus(_ code: String) -> Void`
 - Adds/removes language code used to build pre-flight prompt.
 
@@ -28,25 +25,9 @@
 
 ## PreflightService
 
-### `prepare(selectedModelID:languageCodes:remainingCreditSeconds:modelManager:) async throws -> PreflightConfig`
+### `prepare(languageCodes:remainingCreditSeconds:) async throws -> PreflightConfig`
 - Validates credits.
-- Resolves selected model (with fallback if selected is missing but another installed model exists).
-- Ensures model is loadable.
 - Builds prompt string from language focus.
-
-## ModelManager
-
-### `installedModels() -> Set<BackendModel>`
-- Returns models found in `Documents/Models/`.
-
-### `ensureLoaded(_ model: BackendModel) async throws -> URL`
-- Verifies model file exists and marks model as loaded.
-
-### `installPlaceholderModel(_ model: BackendModel) throws`
-- Current simulated install path for UI/testing.
-
-### `installDownloadedModel(_ model: BackendModel, from temporaryURL: URL) throws`
-- Persists downloaded model binary into `Documents/Models/`.
 
 ## LiveSessionPipeline
 
@@ -90,7 +71,7 @@
 
 ## SessionStore
 
-### `createSession(title:languageHints:modelID:) throws -> UUID`
+### `createSession(title:languageHints:) throws -> UUID`
 - Creates session files and runtime row.
 
 ### `appendTranscript(sessionID:event:) -> Void`

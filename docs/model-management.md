@@ -1,46 +1,20 @@
 # Model Management
 
-## Strategy
-- App ships without model binaries.
-- User chooses one model in Settings.
-- Recording is gated by model readiness + credit.
+## Status
+- Whisper GGML binaries are not used in the app now.
+- Legacy Whisper GGML binary files are removed from this project.
+- Settings has no model selection or download controls.
 
-## Active Catalog
-
-### Normal AI
-- File: `ggml-large-v3-turbo-q8_0.bin`
-- URL: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin?download=true`
-
-### Light AI
-- File: `ggml-large-v3-turbo-q5_0.bin`
-- URL: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin?download=true`
-
-### High Detail AI
-- File: `ggml-large-v3-turbo.bin`
-- URL: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true`
-
-## Paths
-- Model directory: `Documents/Models/`
+## Current Runtime Assets
 - Bundled VAD directory: app bundle `silero-vad-unified-256ms-v6.0.0.mlmodelc` (CoreML Silero, offline-first)
 - Bundled speaker directory: app bundle `wespeaker_v2.mlmodelc` (CoreML WeSpeaker, offline-first)
 
-## Runtime Workflow
-1. User selects model.
-2. App checks if model file exists.
-3. If installed, model becomes active immediately.
-4. If missing, app enters download/install flow.
-5. On record press, pre-flight validates model and may fallback to another installed model.
+## Pre-flight Behavior
+1. User taps record.
+2. Pre-flight validates available credits.
+3. Pre-flight builds the language prompt from language focus.
+4. Pipeline starts when pre-flight succeeds.
 
-## Current Implementation State
-- Backend has model metadata, local file checks, fallback logic, and real download/install for Whisper model binaries.
-- CoreML Silero VAD is bundled in app resources and loaded locally first.
-- If bundled VAD resource is unavailable, cache/download fallback is used.
-- CoreML speaker model (`wespeaker_v2.mlmodelc`) is bundled in app resources and loaded locally first.
-- If bundled speaker resource is unavailable, cache/download fallback is used.
-
-## UX Rules
-- Disable recording until at least one model is available.
-- Show clear state per row:
-  - Not Installed
-  - Downloading
-  - Installed (Active)
+## Notes
+- The transcription branch still uses placeholder text until Whisper/runtime integration is added.
+- This keeps the settings and backend clean for upcoming VAD-related work.

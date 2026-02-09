@@ -3,208 +3,37 @@ import SwiftUI
 import Combine
 import AVFoundation
 
-enum BackendModel: String, CaseIterable, Identifiable {
-    case normalAI = "normal-ai"
-    case lightAI = "light-ai"
-    case highDetailAI = "high-detail-ai"
-
-    nonisolated var id: String { rawValue }
-
-    nonisolated var displayName: String {
-        switch self {
-        case .normalAI:
-            return "Normal AI"
-        case .lightAI:
-            return "Light AI"
-        case .highDetailAI:
-            return "High Detail AI"
-        }
-    }
-
-    nonisolated var sizeLabel: String {
-        switch self {
-        case .normalAI:
-            return "Q8"
-        case .lightAI:
-            return "Q5"
-        case .highDetailAI:
-            return "Full"
-        }
-    }
-
-    nonisolated var remoteDownloadURL: String {
-        switch self {
-        case .normalAI:
-            return "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin?download=true"
-        case .lightAI:
-            return "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin?download=true"
-        case .highDetailAI:
-            return "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true"
-        }
-    }
-
-    nonisolated var binFileName: String {
-        switch self {
-        case .normalAI:
-            return "ggml-large-v3-turbo-q8_0.bin"
-        case .lightAI:
-            return "ggml-large-v3-turbo-q5_0.bin"
-        case .highDetailAI:
-            return "ggml-large-v3-turbo.bin"
-        }
-    }
-
-    nonisolated var priorityOrder: Int {
-        switch self {
-        case .normalAI:
-            return 0
-        case .lightAI:
-            return 1
-        case .highDetailAI:
-            return 2
-        }
-    }
-}
-
 struct PreflightConfig {
-    let resolvedModel: BackendModel
-    let modelPath: URL
     let prompt: String
     let languageCodes: [String]
-    let fallbackNote: String?
 }
 
 enum PreflightError: LocalizedError {
     case creditExhausted
-    case unknownModel
-    case modelUnavailable
 
     var errorDescription: String? {
         switch self {
         case .creditExhausted:
             return "Hours credit is empty. Please refill before recording."
-        case .unknownModel:
-            return "Selected model is invalid."
-        case .modelUnavailable:
-            return "No installed model available. Download one from Settings."
         }
-    }
-}
-
-actor ModelManager {
-    private let fileManager: FileManager
-    private let modelsDirectory: URL
-    private var loadedModel: BackendModel?
-
-    init(fileManager: FileManager = .default, modelsDirectory: URL? = nil) {
-        self.fileManager = fileManager
-
-        if let modelsDirectory {
-            self.modelsDirectory = modelsDirectory
-        } else {
-            let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            self.modelsDirectory = documents.appendingPathComponent("Models", isDirectory: true)
-        }
-
-        try? fileManager.createDirectory(at: self.modelsDirectory, withIntermediateDirectories: true)
-    }
-
-    func modelPath(for model: BackendModel) -> URL {
-        modelsDirectory.appendingPathComponent(model.binFileName)
-    }
-
-    func installedModels() -> Set<BackendModel> {
-        Set(BackendModel.allCases.filter { model in
-            let path = modelPath(for: model)
-            return fileManager.fileExists(atPath: path.path)
-        })
-    }
-
-    func installedModelIDs() -> Set<String> {
-        Set(installedModels().map(\.rawValue))
-    }
-
-    func isInstalled(_ model: BackendModel) -> Bool {
-        installedModels().contains(model)
-    }
-
-    func installPlaceholderModel(_ model: BackendModel) throws {
-        let path = modelPath(for: model)
-        if fileManager.fileExists(atPath: path.path) {
-            return
-        }
-
-        let placeholder = "layca-placeholder-model:\(model.rawValue)\n"
-        let data = Data(placeholder.utf8)
-        try data.write(to: path, options: .atomic)
-    }
-
-    func installDownloadedModel(_ model: BackendModel, from temporaryURL: URL) throws {
-        let path = modelPath(for: model)
-
-        if fileManager.fileExists(atPath: path.path) {
-            try fileManager.removeItem(at: path)
-        }
-
-        try fileManager.copyItem(at: temporaryURL, to: path)
-        loadedModel = nil
-    }
-
-    func ensureLoaded(_ model: BackendModel) async throws -> URL {
-        let path = modelPath(for: model)
-        guard fileManager.fileExists(atPath: path.path) else {
-            throw PreflightError.modelUnavailable
-        }
-
-        if loadedModel != model {
-            try await Task.sleep(nanoseconds: 300_000_000)
-            loadedModel = model
-        }
-
-        return path
     }
 }
 
 struct PreflightService {
     func prepare(
-        selectedModelID: String,
         languageCodes: Set<String>,
-        remainingCreditSeconds: Double,
-        modelManager: ModelManager
+        remainingCreditSeconds: Double
     ) async throws -> PreflightConfig {
         guard remainingCreditSeconds > 0 else {
             throw PreflightError.creditExhausted
         }
 
-        guard let requestedModel = BackendModel(rawValue: selectedModelID) else {
-            throw PreflightError.unknownModel
-        }
-
-        let installed = await modelManager.installedModels()
-
-        let resolvedModel: BackendModel
-        let fallbackNote: String?
-
-        if installed.contains(requestedModel) {
-            resolvedModel = requestedModel
-            fallbackNote = nil
-        } else if let fallback = installed.sorted(by: { $0.priorityOrder < $1.priorityOrder }).first {
-            resolvedModel = fallback
-            fallbackNote = "\(requestedModel.displayName) is not installed. Fallback to \(fallback.displayName)."
-        } else {
-            throw PreflightError.modelUnavailable
-        }
-
-        let modelPath = try await modelManager.ensureLoaded(resolvedModel)
         let normalizedLanguageCodes = languageCodes.map { $0.lowercased() }.sorted()
         let prompt = buildPrompt(languageCodes: normalizedLanguageCodes)
 
         return PreflightConfig(
-            resolvedModel: resolvedModel,
-            modelPath: modelPath,
             prompt: prompt,
-            languageCodes: normalizedLanguageCodes,
-            fallbackNote: fallbackNote
+            languageCodes: normalizedLanguageCodes
         )
     }
 
@@ -242,22 +71,7 @@ enum PipelineEvent: Sendable {
 struct LivePipelineConfig: Sendable {
     let sessionID: UUID
     let prompt: String
-    let modelPath: URL
     let languageCodes: [String]
-}
-
-enum ModelDownloadError: LocalizedError {
-    case invalidURL
-    case unexpectedResponse
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidURL:
-            return "Model URL is invalid."
-        case .unexpectedResponse:
-            return "Model download failed with an unexpected server response."
-        }
-    }
 }
 
 enum MasterRecorderError: LocalizedError {
@@ -967,7 +781,6 @@ actor SessionStore {
         var rows: [TranscriptRow]
         var speakers: [String: SpeakerProfile]
         var languageHints: [String]
-        var modelID: String
         var audioFilePath: String
         var segmentsFilePath: String
         var durationSeconds: Double
@@ -998,7 +811,7 @@ actor SessionStore {
         try? fileManager.createDirectory(at: self.sessionsDirectory, withIntermediateDirectories: true)
     }
 
-    func createSession(title: String, languageHints: [String], modelID: String) throws -> UUID {
+    func createSession(title: String, languageHints: [String]) throws -> UUID {
         let id = UUID()
         let sessionDirectory = sessionsDirectory.appendingPathComponent(id.uuidString, isDirectory: true)
         try fileManager.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
@@ -1020,7 +833,6 @@ actor SessionStore {
             rows: [],
             speakers: [:],
             languageHints: languageHints,
-            modelID: modelID,
             audioFilePath: audioFileURL.path,
             segmentsFilePath: segmentsURL.path,
             durationSeconds: 0,
@@ -1042,13 +854,12 @@ actor SessionStore {
         sessions[sessionID] = session
     }
 
-    func updateSessionConfig(sessionID: UUID, languageHints: [String], modelID: String) {
+    func updateSessionConfig(sessionID: UUID, languageHints: [String]) {
         guard var session = sessions[sessionID] else {
             return
         }
 
         session.languageHints = languageHints
-        session.modelID = modelID
         sessions[sessionID] = session
     }
 
@@ -1181,11 +992,6 @@ final class AppBackend: ObservableObject {
     @Published var selectedLanguageCodes: Set<String> = ["en", "th"]
     @Published var languageSearchText = ""
 
-    @Published var selectedModelID = BackendModel.normalAI.rawValue
-    @Published var downloadedModelIDs: Set<String> = []
-    @Published var downloadingModelID: String?
-    @Published var modelDownloadProgress: Double = 0
-
     @Published var totalHours: Double = 40
     @Published var usedHours: Double = 12.6
 
@@ -1199,7 +1005,6 @@ final class AppBackend: ObservableObject {
 
     @Published var preflightStatusMessage: String?
 
-    private let modelManager = ModelManager()
     private let preflightService = PreflightService()
     private let pipeline = LiveSessionPipeline()
     private let sessionStore = SessionStore()
@@ -1213,17 +1018,6 @@ final class AppBackend: ObservableObject {
     init() {
         Task {
             await bootstrap()
-        }
-    }
-
-    var modelCatalog: [ModelOption] {
-        BackendModel.allCases.map { model in
-            ModelOption(
-                id: model.rawValue,
-                name: model.displayName,
-                sizeLabel: model.sizeLabel,
-                remoteDownloadURL: model.remoteDownloadURL
-            )
         }
     }
 
@@ -1244,7 +1038,6 @@ final class AppBackend: ObservableObject {
     }
 
     func bootstrap() async {
-        await refreshInstalledModels()
         await createNewSessionIfNeeded()
     }
 
@@ -1254,58 +1047,6 @@ final class AppBackend: ObservableObject {
             selectedLanguageCodes.remove(normalized)
         } else {
             selectedLanguageCodes.insert(normalized)
-        }
-    }
-
-    func selectModel(_ option: ModelOption) {
-        guard downloadingModelID == nil else {
-            return
-        }
-
-        guard let model = BackendModel(rawValue: option.id) else {
-            return
-        }
-
-        if downloadedModelIDs.contains(model.rawValue) {
-            selectedModelID = model.rawValue
-            return
-        }
-
-        downloadingModelID = model.rawValue
-        modelDownloadProgress = 0.02
-        preflightStatusMessage = nil
-
-        Task {
-            let progressTask = Task {
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 180_000_000)
-                    await MainActor.run {
-                        let next = min(modelDownloadProgress + 0.02, 0.92)
-                        modelDownloadProgress = next
-                    }
-                }
-            }
-
-            defer { progressTask.cancel() }
-
-            do {
-                try await downloadAndInstall(model)
-                let installed = await modelManager.installedModelIDs()
-
-                await MainActor.run {
-                    downloadedModelIDs = installed
-                    selectedModelID = model.rawValue
-                    downloadingModelID = nil
-                    modelDownloadProgress = 0
-                    preflightStatusMessage = nil
-                }
-            } catch {
-                await MainActor.run {
-                    downloadingModelID = nil
-                    modelDownloadProgress = 0
-                    preflightStatusMessage = error.localizedDescription
-                }
-            }
         }
     }
 
@@ -1386,14 +1127,11 @@ final class AppBackend: ObservableObject {
 
         do {
             let config = try await preflightService.prepare(
-                selectedModelID: selectedModelID,
                 languageCodes: selectedLanguageCodes,
-                remainingCreditSeconds: remainingSeconds,
-                modelManager: modelManager
+                remainingCreditSeconds: remainingSeconds
             )
 
-            selectedModelID = config.resolvedModel.rawValue
-            preflightStatusMessage = config.fallbackNote
+            preflightStatusMessage = nil
 
             guard let audioFileURL = await sessionStore.audioFileURL(for: sessionID) else {
                 preflightStatusMessage = "Unable to prepare audio file for this session."
@@ -1405,8 +1143,7 @@ final class AppBackend: ObservableObject {
 
             await sessionStore.updateSessionConfig(
                 sessionID: sessionID,
-                languageHints: config.languageCodes,
-                modelID: config.resolvedModel.rawValue
+                languageHints: config.languageCodes
             )
             await sessionStore.setSessionStatus(.recording, for: sessionID)
 
@@ -1414,7 +1151,6 @@ final class AppBackend: ObservableObject {
                 config: LivePipelineConfig(
                     sessionID: sessionID,
                     prompt: config.prompt,
-                    modelPath: config.modelPath,
                     languageCodes: config.languageCodes
                 )
             )
@@ -1542,10 +1278,6 @@ final class AppBackend: ObservableObject {
         }
     }
 
-    private func refreshInstalledModels() async {
-        downloadedModelIDs = await modelManager.installedModelIDs()
-    }
-
     private func createNewSessionIfNeeded() async {
         if sessions.isEmpty {
             await createSessionAndActivate()
@@ -1555,12 +1287,9 @@ final class AppBackend: ObservableObject {
     private func createSessionAndActivate() async {
         chatCounter += 1
 
-        let defaultModel = BackendModel(rawValue: selectedModelID)?.rawValue ?? BackendModel.normalAI.rawValue
-
         if let id = try? await sessionStore.createSession(
             title: "Chat \(chatCounter)",
-            languageHints: Array(selectedLanguageCodes),
-            modelID: defaultModel
+            languageHints: Array(selectedLanguageCodes)
         ) {
             activeSessionID = id
             await refreshSessionsFromStore()
@@ -1610,23 +1339,6 @@ final class AppBackend: ObservableObject {
         return result
     }
 
-    private func downloadAndInstall(_ model: BackendModel) async throws {
-        guard let remoteURL = URL(string: model.remoteDownloadURL) else {
-            throw ModelDownloadError.invalidURL
-        }
-
-        let (temporaryLocation, response) = try await URLSession.shared.download(from: remoteURL)
-
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw ModelDownloadError.unexpectedResponse
-        }
-
-        await MainActor.run {
-            modelDownloadProgress = 0.98
-        }
-
-        try await modelManager.installDownloadedModel(model, from: temporaryLocation)
-    }
 }
 
 private extension Color {

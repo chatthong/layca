@@ -2,9 +2,8 @@
 
 ## Completed In This Chat
 
-### Dynamic Pre-Flight Backend (Credits + Model Readiness + Language Prompt)
+### Dynamic Pre-Flight Backend (Credits + Language Prompt)
 - `AppBackend.swift`
-- `ModelManager` resolves model `.bin` paths in `Documents/Models/`, tracks installed/loaded models, and supports fallback model selection.
 - `PreflightService` checks remaining credit and builds prompt like `This is a meeting in English, Thai.`.
 
 ### Live Pipeline Backend (4-Track Style, Concurrent)
@@ -25,18 +24,23 @@
 
 ### App Orchestration + UI Wiring
 - `AppBackend.swift`, `ContentView.swift`, `ChatTabView.swift`
-- `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and model/language settings.
+- `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and language settings.
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Transcript bubble tap now plays only that row's chunk from session audio.
 - Playback is disabled while recording, and rows without valid offsets are non-playable.
 - Recorder button tap issue fixed by disabling hit-testing on decorative overlays.
 
+### Settings Cleanup (Model UI Removed)
+- `SettingTabView.swift`, `ContentView.swift`, `AppBackend.swift`
+- Removed Settings model change/download card and model-select callbacks.
+- Removed in-app Whisper model-file dependency from backend/UI.
+
 ### Tests Added
 - `AppBackendTests.swift`
 - Covered:
   - prompt building from selected languages
-  - model fallback behavior
+  - credit exhaustion guard behavior
   - speaker profile stability across chunks
 - Build + tests validated on iOS simulator.
 
@@ -48,7 +52,7 @@
 5. Add configurable VAD/speaker sensitivity tuning in settings.
 
 ## Quality Gates
-- Keep record disabled when model/credit pre-flight fails.
+- Keep record disabled when credit pre-flight fails.
 - Keep chat updates reactive and incremental.
 - Keep per-session speaker style consistent across chunks.
-- Keep model catalog and docs synchronized when model entries change.
+- Keep docs synchronized with runtime behavior.

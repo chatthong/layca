@@ -4,47 +4,29 @@ import Testing
 
 struct AppBackendTests {
     @Test func preflightBuildsPromptFromLanguageFocus() async throws {
-        let fileManager = FileManager.default
-        let tempModelsURL = fileManager.temporaryDirectory
-            .appendingPathComponent("layca-tests-models-\(UUID().uuidString)", isDirectory: true)
-        defer { try? fileManager.removeItem(at: tempModelsURL) }
-
-        let manager = ModelManager(fileManager: fileManager, modelsDirectory: tempModelsURL)
-        try await manager.installPlaceholderModel(.normalAI)
-
         let service = PreflightService()
         let config = try await service.prepare(
-            selectedModelID: BackendModel.normalAI.rawValue,
             languageCodes: ["th", "en"],
-            remainingCreditSeconds: 120,
-            modelManager: manager
+            remainingCreditSeconds: 120
         )
 
-        #expect(config.resolvedModel == .normalAI)
         #expect(config.languageCodes == ["en", "th"])
         #expect(config.prompt.contains("English"))
         #expect(config.prompt.contains("Thai"))
     }
 
-    @Test func preflightFallsBackToInstalledModelWhenSelectedMissing() async throws {
-        let fileManager = FileManager.default
-        let tempModelsURL = fileManager.temporaryDirectory
-            .appendingPathComponent("layca-tests-fallback-\(UUID().uuidString)", isDirectory: true)
-        defer { try? fileManager.removeItem(at: tempModelsURL) }
-
-        let manager = ModelManager(fileManager: fileManager, modelsDirectory: tempModelsURL)
-        try await manager.installPlaceholderModel(.lightAI)
-
+    @Test func preflightFailsWhenCreditsAreExhausted() async throws {
         let service = PreflightService()
-        let config = try await service.prepare(
-            selectedModelID: BackendModel.normalAI.rawValue,
-            languageCodes: ["en"],
-            remainingCreditSeconds: 120,
-            modelManager: manager
-        )
 
-        #expect(config.resolvedModel == .lightAI)
-        #expect(config.fallbackNote != nil)
+        do {
+            _ = try await service.prepare(
+                languageCodes: ["en"],
+                remainingCreditSeconds: 0
+            )
+            #expect(Bool(false))
+        } catch {
+            #expect(error.localizedDescription.contains("Hours credit is empty"))
+        }
     }
 
     @Test func speakerProfileIsStableAcrossChunksInSession() async throws {
@@ -54,7 +36,7 @@ struct AppBackendTests {
         defer { try? fileManager.removeItem(at: tempSessionsURL) }
 
         let store = SessionStore(fileManager: fileManager, sessionsDirectory: tempSessionsURL)
-        let sessionID = try await store.createSession(title: "Chat 1", languageHints: ["en"], modelID: BackendModel.lightAI.rawValue)
+        let sessionID = try await store.createSession(title: "Chat 1", languageHints: ["en"])
 
         let first = PipelineTranscriptEvent(
             id: UUID(),

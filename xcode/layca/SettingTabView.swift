@@ -8,18 +8,12 @@ struct SettingTabView: View {
     @Binding var languageSearchText: String
 
     let filteredFocusLanguages: [FocusLanguage]
-    let modelCatalog: [ModelOption]
-    let selectedModelID: String
-    let downloadedModelIDs: Set<String>
-    let downloadingModelID: String?
-    let modelDownloadProgress: Double
 
     @Binding var isICloudSyncEnabled: Bool
     let isRestoringPurchases: Bool
     let restoreStatusMessage: String?
 
     let onToggleLanguage: (String) -> Void
-    let onSelectModel: (ModelOption) -> Void
     let onRestorePurchases: () -> Void
 
     var body: some View {
@@ -34,7 +28,6 @@ struct SettingTabView: View {
                         settingsHeader
                         hoursCreditCard
                         languageFocusCard
-                        modelSelectionCard
                         iCloudAndPurchaseCard
                     }
                     .padding(.horizontal, 18)
@@ -68,7 +61,7 @@ struct SettingTabView: View {
             Text("Setting")
                 .font(.system(size: 36, weight: .bold, design: .rounded))
                 .foregroundStyle(.black.opacity(0.9))
-            Text("Language focus, model download, and account sync")
+            Text("Language focus and account sync")
                 .font(.subheadline)
                 .foregroundStyle(.black.opacity(0.6))
         }
@@ -156,35 +149,6 @@ struct SettingTabView: View {
         .liquidCard()
     }
 
-    private var modelSelectionCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Model Change")
-                .font(.headline)
-                .foregroundStyle(.black.opacity(0.8))
-            Text("Select one model. If missing, Layca downloads it from cloud first.")
-                .font(.subheadline)
-                .foregroundStyle(.black.opacity(0.6))
-
-            ForEach(modelCatalog) { model in
-                Button {
-                    onSelectModel(model)
-                } label: {
-                    ModelRow(
-                        model: model,
-                        isSelected: selectedModelID == model.id,
-                        isInstalled: downloadedModelIDs.contains(model.id),
-                        isDownloading: downloadingModelID == model.id,
-                        downloadProgress: modelDownloadProgress
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(downloadingModelID != nil && downloadingModelID != model.id)
-            }
-        }
-        .padding(18)
-        .liquidCard()
-    }
-
     private var iCloudAndPurchaseCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("iCloud & Purchases")
@@ -264,62 +228,6 @@ private struct LanguageChip: View {
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(isSelected ? .black.opacity(0.72) : .white.opacity(0.58))
-        )
-    }
-}
-
-private struct ModelRow: View {
-    let model: ModelOption
-    let isSelected: Bool
-    let isInstalled: Bool
-    let isDownloading: Bool
-    let downloadProgress: Double
-
-    var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.black.opacity(0.82))
-                Text(model.sizeLabel)
-                    .font(.caption)
-                    .foregroundStyle(.black.opacity(0.55))
-            }
-
-            Spacer()
-
-            if isDownloading {
-                HStack(spacing: 6) {
-                    ProgressView(value: max(downloadProgress, 0.05))
-                        .progressViewStyle(.circular)
-                        .tint(.black.opacity(0.75))
-                    Text("\(Int(downloadProgress * 100))%")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.black.opacity(0.55))
-                }
-            } else if isSelected {
-                Label("Active", systemImage: "checkmark.circle.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.green.opacity(0.88))
-            } else if isInstalled {
-                Text("Installed")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.black.opacity(0.55))
-            } else {
-                Label("Download", systemImage: "icloud.and.arrow.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.black.opacity(0.7))
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.white.opacity(isSelected ? 0.64 : 0.50))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(.white.opacity(0.58), lineWidth: 0.8)
         )
     }
 }

@@ -2,7 +2,7 @@
 
 ## Current Runtime Persistence
 - **Primary runtime store:** in-memory actor store (`SessionStore`) for session/transcript state.
-- **Primary durable store:** filesystem (`Documents/Models`, `Documents/Sessions`).
+- **Primary durable store:** filesystem (`Documents/Sessions`).
 - **Bundled runtime asset:** CoreML VAD model directory in app bundle (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) for offline startup.
 - **Bundled runtime asset:** CoreML speaker model directory in app bundle (`wespeaker_v2.mlmodelc`) for offline startup.
 - **Planned:** migrate/extend to `SwiftData` for long-term query/index workflows.
@@ -14,7 +14,6 @@
 - `title: String`
 - `createdAt: Date`
 - `languageHints: [String]`
-- `modelID: String`
 - `audioFilePath: String`
 - `segmentsFilePath: String`
 - `durationSeconds: Double`
@@ -39,10 +38,6 @@
 ## Filesystem Layout
 ```text
 Documents/
-├── Models/
-│   ├── ggml-large-v3-turbo-q8_0.bin
-│   ├── ggml-large-v3-turbo-q5_0.bin
-│   └── ggml-large-v3-turbo.bin
 └── Sessions/
     └── {UUID}/
         ├── session_full.m4a

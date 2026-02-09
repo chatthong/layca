@@ -15,7 +15,7 @@
 
 **Key Differentiators:**
 
-1. **Tiny install + on-demand AI model:** App stays light; model files are installed later.
+1. **Privacy-first local processing:** Core pipeline runs on-device.
 2. **Chat-first review:** Transcript appears as speaker bubbles in one timeline.
 3. **Audio-linked workflow:** Session audio is stored with transcript metadata for playback/export flows.
 
@@ -23,21 +23,10 @@
 
 ## 2. Tech Stack 🛠️
 
-### A. Core Engine & Model Strategy
+### A. Core Engine Strategy
 
 - **Inference target:** `whisper.cpp` integration path (transcription branch still uses placeholder text while runtime integration is pending).
-- **Dynamic model catalog (from Settings):**
-  - **Normal AI**
-    - file: `ggml-large-v3-turbo-q8_0.bin`
-    - URL: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin?download=true`
-  - **Light AI**
-    - file: `ggml-large-v3-turbo-q5_0.bin`
-    - URL: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin?download=true`
-  - **High Detail AI**
-    - file: `ggml-large-v3-turbo.bin`
-    - URL: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true`
-- **Model resolution path:** `Documents/Models/`
-- **Pre-flight behavior:** selected model is validated before recording; missing model can fallback to installed model or block recording.
+- **Pre-flight behavior:** credits and language prompt are validated before recording.
 
 ### B. Audio Stack
 
@@ -58,10 +47,6 @@
 
 ```text
 Documents/
-├── Models/
-│   ├── ggml-large-v3-turbo-q8_0.bin
-│   ├── ggml-large-v3-turbo-q5_0.bin
-│   └── ggml-large-v3-turbo.bin
 └── Sessions/
     └── {UUID}/
         ├── session_full.m4a
@@ -74,7 +59,7 @@ Documents/
 
 - **Chat tab:** Recorder card + live transcript bubbles.
 - **Header:** Active chat title supports inline rename.
-- **Setting tab:** Hours credit, language focus, model selection/download state, iCloud toggle.
+- **Setting tab:** Hours credit, language focus, iCloud toggle, and purchase restore.
 - **Library tab:** Session switcher.
 - **New Chat tab role:** Action tab to create a fresh session and return to Chat.
 - **Export:** Separate sheet; Notepad-style formatting is export-only.
@@ -86,9 +71,7 @@ Documents/
 ### Phase 1: Pre-Flight
 
 1. Check credit balance.
-2. Resolve selected model from dynamic catalog.
-3. Validate installed model path in `Documents/Models/`.
-4. Build language prompt from Language Focus.
+2. Build language prompt from Language Focus.
 
 ### Phase 2: Live Pipeline (Concurrent)
 
@@ -118,9 +101,8 @@ Documents/
 
 ### Implemented
 
-#### Dynamic Pre-Flight Backend (Credits + Model Readiness + Language Prompt)
+#### Dynamic Pre-Flight Backend (Credits + Language Prompt)
 - `AppBackend.swift`
-- `ModelManager` resolves model `.bin` paths in `Documents/Models/`, tracks installed/loaded models, and supports fallback model selection.
 - `PreflightService` checks remaining credit and builds prompt text like `This is a meeting in English, Thai.`.
 
 #### Live Pipeline Backend (4-Track Style, Concurrent)
@@ -142,7 +124,7 @@ Documents/
 
 #### App Orchestration + UI Wiring
 - `AppBackend.swift`, `ContentView.swift`, `ChatTabView.swift`
-- `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and model/language settings.
+- `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and language settings.
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Chat bubble tap plays only that chunk from `session_full.m4a` using persisted offsets.
