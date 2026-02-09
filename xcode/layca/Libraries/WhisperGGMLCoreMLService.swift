@@ -46,6 +46,7 @@ actor WhisperGGMLCoreMLService {
     private let rootDirectory: URL
     private var context: OpaquePointer?
     private var activeModelPath: String?
+    private var didWarmupInference = false
 
     init(fileManager: FileManager = .default, rootDirectory: URL? = nil) {
         self.fileManager = fileManager
@@ -62,6 +63,11 @@ actor WhisperGGMLCoreMLService {
         if let context {
             whisper_free(context)
         }
+    }
+
+    func prepareIfNeeded() async throws {
+        let ctx = try await ensureContext()
+        try warmupInferenceIfNeeded(context: ctx)
     }
 
     func transcribe(
@@ -233,6 +239,40 @@ actor WhisperGGMLCoreMLService {
         }
 
         return WhisperTranscriptionResult(languageID: detectedLanguage, text: finalText)
+    }
+
+    private func warmupInferenceIfNeeded(context: OpaquePointer) throws {
+        guard !didWarmupInference else {
+            return
+        }
+
+        var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
+        params.print_realtime = false
+        params.print_progress = false
+        params.print_timestamps = false
+        params.print_special = false
+        params.translate = false
+        params.n_threads = 1
+        params.offset_ms = 0
+        params.no_context = true
+        params.single_segment = true
+        params.no_timestamps = true
+        params.detect_language = true
+        params.language = nil
+        params.initial_prompt = nil
+
+        // Prime model backends (CoreML/Metal/decoder graph) before first user tap.
+        let warmupSamples = Array(repeating: Float.zero, count: Int(Constants.targetSampleRate))
+        let status = warmupSamples.withUnsafeBufferPointer { bufferPointer in
+            whisper_full(context, params, bufferPointer.baseAddress, Int32(bufferPointer.count))
+        }
+
+        guard status == 0 else {
+            throw WhisperGGMLCoreMLError.inferenceFailed
+        }
+
+        whisper_reset_timings(context)
+        didWarmupInference = true
     }
 
     private static func isLikelyPromptLeak(text: String, prompt: String) -> Bool {

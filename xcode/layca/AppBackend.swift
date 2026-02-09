@@ -1017,6 +1017,7 @@ final class AppBackend: ObservableObject {
     @Published var sessions: [ChatSession] = []
     @Published var activeSessionID: UUID?
     @Published var activeTranscriptRows: [TranscriptRow] = []
+    @Published var transcribingRowIDs: Set<UUID> = []
 
     @Published var preflightStatusMessage: String?
 
@@ -1029,7 +1030,9 @@ final class AppBackend: ObservableObject {
     private var streamTask: Task<Void, Never>?
     private var chunkPlayer: AVAudioPlayer?
     private var chunkStopTask: Task<Void, Never>?
-    private var transcribingRowIDs: Set<UUID> = []
+    private var attemptedTranscriptionRowIDs: Set<UUID> = []
+    private var whisperPrewarmTask: Task<Void, Never>?
+    private var isWhisperPrewarmed = false
     private var chatCounter = 0
 
     init() {
@@ -1055,6 +1058,7 @@ final class AppBackend: ObservableObject {
     }
 
     func bootstrap() async {
+        prewarmWhisperIfNeeded()
         await createNewSessionIfNeeded()
     }
 
@@ -1130,6 +1134,7 @@ final class AppBackend: ObservableObject {
             return
         }
 
+        prewarmWhisperIfNeeded()
         stopChunkPlayback()
 
         if activeSessionID == nil {
@@ -1243,6 +1248,9 @@ final class AppBackend: ObservableObject {
                 guard let self else {
                     return
                 }
+                guard self.shouldRunOnDemandTranscription(for: row) else {
+                    return
+                }
                 await self.transcribeChunkOnDemand(
                     row: row,
                     sessionID: sessionID,
@@ -1261,18 +1269,21 @@ final class AppBackend: ObservableObject {
         startOffset: Double,
         endOffset: Double
     ) async {
-        guard !transcribingRowIDs.contains(row.id) else {
+        guard !transcribingRowIDs.contains(row.id),
+              !attemptedTranscriptionRowIDs.contains(row.id)
+        else {
             return
         }
 
         transcribingRowIDs.insert(row.id)
+        attemptedTranscriptionRowIDs.insert(row.id)
+
+        if let prewarmTask = whisperPrewarmTask {
+            await prewarmTask.value
+        }
         defer {
             transcribingRowIDs.remove(row.id)
-            if preflightStatusMessage == "Transcribing selected chunk..." {
-                preflightStatusMessage = nil
-            }
         }
-        preflightStatusMessage = "Transcribing selected chunk..."
 
         guard let audioURL = await sessionStore.audioFileURL(for: sessionID) else {
             preflightStatusMessage = "Unable to load session audio for transcription."
@@ -1309,6 +1320,19 @@ final class AppBackend: ObservableObject {
         } catch {
             preflightStatusMessage = error.localizedDescription
         }
+    }
+
+    private func shouldRunOnDemandTranscription(for row: TranscriptRow) -> Bool {
+        guard row.language.uppercased() == "AUTO" else {
+            return false
+        }
+        guard !attemptedTranscriptionRowIDs.contains(row.id) else {
+            return false
+        }
+        guard !transcribingRowIDs.contains(row.id) else {
+            return false
+        }
+        return true
     }
 
     private func stopChunkPlayback() {
@@ -1379,6 +1403,33 @@ final class AppBackend: ObservableObject {
         ) {
             activeSessionID = id
             await refreshSessionsFromStore()
+        }
+    }
+
+    private func prewarmWhisperIfNeeded() {
+        guard !isWhisperPrewarmed else {
+            return
+        }
+        guard whisperPrewarmTask == nil else {
+            return
+        }
+
+        whisperPrewarmTask = Task(priority: .utility) { [weak self] in
+            guard let self else {
+                return
+            }
+
+            do {
+                try await self.whisperTranscriber.prepareIfNeeded()
+                await MainActor.run { [weak self] in
+                    self?.isWhisperPrewarmed = true
+                    self?.whisperPrewarmTask = nil
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.whisperPrewarmTask = nil
+                }
+            }
         }
     }
 

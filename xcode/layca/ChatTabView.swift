@@ -8,6 +8,7 @@ struct ChatTabView: View {
     let activeSessionTitle: String
     let activeSessionDateText: String
     let liveChatItems: [TranscriptRow]
+    let transcribingRowIDs: Set<UUID>
     let preflightMessage: String?
     let canPlayTranscriptChunks: Bool
     let onRecordTap: () -> Void
@@ -330,10 +331,23 @@ struct ChatTabView: View {
                 timestampView(for: item)
             }
 
-            Text(item.text)
-                .font(.body)
-                .foregroundStyle(.black.opacity(0.82))
-                .multilineTextAlignment(.leading)
+            if transcribingRowIDs.contains(item.id) {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.red.opacity(0.82))
+                    Text("Transcribing selected chunk...")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.red.opacity(0.82))
+                        .multilineTextAlignment(.leading)
+                }
+                .transition(.opacity)
+            } else {
+                Text(item.text)
+                    .font(.body)
+                    .foregroundStyle(.black.opacity(0.82))
+                    .multilineTextAlignment(.leading)
+            }
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 11)
@@ -345,6 +359,7 @@ struct ChatTabView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(.white.opacity(0.55), lineWidth: 0.8)
         )
+        .animation(.easeInOut(duration: 0.2), value: transcribingRowIDs.contains(item.id))
     }
 
     private func speakerMeta(for item: TranscriptRow) -> some View {

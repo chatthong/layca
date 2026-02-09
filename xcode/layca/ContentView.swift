@@ -24,6 +24,7 @@ struct ContentView: View {
                         activeSessionTitle: backend.activeSessionTitle,
                         activeSessionDateText: backend.activeSessionDateText,
                         liveChatItems: backend.activeTranscriptRows,
+                        transcribingRowIDs: backend.transcribingRowIDs,
                         preflightMessage: backend.preflightStatusMessage,
                         canPlayTranscriptChunks: !backend.isRecording,
                         onRecordTap: backend.toggleRecording,
