@@ -16,10 +16,15 @@
 - Renames active session title (used by Chat header inline rename).
 
 ### `selectModel(_ option: ModelOption) -> Void`
-- Changes active model or triggers model install simulation.
+- Changes active model or triggers real model download/install.
 
 ### `toggleLanguageFocus(_ code: String) -> Void`
 - Adds/removes language code used to build pre-flight prompt.
+
+### `playTranscriptChunk(_ row: TranscriptRow) -> Void`
+- Plays one transcript row chunk from the active session audio file.
+- Requires valid row offsets (`startOffset`, `endOffset`) and recording must be stopped.
+- If constraints are not met, call is a no-op.
 
 ## PreflightService
 
@@ -40,6 +45,9 @@
 ### `installPlaceholderModel(_ model: BackendModel) throws`
 - Current simulated install path for UI/testing.
 
+### `installDownloadedModel(_ model: BackendModel, from temporaryURL: URL) throws`
+- Persists downloaded model binary into `Documents/Models/`.
+
 ## LiveSessionPipeline
 
 ### `start(config: LivePipelineConfig) -> AsyncStream<PipelineEvent>`
@@ -48,9 +56,37 @@
   - timer
   - transcript merged events
   - stopped
+- Uses native CoreML Silero VAD for speech detection when available.
+- Uses native CoreML WeSpeaker embedding (`wespeaker_v2.mlmodelc`) for speaker matching when available.
+- Falls back to amplitude-threshold gating if VAD cannot initialize.
+- Falls back to lightweight heuristic speaker matching if speaker model cannot initialize.
 
 ### `stop() -> Void`
 - Stops pipeline and ends stream.
+
+## SileroVADCoreMLService
+
+### `prepareIfNeeded() async throws -> Void`
+- Resolves bundled `silero-vad-unified-256ms-v6.0.0.mlmodelc` first.
+- Falls back to cache/download if bundle resource is unavailable.
+
+### `ingest(samples:sampleRate:) throws -> Float?`
+- Accepts PCM frames, resamples to 16kHz, runs recurrent CoreML VAD windowing, and returns latest speech probability.
+
+### `reset() -> Void`
+- Clears audio/state buffers between recording sessions.
+
+## SpeakerDiarizationCoreMLService
+
+### `prepareIfNeeded() async throws -> Void`
+- Resolves bundled `wespeaker_v2.mlmodelc` first.
+- Falls back to cache/download if bundle resource is unavailable.
+
+### `embedding(for:sampleRate:) throws -> [Float]?`
+- Accepts PCM samples, resamples to 16kHz, prepares fixed model window, and returns normalized speaker embedding vector.
+
+### `reset() -> Void`
+- Stateless reset hook (kept for pipeline lifecycle symmetry).
 
 ## SessionStore
 
@@ -59,6 +95,7 @@
 
 ### `appendTranscript(sessionID:event:) -> Void`
 - Appends transcript row, updates duration, persists `segments.json` snapshot.
+- Persists `startOffset`/`endOffset` on each row for chunk playback.
 
 ### `snapshotSessions() -> [ChatSession]`
 - Returns session list for Library UI.

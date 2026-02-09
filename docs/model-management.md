@@ -21,6 +21,8 @@
 
 ## Paths
 - Model directory: `Documents/Models/`
+- Bundled VAD directory: app bundle `silero-vad-unified-256ms-v6.0.0.mlmodelc` (CoreML Silero, offline-first)
+- Bundled speaker directory: app bundle `wespeaker_v2.mlmodelc` (CoreML WeSpeaker, offline-first)
 
 ## Runtime Workflow
 1. User selects model.
@@ -30,9 +32,11 @@
 5. On record press, pre-flight validates model and may fallback to another installed model.
 
 ## Current Implementation State
-- Backend has model metadata, local file checks, and fallback logic.
-- Download UI is simulated with placeholder install path.
-- Next step is replacing placeholder install with real `URLSessionDownloadTask` from the URLs above.
+- Backend has model metadata, local file checks, fallback logic, and real download/install for Whisper model binaries.
+- CoreML Silero VAD is bundled in app resources and loaded locally first.
+- If bundled VAD resource is unavailable, cache/download fallback is used.
+- CoreML speaker model (`wespeaker_v2.mlmodelc`) is bundled in app resources and loaded locally first.
+- If bundled speaker resource is unavailable, cache/download fallback is used.
 
 ## UX Rules
 - Disable recording until at least one model is available.

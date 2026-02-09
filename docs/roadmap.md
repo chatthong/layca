@@ -8,13 +8,14 @@
 - `PreflightService` checks remaining credit and builds prompt like `This is a meeting in English, Thai.`.
 
 ### Live Pipeline Backend (4-Track Style, Concurrent)
-- `AppBackend.swift`
+- `AppBackend.swift`, `Libraries/SileroVADCoreMLService.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`
 - `LiveSessionPipeline` actor emits:
   - waveform updates (visualizer timing)
-  - VAD-like chunking behavior
-  - parallel Whisper branch + Speaker-ID branch
+  - CoreML Silero VAD chunking behavior
+  - parallel Whisper branch + CoreML speaker-ID branch
   - merged transcript events (`speaker`, `language`, `text`, `timestamp`)
-- Current implementation is backend-ready simulation and can be swapped to real `AVAudioEngine` + Silero VAD + `whisper.cpp`.
+- Current implementation uses real `AVAudioEngine` + bundled/offline CoreML Silero VAD + bundled/offline CoreML speaker diarization.
+- Chunk split defaults are tuned longer (`silenceCutoff=1.2s`, `minChunk=3.2s`, `maxChunk=12s`) to reduce over-splitting.
 
 ### Storage, Update, and Sync Hooks
 - `AppBackend.swift`
@@ -27,6 +28,8 @@
 - `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and model/language settings.
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
+- Transcript bubble tap now plays only that row's chunk from session audio.
+- Playback is disabled while recording, and rows without valid offsets are non-playable.
 - Recorder button tap issue fixed by disabling hit-testing on decorative overlays.
 
 ### Tests Added
@@ -38,11 +41,11 @@
 - Build + tests validated on iOS simulator.
 
 ## Next Priority
-1. Replace simulated model install with real `URLSessionDownloadTask` using catalog URLs.
-2. Replace simulated pipeline internals with real `AVAudioEngine` + VAD + whisper inference.
-3. Add playback service to seek session audio from transcript rows.
-4. Add resilience/recovery for interrupted recording or processing.
-5. Add optional SwiftData mirror/index layer for long-term search/filter use cases.
+1. Replace placeholder transcript generation with real whisper runtime inference.
+2. Add playback UX polish (playing-state indicator, active-bubble highlight, scrub constraints).
+3. Add resilience/recovery for interrupted recording or processing.
+4. Add optional SwiftData mirror/index layer for long-term search/filter use cases.
+5. Add configurable VAD/speaker sensitivity tuning in settings.
 
 ## Quality Gates
 - Keep record disabled when model/credit pre-flight fails.

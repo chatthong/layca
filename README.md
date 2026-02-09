@@ -3,7 +3,7 @@
 > **The Ultimate Offline Polyglot Meeting Secretary**
 
 **Project Codename:** `Layca-Core`  
-**Version:** 0.3.0 (Dynamic Pipeline + Model Catalog Update)  
+**Version:** 0.5.1 (Live Audio + CoreML VAD + CoreML Speaker Diarization + Chunk Playback)  
 **Platforms:** iOS, iPadOS, tvOS, visionOS  
 **Core Philosophy:** Offline-first after model setup, privacy-first, chat-first UX
 
@@ -25,7 +25,7 @@
 
 ### A. Core Engine & Model Strategy
 
-- **Inference target:** `whisper.cpp` integration path (current backend uses simulation hooks).
+- **Inference target:** `whisper.cpp` integration path (transcription branch still uses placeholder text while runtime integration is pending).
 - **Dynamic model catalog (from Settings):**
   - **Normal AI**
     - file: `ggml-large-v3-turbo-q8_0.bin`
@@ -41,11 +41,15 @@
 
 ### B. Audio Stack
 
-- **Current backend:** Dynamic live pipeline simulator for waveform, VAD-like chunking, transcript merge, and persistence.
-- **Planned production stack:**
-  - `AVAudioEngine` for live input + waveform stream
-  - VAD (Silero or equivalent) for chunk boundary detection
-  - Whisper inference on chunked PCM
+- **Current backend:**
+  - `AVAudioEngine` live microphone input + waveform stream
+  - Native `Silero VAD` via CoreML (`silero-vad-unified-256ms-v6.0.0.mlmodelc`)
+  - Native speaker embedding via CoreML (`wespeaker_v2.mlmodelc`)
+  - Bundled VAD model in app resources (offline-first), with network/cache fallback
+  - Bundled speaker model in app resources (offline-first), with network/cache fallback
+  - Chunk merge + persistence + reactive chat updates
+- **Remaining integration:**
+  - Whisper inference on chunked PCM (replace current placeholder transcript text)
 
 ### C. Data Layer
 
@@ -93,9 +97,10 @@ Documents/
    - Keep session master audio file (`session_full.m4a`).
 2. **Track 2: VAD slicer**
    - Detect speech/silence, cut chunk after sustained silence.
+   - Current defaults: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
 3. **Track 3: Dual AI branch**
    - Branch A: transcription + language ID.
-   - Branch B: speaker matching / new speaker assignment.
+   - Branch B: speaker embedding extraction + cosine matching / new speaker assignment.
 4. **Track 4: Merger**
    - Merge branch results into one transcript item.
 
@@ -103,8 +108,9 @@ Documents/
 
 1. Append transcript into store.
 2. UI updates bubbles reactively.
-3. Deduct used credit by chunk duration.
-4. Optional sync hook runs in background.
+3. Transcript rows keep chunk `startOffset`/`endOffset` for playback.
+4. Deduct used credit by chunk duration.
+5. Optional sync hook runs in background.
 
 ---
 
@@ -119,12 +125,14 @@ Documents/
 
 #### Live Pipeline Backend (4-Track Style, Concurrent)
 - `AppBackend.swift`
+- `Libraries/SileroVADCoreMLService.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`
 - `LiveSessionPipeline` actor emits:
   - waveform updates (visualizer timing)
-  - VAD-like chunking behavior
+  - CoreML Silero VAD chunking behavior
   - parallel Whisper branch + Speaker-ID branch
   - merged transcript events (`speaker`, `language`, `text`, `timestamp`)
-- Current implementation is backend-ready simulation and is structured for replacing internals with real `AVAudioEngine` + Silero VAD + `whisper.cpp`.
+- Current implementation uses real `AVAudioEngine` + native CoreML Silero VAD + native CoreML speaker diarization.
+- Transcription branch is still placeholder text until Whisper runtime is connected.
 
 #### Storage, Update, and Sync Hooks
 - `AppBackend.swift`
@@ -137,6 +145,8 @@ Documents/
 - `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and model/language settings.
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
+- Chat bubble tap plays only that chunk from `session_full.m4a` using persisted offsets.
+- Chunk playback is only enabled when recording is stopped.
 - Recorder card hit-testing fix applied so `Record` is tappable.
 
 #### Tests Added
@@ -148,9 +158,9 @@ Documents/
 
 ### Next
 
-- Replace simulated pipeline internals with real `AVAudioEngine` + VAD + Whisper runtime.
-- Replace placeholder model install with real `URLSessionDownloadTask` using catalog URLs.
-- Add playback seek-by-segment path in app flow.
+- Replace placeholder transcript generation with real Whisper runtime inference.
+- Add VAD confidence/debug telemetry for tuning thresholds in production.
+- Add playback UX polish (selected-row highlight / progress / interruption policy).
 
 ---
 

@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import AVFoundation
 
 enum BackendModel: String, CaseIterable, Identifiable {
     case normalAI = "normal-ai"
@@ -138,6 +139,17 @@ actor ModelManager {
         try data.write(to: path, options: .atomic)
     }
 
+    func installDownloadedModel(_ model: BackendModel, from temporaryURL: URL) throws {
+        let path = modelPath(for: model)
+
+        if fileManager.fileExists(atPath: path.path) {
+            try fileManager.removeItem(at: path)
+        }
+
+        try fileManager.copyItem(at: temporaryURL, to: path)
+        loadedModel = nil
+    }
+
     func ensureLoaded(_ model: BackendModel) async throws -> URL {
         let path = modelPath(for: model)
         guard fileManager.fileExists(atPath: path.path) else {
@@ -234,10 +246,236 @@ struct LivePipelineConfig: Sendable {
     let languageCodes: [String]
 }
 
+enum ModelDownloadError: LocalizedError {
+    case invalidURL
+    case unexpectedResponse
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "Model URL is invalid."
+        case .unexpectedResponse:
+            return "Model download failed with an unexpected server response."
+        }
+    }
+}
+
+enum MasterRecorderError: LocalizedError {
+    case microphonePermissionDenied
+    case unableToStart
+
+    var errorDescription: String? {
+        switch self {
+        case .microphonePermissionDenied:
+            return "Microphone permission is required for recording."
+        case .unableToStart:
+            return "Unable to start audio recording."
+        }
+    }
+}
+
+@MainActor
+final class MasterAudioRecorder: NSObject, AVAudioRecorderDelegate {
+    private var recorder: AVAudioRecorder?
+
+    func startRecording(to destinationURL: URL) async throws {
+        stopAndReset()
+
+        let hasPermission = await requestPermission()
+        guard hasPermission else {
+            throw MasterRecorderError.microphonePermissionDenied
+        }
+
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
+        try session.setActive(true, options: .notifyOthersOnDeactivation)
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+            AVSampleRateKey: 44_100,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+        ]
+
+        let parentDirectory = destinationURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: parentDirectory, withIntermediateDirectories: true)
+
+        if FileManager.default.fileExists(atPath: destinationURL.path) {
+            try FileManager.default.removeItem(at: destinationURL)
+        }
+
+        let recorder = try AVAudioRecorder(url: destinationURL, settings: settings)
+        recorder.delegate = self
+        recorder.prepareToRecord()
+
+        guard recorder.record() else {
+            throw MasterRecorderError.unableToStart
+        }
+
+        self.recorder = recorder
+    }
+
+    func stop() {
+        stopAndReset()
+    }
+
+    private func stopAndReset() {
+        recorder?.stop()
+        recorder = nil
+
+        let session = AVAudioSession.sharedInstance()
+        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func requestPermission() async -> Bool {
+        await withCheckedContinuation { continuation in
+            if #available(iOS 17.0, tvOS 17.0, visionOS 1.0, macCatalyst 17.0, *) {
+                AVAudioApplication.requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            } else {
+                AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            }
+        }
+    }
+}
+
+enum LiveAudioInputError: LocalizedError {
+    case invalidInputFormat
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidInputFormat:
+            return "Unable to access microphone input format."
+        }
+    }
+}
+
+private struct CapturedAudioFrame: Sendable {
+    let samples: [Float]
+    let sampleRate: Double
+    let amplitude: Double
+    let duration: Double
+    let zeroCrossingRate: Double
+}
+
+@MainActor
+private final class LiveAudioInputController {
+    private let engine = AVAudioEngine()
+    private var isStarted = false
+
+    func start(onCapture: @escaping @Sendable (CapturedAudioFrame) -> Void) throws {
+        let inputNode = engine.inputNode
+        let outputFormat = inputNode.outputFormat(forBus: 0)
+
+        guard outputFormat.sampleRate > 0, outputFormat.channelCount > 0 else {
+            throw LiveAudioInputError.invalidInputFormat
+        }
+
+        guard let tapFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: outputFormat.sampleRate,
+            channels: outputFormat.channelCount,
+            interleaved: false
+        ) else {
+            throw LiveAudioInputError.invalidInputFormat
+        }
+
+        inputNode.removeTap(onBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: tapFormat) { buffer, _ in
+            guard let frame = Self.captureFrame(from: buffer) else {
+                return
+            }
+            onCapture(frame)
+        }
+
+        engine.prepare()
+        try engine.start()
+        isStarted = true
+    }
+
+    func stop() {
+        guard isStarted else {
+            return
+        }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        isStarted = false
+    }
+
+    private static func captureFrame(from buffer: AVAudioPCMBuffer) -> CapturedAudioFrame? {
+        guard let channelData = buffer.floatChannelData else {
+            return nil
+        }
+
+        let frameLength = Int(buffer.frameLength)
+        let channelCount = Int(buffer.format.channelCount)
+        guard frameLength > 0, channelCount > 0 else {
+            return nil
+        }
+
+        var monoSamples = Array(repeating: Float.zero, count: frameLength)
+        let channelScale = Float(1.0 / Double(channelCount))
+
+        for channel in 0..<channelCount {
+            let source = channelData[channel]
+            for index in 0..<frameLength {
+                monoSamples[index] += source[index] * channelScale
+            }
+        }
+
+        var sumSquares: Float = 0
+        for sample in monoSamples {
+            sumSquares += sample * sample
+        }
+        let rms = sqrt(sumSquares / Float(frameLength))
+        let normalizedAmplitude = min(max(Double(rms) * 12.0, 0), 1)
+
+        var crossings = 0
+        if frameLength > 1 {
+            for index in 1..<frameLength {
+                let previous = monoSamples[index - 1]
+                let current = monoSamples[index]
+                if (previous >= 0 && current < 0) || (previous < 0 && current >= 0) {
+                    crossings += 1
+                }
+            }
+        }
+        let zeroCrossingRate = Double(crossings) / Double(max(frameLength - 1, 1))
+
+        let duration = Double(frameLength) / buffer.format.sampleRate
+        return CapturedAudioFrame(
+            samples: monoSamples,
+            sampleRate: buffer.format.sampleRate,
+            amplitude: normalizedAmplitude,
+            duration: duration,
+            zeroCrossingRate: zeroCrossingRate
+        )
+    }
+}
+
 actor LiveSessionPipeline {
+    private enum VADState {
+        case loading
+        case ready
+        case fallback
+    }
+
+    private enum SpeakerState {
+        case loading
+        case ready
+        case fallback
+    }
+
     private struct AudioFrame {
         let timestamp: Double
+        let duration: Double
+        let sampleRate: Double
         let amplitude: Double
+        let zeroCrossingRate: Double
+        let samples: [Float]
     }
 
     private struct WhisperResult {
@@ -246,76 +484,222 @@ actor LiveSessionPipeline {
     }
 
     private var continuation: AsyncStream<PipelineEvent>.Continuation?
-    private var producerTask: Task<Void, Never>?
     private var isRunning = false
-    private var speakerEmbeddings: [String: Double] = [:]
+    private var speakerEmbeddings: [String: [Float]] = [:]
+    private var speakerObservationCounts: [String: Int] = [:]
+    private var pendingSpeakerEmbedding: [Float]?
+    private var pendingSpeakerChunks = 0
+    private var fallbackSpeakerEmbeddings: [String: Double] = [:]
+
+    private var inputController: LiveAudioInputController?
+    private var activeConfig: LivePipelineConfig?
+    private var elapsedSeconds: Double = 0
+    private var waveformBuffer: [Double] = Array(repeating: 0.03, count: 18)
+    private var activeChunkFrames: [AudioFrame] = []
+    private var silenceSeconds: Double = 0
+    private var chunkCounter = 0
+    private var runToken = UUID()
+    private var vadState: VADState = .loading
+    private var speakerState: SpeakerState = .loading
+    private let sileroVAD = SileroVADCoreMLService()
+    private let speakerDiarizer = SpeakerDiarizationCoreMLService()
+
+    private let speechThreshold: Double = 0.06
+    private let vadSpeechThreshold: Float = 0.5
+    private let silenceCutoffSeconds: Double = 1.2
+    private let minChunkDurationSeconds: Double = 3.2
+    private let maxChunkDurationSeconds: Double = 12
+    private let speakerSimilarityThreshold: Float = 0.72
+    private let speakerLooseSimilarityThreshold: Float = 0.60
+    private let newSpeakerCandidateSimilarity: Float = 0.55
+    private let pendingChunksBeforeNewSpeaker = 2
+    private let maxSpeakersPerSession = 6
+    private let speakerFallbackThreshold: Double = 0.11
 
     func start(config: LivePipelineConfig) -> AsyncStream<PipelineEvent> {
         AsyncStream(bufferingPolicy: .bufferingNewest(500)) { continuation in
             Task {
-                self.stop()
-                self.startInternal(config: config, continuation: continuation)
+                await self.stop()
+                await self.startInternal(config: config, continuation: continuation)
             }
         }
     }
 
-    func stop() {
+    func stop() async {
+        guard continuation != nil || isRunning else {
+            return
+        }
+
         isRunning = false
-        producerTask?.cancel()
-        producerTask = nil
+
+        if let controller = inputController {
+            await MainActor.run {
+                controller.stop()
+            }
+        }
+        inputController = nil
+
+        if let config = activeConfig, !activeChunkFrames.isEmpty {
+            await processChunk(activeChunkFrames, config: config)
+            activeChunkFrames.removeAll(keepingCapacity: false)
+        }
 
         continuation?.yield(.stopped)
         continuation?.finish()
         continuation = nil
 
+        activeConfig = nil
+        elapsedSeconds = 0
+        waveformBuffer = Array(repeating: 0.03, count: 18)
+        silenceSeconds = 0
+        chunkCounter = 0
         speakerEmbeddings.removeAll()
+        speakerObservationCounts.removeAll()
+        pendingSpeakerEmbedding = nil
+        pendingSpeakerChunks = 0
+        fallbackSpeakerEmbeddings.removeAll()
+        runToken = UUID()
+        vadState = .loading
+        speakerState = .loading
+        await sileroVAD.reset()
+        await speakerDiarizer.reset()
     }
 
-    private func startInternal(config: LivePipelineConfig, continuation: AsyncStream<PipelineEvent>.Continuation) {
+    private func startInternal(config: LivePipelineConfig, continuation: AsyncStream<PipelineEvent>.Continuation) async {
         self.continuation = continuation
         isRunning = true
+        activeConfig = config
+        elapsedSeconds = 0
+        waveformBuffer = Array(repeating: 0.03, count: 18)
+        activeChunkFrames = []
+        silenceSeconds = 0
+        chunkCounter = 0
+        runToken = UUID()
+        vadState = .loading
+        speakerState = .loading
 
-        producerTask = Task {
-            await runPipeline(config: config)
+        let token = runToken
+        Task {
+            await self.prepareVAD(for: token)
+        }
+        Task {
+            await self.prepareSpeakerDiarization(for: token)
+        }
+
+        let controller = await MainActor.run { LiveAudioInputController() }
+
+        do {
+            try await MainActor.run {
+                try controller.start { [weak self] capturedFrame in
+                    guard let self else {
+                        return
+                    }
+                    Task {
+                        await self.ingest(frame: capturedFrame)
+                    }
+                }
+            }
+            inputController = controller
+        } catch {
+            isRunning = false
+            activeConfig = nil
+            continuation.yield(.stopped)
+            continuation.finish()
+            self.continuation = nil
         }
     }
 
-    private func runPipeline(config: LivePipelineConfig) async {
-        let tickDuration: Double = 0.05
-
-        var elapsed: Double = 0
-        var waveform: [Double] = Array(repeating: 0.03, count: 18)
-        var activeChunkFrames: [AudioFrame] = []
-        var silenceSeconds: Double = 0
-
-        while isRunning, !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 50_000_000)
-
-            elapsed += tickDuration
-            let amplitude = simulatedAmplitude(at: elapsed)
-
-            waveform.removeFirst()
-            waveform.append(amplitude)
-
-            continuation?.yield(.waveform(waveform))
-            continuation?.yield(.timer(elapsed))
-
-            if amplitude >= 0.14 {
-                activeChunkFrames.append(AudioFrame(timestamp: elapsed, amplitude: amplitude))
-                silenceSeconds = 0
-            } else if !activeChunkFrames.isEmpty {
-                silenceSeconds += tickDuration
-                if silenceSeconds >= 0.5 {
-                    let chunk = activeChunkFrames
-                    activeChunkFrames.removeAll(keepingCapacity: true)
-                    silenceSeconds = 0
-                    await processChunk(chunk, config: config)
-                }
+    private func prepareVAD(for token: UUID) async {
+        do {
+            try await sileroVAD.prepareIfNeeded()
+            guard isRunning, token == runToken else {
+                return
             }
+            vadState = .ready
+        } catch {
+            guard isRunning, token == runToken else {
+                return
+            }
+            vadState = .fallback
+        }
+    }
+
+    private func prepareSpeakerDiarization(for token: UUID) async {
+        do {
+            try await speakerDiarizer.prepareIfNeeded()
+            guard isRunning, token == runToken else {
+                return
+            }
+            speakerState = .ready
+        } catch {
+            guard isRunning, token == runToken else {
+                return
+            }
+            speakerState = .fallback
+        }
+    }
+
+    private func ingest(frame: CapturedAudioFrame) async {
+        guard isRunning, let config = activeConfig else {
+            return
+        }
+
+        let frameTimestamp = elapsedSeconds
+        elapsedSeconds += frame.duration
+
+        waveformBuffer.removeFirst()
+        waveformBuffer.append(frame.amplitude)
+
+        continuation?.yield(.waveform(waveformBuffer))
+        continuation?.yield(.timer(elapsedSeconds))
+
+        let audioFrame = AudioFrame(
+            timestamp: frameTimestamp,
+            duration: frame.duration,
+            sampleRate: frame.sampleRate,
+            amplitude: frame.amplitude,
+            zeroCrossingRate: frame.zeroCrossingRate,
+            samples: frame.samples
+        )
+
+        let isSpeechFrame = await evaluateSpeech(frame: frame)
+
+        if isSpeechFrame {
+            activeChunkFrames.append(audioFrame)
+            silenceSeconds = 0
+        } else if !activeChunkFrames.isEmpty {
+            silenceSeconds += frame.duration
         }
 
         if !activeChunkFrames.isEmpty {
-            await processChunk(activeChunkFrames, config: config)
+            let currentChunkDuration = chunkDuration(for: activeChunkFrames)
+            let shouldCutForSilence =
+                silenceSeconds >= silenceCutoffSeconds &&
+                currentChunkDuration >= minChunkDurationSeconds
+
+            if shouldCutForSilence || currentChunkDuration >= maxChunkDurationSeconds {
+                let chunk = activeChunkFrames
+                activeChunkFrames.removeAll(keepingCapacity: true)
+                silenceSeconds = 0
+                await processChunk(chunk, config: config)
+            }
+        }
+    }
+
+    private func evaluateSpeech(frame: CapturedAudioFrame) async -> Bool {
+        switch vadState {
+        case .ready:
+            do {
+                if let probability = try await sileroVAD.ingest(samples: frame.samples, sampleRate: frame.sampleRate) {
+                    return probability >= vadSpeechThreshold
+                }
+                return frame.amplitude >= speechThreshold
+            } catch {
+                vadState = .fallback
+                return frame.amplitude >= speechThreshold
+            }
+        case .loading, .fallback:
+            return frame.amplitude >= speechThreshold
         }
     }
 
@@ -324,7 +708,7 @@ actor LiveSessionPipeline {
             return
         }
 
-        let chunkSeconds = max(last.timestamp - first.timestamp + 0.05, 0.35)
+        let chunkSeconds = max((last.timestamp + last.duration) - first.timestamp, 0.2)
 
         async let whisperResult = whisper(chunk: chunk, config: config)
         async let speakerID = identifySpeaker(chunk: chunk)
@@ -343,77 +727,228 @@ actor LiveSessionPipeline {
         )
 
         continuation?.yield(.transcript(event, chunkSeconds: chunkSeconds))
+        chunkCounter += 1
     }
 
     private func whisper(chunk: [AudioFrame], config: LivePipelineConfig) async -> WhisperResult {
-        try? await Task.sleep(nanoseconds: 190_000_000)
+        let languageCode = config.languageCodes.first ?? "en"
+        let seconds = chunkDuration(for: chunk)
+        let avgAmplitude = chunk.map(\.amplitude).reduce(0, +) / Double(max(chunk.count, 1))
+        let zcr = chunk.map(\.zeroCrossingRate).reduce(0, +) / Double(max(chunk.count, 1))
 
-        let languageCode = config.languageCodes.randomElement() ?? "en"
-
-        let phraseBank: [String: [String]] = [
-            "en": [
-                "Let's finalize the rollout checklist before shipping.",
-                "Please keep installation optional and explain storage impact.",
-                "We should keep this release private until testing is complete."
-            ],
-            "th": [
-                "สรุปแผนงานก่อนปล่อยเวอร์ชันจริงอีกครั้งครับ",
-                "ขอให้ติดตั้งโมเดลเป็นตัวเลือกและบอกขนาดไฟล์ชัดเจน",
-                "เดี๋ยวผมสรุปประเด็นทั้งหมดส่งในคืนนี้"
-            ]
-        ]
-
-        let text = phraseBank[languageCode]?.randomElement()
-            ?? phraseBank["en"]!.randomElement()!
+        let levelPercent = Int((avgAmplitude * 100).rounded())
+        let paceHint = zcr > 0.16 ? "fast" : "steady"
+        let text = "Speech chunk captured (\(String(format: "%.1f", seconds))s, \(paceHint) pace, level \(levelPercent)%)."
 
         return WhisperResult(languageID: languageCode.uppercased(), text: text)
     }
 
     private func identifySpeaker(chunk: [AudioFrame]) async -> String {
-        try? await Task.sleep(nanoseconds: 120_000_000)
-
-        let embedding = chunk.map(\.amplitude).reduce(0, +) / Double(max(chunk.count, 1))
-
-        if let existing = closestSpeaker(for: embedding, threshold: 0.055) {
-            return existing
+        switch speakerState {
+        case .ready:
+            do {
+                let samples = chunk.flatMap(\.samples)
+                let sampleRate = chunk.first?.sampleRate ?? 16_000
+                if let embedding = try await speakerDiarizer.embedding(for: samples, sampleRate: sampleRate),
+                   !embedding.isEmpty {
+                    return assignSpeaker(from: embedding)
+                }
+                return identifySpeakerFallback(chunk: chunk)
+            } catch {
+                speakerState = .fallback
+                return identifySpeakerFallback(chunk: chunk)
+            }
+        case .loading, .fallback:
+            return identifySpeakerFallback(chunk: chunk)
         }
-
-        let nextIndex = speakerEmbeddings.count
-        let scalar = UnicodeScalar(65 + min(nextIndex, 25)) ?? "Z".unicodeScalars.first!
-        let label = "Speaker \(Character(scalar))"
-        speakerEmbeddings[label] = embedding
-        return label
     }
 
-    private func closestSpeaker(for embedding: Double, threshold: Double) -> String? {
-        var candidate: (label: String, distance: Double)?
+    private func assignSpeaker(from embedding: [Float]) -> String {
+        guard !speakerEmbeddings.isEmpty else {
+            pendingSpeakerEmbedding = nil
+            pendingSpeakerChunks = 0
+            return createSpeakerLabel(with: embedding)
+        }
+
+        guard let closest = closestSpeaker(for: embedding) else {
+            pendingSpeakerEmbedding = nil
+            pendingSpeakerChunks = 0
+            return createSpeakerLabel(with: embedding)
+        }
+
+        if closest.similarity >= speakerSimilarityThreshold {
+            pendingSpeakerEmbedding = nil
+            pendingSpeakerChunks = 0
+            updateSpeaker(label: closest.label, with: embedding)
+            return closest.label
+        }
+
+        if closest.similarity >= speakerLooseSimilarityThreshold {
+            pendingSpeakerEmbedding = nil
+            pendingSpeakerChunks = 0
+            updateSpeaker(label: closest.label, with: embedding)
+            return closest.label
+        }
+
+        if speakerEmbeddings.count >= maxSpeakersPerSession {
+            pendingSpeakerEmbedding = nil
+            pendingSpeakerChunks = 0
+            updateSpeaker(label: closest.label, with: embedding)
+            return closest.label
+        }
+
+        if let pending = pendingSpeakerEmbedding,
+           cosineSimilarity(pending, embedding) >= newSpeakerCandidateSimilarity {
+            pendingSpeakerEmbedding = normalize(zip(pending, embedding).map { pair in
+                (pair.0 + pair.1) * 0.5
+            })
+            pendingSpeakerChunks += 1
+        } else {
+            pendingSpeakerEmbedding = normalize(embedding)
+            pendingSpeakerChunks = 1
+        }
+
+        if pendingSpeakerChunks >= pendingChunksBeforeNewSpeaker {
+            pendingSpeakerEmbedding = nil
+            pendingSpeakerChunks = 0
+            return createSpeakerLabel(with: embedding)
+        }
+
+        // Keep continuity while candidate is warming up.
+        updateSpeaker(label: closest.label, with: embedding)
+        return closest.label
+    }
+
+    private func closestSpeaker(for embedding: [Float]) -> (label: String, similarity: Float)? {
+        var candidate: (label: String, similarity: Float)?
 
         for (label, reference) in speakerEmbeddings {
-            let distance = abs(reference - embedding)
-            if distance <= threshold {
-                if let current = candidate {
-                    if distance < current.distance {
-                        candidate = (label, distance)
-                    }
-                } else {
-                    candidate = (label, distance)
+            let similarity = cosineSimilarity(embedding, reference)
+            if let current = candidate {
+                if similarity > current.similarity {
+                    candidate = (label, similarity)
                 }
+            } else {
+                candidate = (label, similarity)
             }
         }
 
-        return candidate?.label
+        return candidate
     }
 
-    private func simulatedAmplitude(at seconds: Double) -> Double {
-        let baseline = Double.random(in: 0.01...0.06)
-        let waveform = (sin(seconds * 2.1).magnitude + cos(seconds * 1.3).magnitude) * 0.22
-        let speakingWindow = (Int(seconds * 10) % 32) < 22
-
-        if speakingWindow {
-            return min(1, baseline + waveform + Double.random(in: 0.08...0.18))
+    private func updateSpeaker(label: String, with embedding: [Float]) {
+        guard let current = speakerEmbeddings[label] else {
+            speakerEmbeddings[label] = normalize(embedding)
+            speakerObservationCounts[label] = 1
+            return
         }
 
-        return min(0.12, baseline + Double.random(in: 0...0.03))
+        let previousCount = speakerObservationCounts[label] ?? 1
+        let newCount = previousCount + 1
+        let length = min(current.count, embedding.count)
+        var merged = current
+
+        for index in 0..<length {
+            let weighted = (current[index] * Float(previousCount)) + embedding[index]
+            merged[index] = weighted / Float(newCount)
+        }
+
+        speakerEmbeddings[label] = normalize(merged)
+        speakerObservationCounts[label] = newCount
+    }
+
+    private func createSpeakerLabel(with embedding: [Float]) -> String {
+        let nextIndex = speakerEmbeddings.count
+        let scalar = UnicodeScalar(65 + min(nextIndex, 25)) ?? "Z".unicodeScalars.first!
+        let label = "Speaker \(Character(scalar))"
+        speakerEmbeddings[label] = normalize(embedding)
+        speakerObservationCounts[label] = 1
+        return label
+    }
+
+    private func identifySpeakerFallback(chunk: [AudioFrame]) -> String {
+        let averageAmplitude = chunk.map(\.amplitude).reduce(0, +) / Double(max(chunk.count, 1))
+        let averageZCR = chunk.map(\.zeroCrossingRate).reduce(0, +) / Double(max(chunk.count, 1))
+        let embedding = (averageAmplitude * 0.74) + (averageZCR * 0.26)
+
+        if let closest = closestFallbackSpeaker(for: embedding) {
+            if closest.distance <= speakerFallbackThreshold || fallbackSpeakerEmbeddings.count >= 3 {
+                return closest.label
+            }
+        }
+
+        let nextIndex = fallbackSpeakerEmbeddings.count
+        let scalar = UnicodeScalar(65 + min(nextIndex, 25)) ?? "Z".unicodeScalars.first!
+        let label = "Speaker \(Character(scalar))"
+        fallbackSpeakerEmbeddings[label] = embedding
+        return label
+    }
+
+    private func closestFallbackSpeaker(for embedding: Double) -> (label: String, distance: Double)? {
+        var candidate: (label: String, distance: Double)?
+
+        for (label, reference) in fallbackSpeakerEmbeddings {
+            let distance = abs(reference - embedding)
+            if let current = candidate {
+                if distance < current.distance {
+                    candidate = (label, distance)
+                }
+            } else {
+                candidate = (label, distance)
+            }
+        }
+
+        return candidate
+    }
+
+    private func cosineSimilarity(_ lhs: [Float], _ rhs: [Float]) -> Float {
+        let length = min(lhs.count, rhs.count)
+        guard length > 0 else {
+            return -1
+        }
+
+        var dot: Float = 0
+        var lhsNorm: Float = 0
+        var rhsNorm: Float = 0
+
+        for index in 0..<length {
+            let left = lhs[index]
+            let right = rhs[index]
+            dot += left * right
+            lhsNorm += left * left
+            rhsNorm += right * right
+        }
+
+        guard lhsNorm > 0, rhsNorm > 0 else {
+            return -1
+        }
+
+        return dot / (sqrt(lhsNorm) * sqrt(rhsNorm))
+    }
+
+    private func normalize(_ vector: [Float]) -> [Float] {
+        guard !vector.isEmpty else {
+            return vector
+        }
+
+        var sumSquares: Float = 0
+        for value in vector {
+            sumSquares += value * value
+        }
+
+        let length = sqrt(sumSquares)
+        guard length > 0 else {
+            return vector
+        }
+
+        return vector.map { $0 / length }
+    }
+
+    private func chunkDuration(for chunk: [AudioFrame]) -> Double {
+        guard let first = chunk.first, let last = chunk.last else {
+            return 0
+        }
+        return max((last.timestamp + last.duration) - first.timestamp, 0)
     }
 }
 
@@ -545,6 +1080,13 @@ actor SessionStore {
         sessions[sessionID]?.rows ?? []
     }
 
+    func audioFileURL(for sessionID: UUID) -> URL? {
+        guard let path = sessions[sessionID]?.audioFilePath else {
+            return nil
+        }
+        return URL(fileURLWithPath: path)
+    }
+
     func appendTranscript(sessionID: UUID, event: PipelineTranscriptEvent) {
         guard var session = sessions[sessionID] else {
             return
@@ -559,7 +1101,9 @@ actor SessionStore {
             time: Self.formatTimestamp(seconds: event.startOffset),
             language: event.languageID,
             avatarSymbol: profile.avatarSymbol,
-            avatarPalette: [baseColor, .white.opacity(0.72)]
+            avatarPalette: [baseColor, .white.opacity(0.72)],
+            startOffset: event.startOffset,
+            endOffset: event.endOffset
         )
 
         session.rows.append(row)
@@ -604,6 +1148,8 @@ actor SessionStore {
             let text: String
             let time: String
             let language: String
+            let startOffset: Double?
+            let endOffset: Double?
         }
 
         let snapshots = session.rows.map { row in
@@ -611,7 +1157,9 @@ actor SessionStore {
                 speaker: row.speaker,
                 text: row.text,
                 time: row.time,
-                language: row.language
+                language: row.language,
+                startOffset: row.startOffset,
+                endOffset: row.endOffset
             )
         }
 
@@ -655,8 +1203,11 @@ final class AppBackend: ObservableObject {
     private let preflightService = PreflightService()
     private let pipeline = LiveSessionPipeline()
     private let sessionStore = SessionStore()
+    private let masterRecorder = MasterAudioRecorder()
 
     private var streamTask: Task<Void, Never>?
+    private var chunkPlayer: AVAudioPlayer?
+    private var chunkStopTask: Task<Void, Never>?
     private var chatCounter = 0
 
     init() {
@@ -721,25 +1272,39 @@ final class AppBackend: ObservableObject {
         }
 
         downloadingModelID = model.rawValue
-        modelDownloadProgress = 0
+        modelDownloadProgress = 0.02
+        preflightStatusMessage = nil
 
         Task {
-            for step in 1...14 {
-                try? await Task.sleep(nanoseconds: 180_000_000)
-                await MainActor.run {
-                    modelDownloadProgress = Double(step) / 14.0
+            let progressTask = Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 180_000_000)
+                    await MainActor.run {
+                        let next = min(modelDownloadProgress + 0.02, 0.92)
+                        modelDownloadProgress = next
+                    }
                 }
             }
 
-            try? await modelManager.installPlaceholderModel(model)
-            let installed = await modelManager.installedModelIDs()
+            defer { progressTask.cancel() }
 
-            await MainActor.run {
-                downloadedModelIDs = installed
-                selectedModelID = model.rawValue
-                downloadingModelID = nil
-                modelDownloadProgress = 0
-                preflightStatusMessage = nil
+            do {
+                try await downloadAndInstall(model)
+                let installed = await modelManager.installedModelIDs()
+
+                await MainActor.run {
+                    downloadedModelIDs = installed
+                    selectedModelID = model.rawValue
+                    downloadingModelID = nil
+                    modelDownloadProgress = 0
+                    preflightStatusMessage = nil
+                }
+            } catch {
+                await MainActor.run {
+                    downloadingModelID = nil
+                    modelDownloadProgress = 0
+                    preflightStatusMessage = error.localizedDescription
+                }
             }
         }
     }
@@ -796,10 +1361,18 @@ final class AppBackend: ObservableObject {
         }
     }
 
+    func playTranscriptChunk(_ row: TranscriptRow) {
+        Task {
+            await playTranscriptChunkInternal(row)
+        }
+    }
+
     private func startRecording() async {
         guard !isRecording else {
             return
         }
+
+        stopChunkPlayback()
 
         if activeSessionID == nil {
             await createSessionAndActivate()
@@ -821,6 +1394,14 @@ final class AppBackend: ObservableObject {
 
             selectedModelID = config.resolvedModel.rawValue
             preflightStatusMessage = config.fallbackNote
+
+            guard let audioFileURL = await sessionStore.audioFileURL(for: sessionID) else {
+                preflightStatusMessage = "Unable to prepare audio file for this session."
+                await sessionStore.setSessionStatus(.failed, for: sessionID)
+                return
+            }
+
+            try await masterRecorder.startRecording(to: audioFileURL)
 
             await sessionStore.updateSessionConfig(
                 sessionID: sessionID,
@@ -851,6 +1432,7 @@ final class AppBackend: ObservableObject {
         await pipeline.stop()
         streamTask?.cancel()
         streamTask = nil
+        masterRecorder.stop()
 
         if let activeSessionID {
             await sessionStore.setSessionStatus(.ready, for: activeSessionID)
@@ -858,6 +1440,61 @@ final class AppBackend: ObservableObject {
 
         isRecording = false
         await refreshSessionsFromStore()
+    }
+
+    private func playTranscriptChunkInternal(_ row: TranscriptRow) async {
+        guard !isRecording,
+              let sessionID = activeSessionID,
+              let startOffset = row.startOffset,
+              let endOffset = row.endOffset,
+              endOffset > startOffset
+        else {
+            return
+        }
+
+        guard let audioURL = await sessionStore.audioFileURL(for: sessionID) else {
+            return
+        }
+
+        stopChunkPlayback()
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default, options: [.duckOthers])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+
+            let player = try AVAudioPlayer(contentsOf: audioURL)
+            let start = max(0, min(startOffset, player.duration))
+            let duration = max(min(endOffset, player.duration) - start, 0.05)
+
+            player.currentTime = start
+            player.prepareToPlay()
+            player.play()
+
+            chunkPlayer = player
+            chunkStopTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+                guard let self else {
+                    return
+                }
+                await MainActor.run {
+                    guard self.chunkPlayer === player else {
+                        return
+                    }
+                    self.stopChunkPlayback()
+                }
+            }
+        } catch {
+            stopChunkPlayback()
+        }
+    }
+
+    private func stopChunkPlayback() {
+        chunkStopTask?.cancel()
+        chunkStopTask = nil
+        chunkPlayer?.stop()
+        chunkPlayer = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     private func consume(stream: AsyncStream<PipelineEvent>, sessionID: UUID) -> Task<Void, Never> {
@@ -971,6 +1608,24 @@ final class AppBackend: ObservableObject {
         }
 
         return result
+    }
+
+    private func downloadAndInstall(_ model: BackendModel) async throws {
+        guard let remoteURL = URL(string: model.remoteDownloadURL) else {
+            throw ModelDownloadError.invalidURL
+        }
+
+        let (temporaryLocation, response) = try await URLSession.shared.download(from: remoteURL)
+
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw ModelDownloadError.unexpectedResponse
+        }
+
+        await MainActor.run {
+            modelDownloadProgress = 0.98
+        }
+
+        try await modelManager.installDownloadedModel(model, from: temporaryLocation)
     }
 }
 

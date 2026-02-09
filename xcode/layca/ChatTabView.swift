@@ -9,7 +9,9 @@ struct ChatTabView: View {
     let activeSessionDateText: String
     let liveChatItems: [TranscriptRow]
     let preflightMessage: String?
+    let canPlayTranscriptChunks: Bool
     let onRecordTap: () -> Void
+    let onTranscriptTap: (TranscriptRow) -> Void
     let onExportTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
 
@@ -282,8 +284,14 @@ struct ChatTabView: View {
             ForEach(liveChatItems) { item in
                 HStack(alignment: .top, spacing: 10) {
                     avatarView(for: item)
-                    messageBubble(for: item)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        onTranscriptTap(item)
+                    } label: {
+                        messageBubble(for: item)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!isTranscriptBubblePlayable(item))
                 }
             }
         }
@@ -365,6 +373,17 @@ struct ChatTabView: View {
         Text(item.time)
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.black.opacity(0.43))
+    }
+
+    private func isTranscriptBubblePlayable(_ item: TranscriptRow) -> Bool {
+        guard canPlayTranscriptChunks,
+              let startOffset = item.startOffset,
+              let endOffset = item.endOffset
+        else {
+            return false
+        }
+
+        return endOffset > startOffset
     }
 
     private func beginTitleRename() {

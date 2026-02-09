@@ -25,7 +25,9 @@ struct ContentView: View {
                         activeSessionDateText: backend.activeSessionDateText,
                         liveChatItems: backend.activeTranscriptRows,
                         preflightMessage: backend.preflightStatusMessage,
+                        canPlayTranscriptChunks: !backend.isRecording,
                         onRecordTap: backend.toggleRecording,
+                        onTranscriptTap: backend.playTranscriptChunk,
                         onExportTap: { isExportPresented = true },
                         onRenameSessionTitle: backend.renameActiveSessionTitle
                     )
@@ -371,6 +373,8 @@ struct TranscriptRow: Identifiable {
     let language: String
     let avatarSymbol: String
     let avatarPalette: [Color]
+    let startOffset: Double?
+    let endOffset: Double?
 
     static func makeDemoRows(chatNumber: Int) -> [TranscriptRow] {
         struct BaseMessage {
@@ -437,7 +441,9 @@ struct TranscriptRow: Identifiable {
                 time: message.time,
                 language: message.language,
                 avatarSymbol: avatar.0,
-                avatarPalette: avatar.1
+                avatarPalette: avatar.1,
+                startOffset: nil,
+                endOffset: nil
             )
         }
     }

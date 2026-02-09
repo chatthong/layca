@@ -37,6 +37,7 @@
   - Saved title appears in both Chat and Library.
 - `Export` opens from the Chat header icon instead of a tab.
 - On some compact layouts, iOS may prioritize icon rendering for special-role grouped tabs even if text is provided.
+- Transcript bubbles are tappable for per-chunk playback only when recording is stopped.
 
 ## Why This Design
 - Native behavior and consistency with Apple navigation guidance.
