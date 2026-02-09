@@ -59,6 +59,8 @@ struct PipelineTranscriptEvent: Sendable {
     let text: String
     let startOffset: Double
     let endOffset: Double
+    let samples: [Float]
+    let sampleRate: Double
 }
 
 enum PipelineEvent: Sendable {
@@ -324,7 +326,7 @@ actor LiveSessionPipeline {
     private let pendingChunksBeforeNewSpeaker = 2
     private let maxSpeakersPerSession = 6
     private let speakerFallbackThreshold: Double = 0.11
-    private let deferredTranscriptPlaceholder = "Tap this bubble to transcribe this chunk."
+    private let deferredTranscriptPlaceholder = "Queued for automatic transcription..."
 
     func start(config: LivePipelineConfig) -> AsyncStream<PipelineEvent> {
         AsyncStream(bufferingPolicy: .bufferingNewest(500)) { continuation in
@@ -532,7 +534,9 @@ actor LiveSessionPipeline {
             languageID: languageCode,
             text: deferredTranscriptPlaceholder,
             startOffset: first.timestamp,
-            endOffset: first.timestamp + chunkSeconds
+            endOffset: first.timestamp + chunkSeconds,
+            samples: chunk.flatMap(\.samples),
+            sampleRate: first.sampleRate
         )
 
         continuation?.yield(.transcript(event, chunkSeconds: chunkSeconds))
@@ -999,6 +1003,13 @@ actor SessionStore {
 
 @MainActor
 final class AppBackend: ObservableObject {
+    private struct QueuedChunkTranscription: Sendable {
+        let rowID: UUID
+        let sessionID: UUID
+        let samples: [Float]
+        let sampleRate: Double
+    }
+
     @Published var isRecording = false
     @Published var recordingSeconds: Double = 0
     @Published var waveformBars: [Double] = Array(repeating: 0.03, count: 9)
@@ -1031,6 +1042,9 @@ final class AppBackend: ObservableObject {
     private var chunkPlayer: AVAudioPlayer?
     private var chunkStopTask: Task<Void, Never>?
     private var attemptedTranscriptionRowIDs: Set<UUID> = []
+    private var queuedTranscriptionRowIDs: Set<UUID> = []
+    private var queuedChunkTranscriptions: [QueuedChunkTranscription] = []
+    private var queuedTranscriptionTask: Task<Void, Never>?
     private var chatCounter = 0
 
     init() {
@@ -1240,47 +1254,28 @@ final class AppBackend: ObservableObject {
                 }
             }
 
-            Task { [weak self] in
-                guard let self else {
-                    return
-                }
-                guard self.shouldRunOnDemandTranscription(for: row) else {
-                    return
-                }
-                await self.transcribeChunkOnDemand(
-                    row: row,
-                    sessionID: sessionID,
-                    startOffset: startOffset,
-                    endOffset: endOffset
-                )
-            }
         } catch {
             stopChunkPlayback()
         }
     }
 
-    private func transcribeChunkOnDemand(
-        row: TranscriptRow,
+    private func transcribeQueuedChunk(
+        rowID: UUID,
         sessionID: UUID,
-        startOffset: Double,
-        endOffset: Double
+        samples: [Float],
+        sampleRate: Double
     ) async {
-        guard !transcribingRowIDs.contains(row.id),
-              !attemptedTranscriptionRowIDs.contains(row.id)
+        guard !transcribingRowIDs.contains(rowID),
+              !attemptedTranscriptionRowIDs.contains(rowID)
         else {
             return
         }
 
-        transcribingRowIDs.insert(row.id)
-        attemptedTranscriptionRowIDs.insert(row.id)
+        transcribingRowIDs.insert(rowID)
+        attemptedTranscriptionRowIDs.insert(rowID)
 
         defer {
-            transcribingRowIDs.remove(row.id)
-        }
-
-        guard let audioURL = await sessionStore.audioFileURL(for: sessionID) else {
-            preflightStatusMessage = "Unable to load session audio for transcription."
-            return
+            transcribingRowIDs.remove(rowID)
         }
 
         do {
@@ -1289,9 +1284,8 @@ final class AppBackend: ObservableObject {
                 keywords: focusContextKeywords
             )
             let result = try await whisperTranscriber.transcribe(
-                audioURL: audioURL,
-                startOffset: startOffset,
-                endOffset: endOffset,
+                samples: samples,
+                sourceSampleRate: sampleRate,
                 preferredLanguageCode: "auto",
                 initialPrompt: initialPrompt
             )
@@ -1304,7 +1298,7 @@ final class AppBackend: ObservableObject {
 
             await sessionStore.updateTranscriptRow(
                 sessionID: sessionID,
-                rowID: row.id,
+                rowID: rowID,
                 text: trimmed,
                 language: result.languageID.uppercased()
             )
@@ -1315,17 +1309,66 @@ final class AppBackend: ObservableObject {
         }
     }
 
-    private func shouldRunOnDemandTranscription(for row: TranscriptRow) -> Bool {
-        guard row.language.uppercased() == "AUTO" else {
-            return false
+    private func enqueueChunkForAutomaticTranscription(
+        rowID: UUID,
+        sessionID: UUID,
+        samples: [Float],
+        sampleRate: Double
+    ) {
+        guard !samples.isEmpty, sampleRate > 0 else {
+            return
         }
-        guard !attemptedTranscriptionRowIDs.contains(row.id) else {
-            return false
+        guard !attemptedTranscriptionRowIDs.contains(rowID),
+              !transcribingRowIDs.contains(rowID),
+              !queuedTranscriptionRowIDs.contains(rowID)
+        else {
+            return
         }
-        guard !transcribingRowIDs.contains(row.id) else {
-            return false
+
+        queuedTranscriptionRowIDs.insert(rowID)
+        queuedChunkTranscriptions.append(
+            QueuedChunkTranscription(
+                rowID: rowID,
+                sessionID: sessionID,
+                samples: samples,
+                sampleRate: sampleRate
+            )
+        )
+        startQueuedTranscriptionWorkerIfNeeded()
+    }
+
+    private func startQueuedTranscriptionWorkerIfNeeded() {
+        guard queuedTranscriptionTask == nil else {
+            return
         }
-        return true
+
+        queuedTranscriptionTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+            await self.drainQueuedChunkTranscriptions()
+        }
+    }
+
+    private func drainQueuedChunkTranscriptions() async {
+        while !Task.isCancelled {
+            guard !queuedChunkTranscriptions.isEmpty else {
+                queuedTranscriptionTask = nil
+                return
+            }
+
+            let next = queuedChunkTranscriptions.removeFirst()
+            queuedTranscriptionRowIDs.remove(next.rowID)
+
+            await transcribeQueuedChunk(
+                rowID: next.rowID,
+                sessionID: next.sessionID,
+                samples: next.samples,
+                sampleRate: next.sampleRate
+            )
+        }
+
+        queuedTranscriptionTask = nil
     }
 
     private func stopChunkPlayback() {
@@ -1362,6 +1405,12 @@ final class AppBackend: ObservableObject {
         case .transcript(let transcript, let chunkSeconds):
             await sessionStore.appendTranscript(sessionID: sessionID, event: transcript)
             await refreshSessionsFromStore()
+            enqueueChunkForAutomaticTranscription(
+                rowID: transcript.id,
+                sessionID: sessionID,
+                samples: transcript.samples,
+                sampleRate: transcript.sampleRate
+            )
 
             usedHours = min(totalHours, usedHours + (chunkSeconds / 3600))
             if usedHours >= totalHours {

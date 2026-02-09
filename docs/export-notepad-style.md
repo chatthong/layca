@@ -36,6 +36,6 @@ Agreed. We can add VAD options after cleanup.
 
 ## Implementation Notes
 - Reuse transcript segments and timestamps from storage.
-- Export uses latest persisted row text (including any on-demand Whisper updates from bubble taps).
+- Export uses latest persisted row text (including any automatic queued Whisper updates).
 - Apply style transform at export time only.
 - Keep raw transcript unchanged in persistence.

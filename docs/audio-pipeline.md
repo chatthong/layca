@@ -22,7 +22,7 @@
 
 ### Track 3: Dual AI Branch
 - Branch A: speaker embedding extraction from CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) and cosine-similarity matching for session speaker labels.
-- Branch B: deferred transcription marker (text placeholder persisted per chunk).
+- Branch B: deferred transcription marker (text placeholder persisted per chunk until queue worker transcribes it).
 - Speaker branch fallback: lightweight amplitude/ZCR heuristic if speaker CoreML model is unavailable.
 
 ### Track 4: Merger
@@ -44,12 +44,12 @@
 ## Chunk Playback Path
 - Chat bubble taps call backend chunk playback.
 - Playback seeks into `session_full.m4a` at row `startOffset`, then auto-stops at `endOffset`.
-- The same tap also runs Whisper transcription for that chunk (`whisper.cpp`) and updates row text in storage/UI.
+- Chunk transcription runs automatically from backend queue (`whisper.cpp`) and updates row text in storage/UI.
 - Whisper chunk decode is configured for original-language transcript output:
   - `preferredLanguageCode = "auto"` (language auto-detect)
   - `translate = false` (never translate)
   - `initial_prompt` comes from Language Focus + context keywords
-- Whisper initializes lazily on first chunk-tap transcription (no app-launch prewarm).
+- Whisper initializes lazily on first queued chunk transcription (no app-launch prewarm).
 - Default Whisper startup path is non-CoreML encoder for reliability; set `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1` to opt in.
 - In default mode, CoreML encoder load-failure logs for `ggml-large-v3-turbo-encoder.mlmodelc` are expected and non-fatal.
 - If output is empty or appears to echo prompt instructions, backend applies fallback reruns (without prompt and detected-language retry) before returning no-speech.
@@ -57,5 +57,5 @@
 - If offsets are missing or invalid, bubble remains non-playable.
 
 ## Current vs Planned
-- **Current:** real `AVAudioEngine` input + native CoreML Silero VAD + native CoreML speaker diarization + reactive chunk pipeline + chunk-level playback + on-demand Whisper transcription with auto language detection and no translation.
+- **Current:** real `AVAudioEngine` input + native CoreML Silero VAD + native CoreML speaker diarization + reactive chunk pipeline + chunk-level playback + automatic queued Whisper transcription with auto language detection and no translation.
 - **Planned:** add per-bubble processing/progress state and retry controls for debug workflows.

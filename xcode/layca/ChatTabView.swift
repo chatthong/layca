@@ -336,7 +336,7 @@ struct ChatTabView: View {
                     ProgressView()
                         .controlSize(.small)
                         .tint(.red.opacity(0.82))
-                    Text("Transcribing selected chunk...")
+                    Text("Transcribing chunk...")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.red.opacity(0.82))
                         .multilineTextAlignment(.leading)

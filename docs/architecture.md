@@ -27,15 +27,16 @@
 6. Chunk duration deducts credit.
 7. Transcript rows persist chunk `startOffset`/`endOffset`.
 8. Optional sync hook runs.
-9. User can tap a transcript bubble to play that chunk and run on-demand Whisper transcription when recording is stopped.
+9. Backend queues chunk transcription automatically (one-by-one) and updates bubbles reactively.
+10. User can tap a transcript bubble to play that chunk when recording is stopped.
 
 ## Current Implementation Note
 - Pipeline internals are production-style backend services.
 - Audio capture uses real `AVAudioEngine`.
 - VAD uses native CoreML Silero (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) with bundled offline model.
 - Speaker branch uses native CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) with bundled offline model.
-- Whisper transcription is deferred to bubble-tap action (`whisper.cpp`), not auto-run during live chunking.
-- Tap transcription runs with Whisper auto language detection (`preferredLanguageCode = "auto"`) and `translate = false`.
+- Whisper transcription runs automatically through a serial queue (`whisper.cpp`) as chunks are produced.
+- Automatic transcription runs with Whisper auto language detection (`preferredLanguageCode = "auto"`) and `translate = false`.
 - Whisper prompt template is built from Language Focus + context keywords.
 - If output appears to echo the prompt text, the backend reruns inference without prompt.
 - Whisper is initialized lazily on first transcription request (no app-launch prewarm).

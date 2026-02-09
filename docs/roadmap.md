@@ -23,7 +23,7 @@
 - `SessionStore` creates `session_full.m4a` + `segments.json`.
 - Appends transcript rows, persists segment snapshots, and keeps stable speaker profile (color/avatar) per session.
 - Credit deduction per chunk and iCloud-sync hook point are included.
-- Added row-level transcript text update path for on-demand Whisper inference results.
+- Added row-level transcript text update path for automatic queued Whisper inference results.
 
 ### App Orchestration + UI Wiring
 - `AppBackend.swift`, `ContentView.swift`, `ChatTabView.swift`
@@ -31,13 +31,20 @@
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Transcript bubble tap now plays only that row's chunk from session audio.
-- Transcript bubble tap also triggers Whisper transcription for that chunk and patches row text in place.
-- Tap transcription now uses Whisper auto language detection (`preferredLanguageCode = "auto"`) and `translate = false`.
-- Added stuck-state fix for transcription status (`Transcribing selected chunk...` always clears).
+- Chunk transcription now runs automatically in backend queue order and patches row text in place.
+- Queued transcription uses Whisper auto language detection (`preferredLanguageCode = "auto"`) and `translate = false`.
+- Added stuck-state fix for transcription status (transcribing indicator always clears).
 - Added no-speech messaging for empty inference results.
 - Added prompt-leak guard: if output echoes prompt instructions, rerun without prompt.
 - Playback is disabled while recording, and rows without valid offsets are non-playable.
 - Recorder button tap issue fixed by disabling hit-testing on decorative overlays.
+
+### Automatic Chunk Transcription Queue
+- `AppBackend.swift`, `ChatTabView.swift`
+- Removed transcription trigger from transcript-bubble tap (tap remains playback-only).
+- Added serial queue processing so finished chunks are transcribed one-by-one automatically.
+- Added queue dedup guards to avoid duplicate transcription jobs per row.
+- Updated placeholder/transcribing UI copy to reflect automatic queue processing.
 
 ### Whisper Startup Reliability Hardening
 - `AppBackend.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
@@ -59,11 +66,10 @@
   - credit exhaustion guard behavior
   - speaker profile stability across chunks
 - Build validated on iOS simulator.
-- `laycaTests` currently has compile failures unrelated to this change (`PreflightService.prepare` callsites missing `focusKeywords`).
 
 ## Next Priority
 1. Add playback/transcription UX polish (playing-state indicator, active-bubble highlight, transcription-progress state).
-2. Add resilience/retry handling for interrupted on-demand transcription jobs.
+2. Add resilience/retry handling for interrupted queued transcription jobs.
 3. Add resilience/recovery for interrupted recording or processing.
 4. Add optional SwiftData mirror/index layer for long-term search/filter use cases.
 5. Add configurable VAD/speaker sensitivity tuning in settings.

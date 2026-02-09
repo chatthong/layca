@@ -42,8 +42,8 @@
   - Saved title appears in both Chat and Library.
 - `Export` opens from the Chat header icon instead of a tab.
 - On some compact layouts, iOS may prioritize icon rendering for special-role grouped tabs even if text is provided.
-- Transcript bubbles are tappable for per-chunk playback and on-demand transcription only when recording is stopped.
-- Chunk-tap transcription keeps original spoken language (auto-detect + no translation).
+- Transcript bubbles are tappable for per-chunk playback only when recording is stopped.
+- Chunk transcription runs automatically in queue order and keeps original spoken language (auto-detect + no translation).
 
 ## Why This Design
 - Native behavior and consistency with Apple navigation guidance.

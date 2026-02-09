@@ -7,6 +7,7 @@ struct AppBackendTests {
         let service = PreflightService()
         let config = try await service.prepare(
             languageCodes: ["th", "en"],
+            focusKeywords: "",
             remainingCreditSeconds: 120
         )
 
@@ -21,6 +22,7 @@ struct AppBackendTests {
         do {
             _ = try await service.prepare(
                 languageCodes: ["en"],
+                focusKeywords: "",
                 remainingCreditSeconds: 0
             )
             #expect(Bool(false))
@@ -45,7 +47,9 @@ struct AppBackendTests {
             languageID: "EN",
             text: "First line",
             startOffset: 1,
-            endOffset: 2
+            endOffset: 2,
+            samples: [0.1, 0.2, 0.3],
+            sampleRate: 16_000
         )
         let second = PipelineTranscriptEvent(
             id: UUID(),
@@ -54,7 +58,9 @@ struct AppBackendTests {
             languageID: "EN",
             text: "Second line",
             startOffset: 3,
-            endOffset: 4
+            endOffset: 4,
+            samples: [0.1, 0.2, 0.3],
+            sampleRate: 16_000
         )
 
         await store.appendTranscript(sessionID: sessionID, event: first)

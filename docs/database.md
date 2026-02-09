@@ -32,7 +32,7 @@
 - `avatarPalette: [Color]`
 - `startOffset: Double?` (seconds in `session_full.m4a`)
 - `endOffset: Double?` (seconds in `session_full.m4a`)
-- `text` initially stores deferred placeholder and is replaced by on-demand Whisper result after bubble tap.
+- `text` initially stores deferred placeholder and is replaced by queued automatic Whisper result.
 
 ### Speaker Profile (session-scoped)
 - `label: String` (e.g., `Speaker A`)
@@ -55,7 +55,7 @@ Documents/
    - refresh session duration
    - keep row chunk offsets for playback
    - rewrite `segments.json` snapshot
-3. On each bubble-tap transcription update:
+3. On each queued transcription update:
    - patch one existing row text/language
    - rewrite `segments.json` snapshot
 4. On recording stop:

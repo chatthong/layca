@@ -84,15 +84,49 @@ actor WhisperGGMLCoreMLService {
         }
 
         let ctx = try await ensureContext()
-        let samples = try Self.loadSamples(
+        let samples16k = try Self.loadSamples(
             from: audioURL,
             startOffset: startOffset,
             endOffset: endOffset
         )
-        guard !samples.isEmpty else {
+        guard !samples16k.isEmpty else {
             throw WhisperGGMLCoreMLError.noAudioSamples
         }
 
+        return try transcribeSamples(
+            samples16k,
+            context: ctx,
+            preferredLanguageCode: preferredLanguageCode,
+            initialPrompt: initialPrompt
+        )
+    }
+
+    func transcribe(
+        samples: [Float],
+        sourceSampleRate: Double,
+        preferredLanguageCode: String,
+        initialPrompt: String?
+    ) async throws -> WhisperTranscriptionResult {
+        let ctx = try await ensureContext()
+        let samples16k = Self.resampleTo16k(samples: samples, sourceSampleRate: sourceSampleRate)
+        guard !samples16k.isEmpty else {
+            throw WhisperGGMLCoreMLError.noAudioSamples
+        }
+
+        return try transcribeSamples(
+            samples16k,
+            context: ctx,
+            preferredLanguageCode: preferredLanguageCode,
+            initialPrompt: initialPrompt
+        )
+    }
+
+    private func transcribeSamples(
+        _ samples: [Float],
+        context: OpaquePointer,
+        preferredLanguageCode: String,
+        initialPrompt: String?
+    ) throws -> WhisperTranscriptionResult {
         let normalizedLanguage = preferredLanguageCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let languageCode: String
         if normalizedLanguage.isEmpty || normalizedLanguage == "auto" {
@@ -126,9 +160,9 @@ actor WhisperGGMLCoreMLService {
             params.language = languagePointer
             params.detect_language = detectLanguage
             params.initial_prompt = promptPointer
-            whisper_reset_timings(ctx)
+            whisper_reset_timings(context)
             return samples.withUnsafeBufferPointer { bufferPointer in
-                whisper_full(ctx, params, bufferPointer.baseAddress, Int32(bufferPointer.count))
+                whisper_full(context, params, bufferPointer.baseAddress, Int32(bufferPointer.count))
             }
         }
 
@@ -171,12 +205,12 @@ actor WhisperGGMLCoreMLService {
         }
 
         func collectText() -> String {
-            let segmentCount = Int(whisper_full_n_segments(ctx))
+            let segmentCount = Int(whisper_full_n_segments(context))
             var parts: [String] = []
             parts.reserveCapacity(segmentCount)
 
             for index in 0..<segmentCount {
-                if let segment = whisper_full_get_segment_text(ctx, Int32(index)) {
+                if let segment = whisper_full_get_segment_text(context, Int32(index)) {
                     let text = String(cString: segment).trimmingCharacters(in: .whitespacesAndNewlines)
                     if !text.isEmpty {
                         parts.append(text)
@@ -188,7 +222,7 @@ actor WhisperGGMLCoreMLService {
         }
 
         func detectedLanguageCode() -> String {
-            let languageID = whisper_full_lang_id(ctx)
+            let languageID = whisper_full_lang_id(context)
             guard languageID >= 0, let cLanguage = whisper_lang_str(languageID) else {
                 return "unknown"
             }

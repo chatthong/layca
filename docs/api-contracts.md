@@ -20,11 +20,6 @@
 
 ### `playTranscriptChunk(_ row: TranscriptRow) -> Void`
 - Plays one transcript row chunk from the active session audio file.
-- Also triggers on-demand Whisper transcription for that row and updates row text if inference succeeds.
-- Whisper context is initialized lazily by this path (no startup prewarm task).
-- On-demand transcription always uses Whisper language auto-detect (`preferredLanguageCode = "auto"`).
-- On-demand transcription uses the pre-flight prompt template with Language Focus + context keywords as `initial_prompt`.
-- If inference returns empty text, backend reports `No speech detected in this chunk.`
 - Requires valid row offsets (`startOffset`, `endOffset`) and recording must be stopped.
 - If constraints are not met, call is a no-op.
 
@@ -48,7 +43,7 @@
   - stopped
 - Uses native CoreML Silero VAD for speech detection when available.
 - Uses native CoreML WeSpeaker embedding (`wespeaker_v2.mlmodelc`) for speaker matching when available.
-- Emits deferred transcript placeholder text during recording; Whisper transcription is run later on tap.
+- Emits deferred transcript placeholder text during recording; backend auto-queues Whisper transcription.
 - Falls back to amplitude-threshold gating if VAD cannot initialize.
 - Falls back to lightweight heuristic speaker matching if speaker model cannot initialize.
 
@@ -90,6 +85,10 @@
 - Default runtime path uses non-CoreML encoder for reliability.
 - CoreML encoder path can be enabled with environment variable `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`.
 
+### `transcribe(samples:sourceSampleRate:preferredLanguageCode:initialPrompt:) async throws -> WhisperTranscriptionResult`
+- Transcribes in-memory chunk PCM and resamples to 16kHz internally.
+- Used by backend automatic queue worker so chunk inference does not depend on reading from the active recording file.
+
 ## SessionStore
 
 ### `createSession(title:languageHints:) throws -> UUID`
@@ -98,7 +97,7 @@
 ### `appendTranscript(sessionID:event:) -> Void`
 - Appends transcript row, updates duration, persists `segments.json` snapshot.
 - Persists `startOffset`/`endOffset` on each row for chunk playback.
-- Stores deferred placeholder text until bubble-tap transcription updates row text.
+- Stores deferred placeholder text until queued automatic transcription updates row text.
 
 ### `updateTranscriptRow(sessionID:rowID:text:language:) -> Void`
 - Patches one persisted transcript row with inferred Whisper text/language.

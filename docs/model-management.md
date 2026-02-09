@@ -2,7 +2,7 @@
 
 ## Status
 - Whisper runtime is integrated via `whisper.cpp` (`whisper.xcframework`).
-- Transcription is currently triggered on transcript-bubble tap (deferred/on-demand mode).
+- Transcription is currently queued automatically per chunk (serial one-by-one mode).
 - Settings has no model selection or download controls.
 - Settings now provides:
   - Language Focus (multi-select)
@@ -15,8 +15,8 @@
 - Bundled Whisper encoder directory: app bundle `ggml-large-v3-turbo-encoder.mlmodelc` (optional CoreML encoder acceleration)
 - Whisper runtime framework: `Frameworks/whisper.xcframework` (static XCFramework)
 
-## Whisper Inference Behavior (Chunk Tap)
-- Language mode: `preferredLanguageCode = "auto"` (always auto-detect for chunk taps)
+## Whisper Inference Behavior (Auto Queue)
+- Language mode: `preferredLanguageCode = "auto"` (always auto-detect for queued chunk transcription)
 - Translation: disabled (`translate = false`)
 - Prompt: `initial_prompt` from settings-driven template:
   - `This is a verbatim transcript of a meeting in [LANGUAGES]. The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language. Do not translate. Context: [KEYWORDS].`
@@ -27,7 +27,7 @@
 
 ## Whisper Startup / Backend Selection
 - App does not prewarm Whisper automatically on launch.
-- Whisper context initializes lazily when first chunk transcription is requested.
+- Whisper context initializes lazily when first queued chunk transcription is requested.
 - Default mode disables CoreML encoder path for startup reliability.
 - Set `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1` to opt in to CoreML encoder path.
 - In default mode, a log like `failed to load Core ML model ... ggml-large-v3-turbo-encoder.mlmodelc` is expected and non-fatal.
