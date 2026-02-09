@@ -3,7 +3,7 @@
 > **The Ultimate Offline Polyglot Meeting Secretary**
 
 **Project Codename:** `Layca-Core`  
-**Version:** 0.5.1 (Live Audio + CoreML VAD + CoreML Speaker Diarization + Chunk Playback)  
+**Version:** 0.5.2 (Live Audio + CoreML VAD + CoreML Speaker Diarization + On-Demand Whisper Chunk Transcription)  
 **Platforms:** iOS, iPadOS, tvOS, visionOS  
 **Core Philosophy:** Offline-first after model setup, privacy-first, chat-first UX
 
@@ -25,7 +25,8 @@
 
 ### A. Core Engine Strategy
 
-- **Inference target:** `whisper.cpp` integration path (transcription branch still uses placeholder text while runtime integration is pending).
+- **Inference target:** `whisper.cpp` with CoreML encoder acceleration (`ggml-large-v3-turbo-encoder.mlmodelc`) and on-demand chunk transcription.
+- **Decoder model:** `ggml-large-v3-turbo.bin` bundled in app resources (with cache/download fallback).
 - **Pre-flight behavior:** credits and language prompt are validated before recording.
 
 ### B. Audio Stack
@@ -37,8 +38,8 @@
   - Bundled VAD model in app resources (offline-first), with network/cache fallback
   - Bundled speaker model in app resources (offline-first), with network/cache fallback
   - Chunk merge + persistence + reactive chat updates
-- **Remaining integration:**
-  - Whisper inference on chunked PCM (replace current placeholder transcript text)
+- **Current transcription mode:**
+  - Chunk transcription runs on-demand when a transcript bubble is tapped (for debug/deep inspection).
 
 ### C. Data Layer
 
@@ -59,7 +60,7 @@ Documents/
 
 - **Chat tab:** Recorder card + live transcript bubbles.
 - **Header:** Active chat title supports inline rename.
-- **Setting tab:** Hours credit, language focus, iCloud toggle, and purchase restore.
+- **Setting tab:** Hours credit, language focus, context keywords, iCloud toggle, and purchase restore.
 - **Library tab:** Session switcher.
 - **New Chat tab role:** Action tab to create a fresh session and return to Chat.
 - **Export:** Separate sheet; Notepad-style formatting is export-only.
@@ -71,7 +72,7 @@ Documents/
 ### Phase 1: Pre-Flight
 
 1. Check credit balance.
-2. Build language prompt from Language Focus.
+2. Build Whisper initial prompt from Language Focus + context keywords.
 
 ### Phase 2: Live Pipeline (Concurrent)
 
@@ -81,11 +82,10 @@ Documents/
 2. **Track 2: VAD slicer**
    - Detect speech/silence, cut chunk after sustained silence.
    - Current defaults: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
-3. **Track 3: Dual AI branch**
-   - Branch A: transcription + language ID.
-   - Branch B: speaker embedding extraction + cosine matching / new speaker assignment.
+3. **Track 3: Speaker branch**
+   - CoreML speaker embedding extraction + cosine matching / new speaker assignment.
 4. **Track 4: Merger**
-   - Merge branch results into one transcript item.
+   - Store speaker/language metadata plus chunk offsets and deferred-transcript placeholder text.
 
 ### Phase 3: Persist + Reactive UI
 
@@ -103,18 +103,21 @@ Documents/
 
 #### Dynamic Pre-Flight Backend (Credits + Language Prompt)
 - `AppBackend.swift`
-- `PreflightService` checks remaining credit and builds prompt text like `This is a meeting in English, Thai.`.
+- `PreflightService` checks remaining credit and builds prompt text:
+  - `This is a verbatim transcript of a meeting in [LANGUAGES]. The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language. Do not translate. Context: [KEYWORDS].`
 
 #### Live Pipeline Backend (4-Track Style, Concurrent)
 - `AppBackend.swift`
-- `Libraries/SileroVADCoreMLService.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`
+- `Libraries/SileroVADCoreMLService.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
 - `LiveSessionPipeline` actor emits:
   - waveform updates (visualizer timing)
   - CoreML Silero VAD chunking behavior
-  - parallel Whisper branch + Speaker-ID branch
+  - speaker-ID branch
   - merged transcript events (`speaker`, `language`, `text`, `timestamp`)
 - Current implementation uses real `AVAudioEngine` + native CoreML Silero VAD + native CoreML speaker diarization.
-- Transcription branch is still placeholder text until Whisper runtime is connected.
+- Chunk rows are persisted with placeholder transcript text and are transcribed by Whisper on tap.
+- Tap transcription runs with `preferredLanguageCode = "auto"` and `translate = false` to keep original spoken language (no translation).
+- Whisper prompt-leak fallback is implemented: if output echoes the instruction prompt, inference reruns without prompt.
 
 #### Storage, Update, and Sync Hooks
 - `AppBackend.swift`
@@ -127,7 +130,8 @@ Documents/
 - `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and language settings.
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
-- Chat bubble tap plays only that chunk from `session_full.m4a` using persisted offsets.
+- Chat bubble tap plays that chunk from `session_full.m4a` and triggers on-demand Whisper transcription for that row.
+- Bubble tap transcription status clears reliably and reports `"No speech detected in this chunk."` when inference returns empty text.
 - Chunk playback is only enabled when recording is stopped.
 - Recorder card hit-testing fix applied so `Record` is tappable.
 
@@ -140,7 +144,7 @@ Documents/
 
 ### Next
 
-- Replace placeholder transcript generation with real Whisper runtime inference.
+- Add explicit playback/transcription progress state per tapped bubble.
 - Add VAD confidence/debug telemetry for tuning thresholds in production.
 - Add playback UX polish (selected-row highlight / progress / interruption policy).
 

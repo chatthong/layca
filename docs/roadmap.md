@@ -4,14 +4,16 @@
 
 ### Dynamic Pre-Flight Backend (Credits + Language Prompt)
 - `AppBackend.swift`
-- `PreflightService` checks remaining credit and builds prompt like `This is a meeting in English, Thai.`.
+- `PreflightService` checks remaining credit and builds prompt:
+  - `This is a verbatim transcript of a meeting in [LANGUAGES]. The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language. Do not translate. Context: [KEYWORDS].`
+- Added settings-backed context keyword input for prompt context.
 
 ### Live Pipeline Backend (4-Track Style, Concurrent)
-- `AppBackend.swift`, `Libraries/SileroVADCoreMLService.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`
+- `AppBackend.swift`, `Libraries/SileroVADCoreMLService.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
 - `LiveSessionPipeline` actor emits:
   - waveform updates (visualizer timing)
   - CoreML Silero VAD chunking behavior
-  - parallel Whisper branch + CoreML speaker-ID branch
+  - CoreML speaker-ID branch
   - merged transcript events (`speaker`, `language`, `text`, `timestamp`)
 - Current implementation uses real `AVAudioEngine` + bundled/offline CoreML Silero VAD + bundled/offline CoreML speaker diarization.
 - Chunk split defaults are tuned longer (`silenceCutoff=1.2s`, `minChunk=3.2s`, `maxChunk=12s`) to reduce over-splitting.
@@ -21,6 +23,7 @@
 - `SessionStore` creates `session_full.m4a` + `segments.json`.
 - Appends transcript rows, persists segment snapshots, and keeps stable speaker profile (color/avatar) per session.
 - Credit deduction per chunk and iCloud-sync hook point are included.
+- Added row-level transcript text update path for on-demand Whisper inference results.
 
 ### App Orchestration + UI Wiring
 - `AppBackend.swift`, `ContentView.swift`, `ChatTabView.swift`
@@ -28,13 +31,18 @@
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Transcript bubble tap now plays only that row's chunk from session audio.
+- Transcript bubble tap also triggers Whisper transcription for that chunk and patches row text in place.
+- Tap transcription now uses Whisper auto language detection (`preferredLanguageCode = "auto"`) and `translate = false`.
+- Added stuck-state fix for transcription status (`Transcribing selected chunk...` always clears).
+- Added no-speech messaging for empty inference results.
+- Added prompt-leak guard: if output echoes prompt instructions, rerun without prompt.
 - Playback is disabled while recording, and rows without valid offsets are non-playable.
 - Recorder button tap issue fixed by disabling hit-testing on decorative overlays.
 
 ### Settings Cleanup (Model UI Removed)
 - `SettingTabView.swift`, `ContentView.swift`, `AppBackend.swift`
 - Removed Settings model change/download card and model-select callbacks.
-- Removed in-app Whisper model-file dependency from backend/UI.
+- Added context-keywords input for Whisper `initial_prompt`.
 
 ### Tests Added
 - `AppBackendTests.swift`
@@ -45,8 +53,8 @@
 - Build + tests validated on iOS simulator.
 
 ## Next Priority
-1. Replace placeholder transcript generation with real whisper runtime inference.
-2. Add playback UX polish (playing-state indicator, active-bubble highlight, scrub constraints).
+1. Add playback/transcription UX polish (playing-state indicator, active-bubble highlight, transcription-progress state).
+2. Add resilience/retry handling for interrupted on-demand transcription jobs.
 3. Add resilience/recovery for interrupted recording or processing.
 4. Add optional SwiftData mirror/index layer for long-term search/filter use cases.
 5. Add configurable VAD/speaker sensitivity tuning in settings.

@@ -35,13 +35,15 @@
 - `Setting` currently contains:
   - Hours credit
   - Language focus
+  - Context keywords (for Whisper prompt context)
   - iCloud sync + restore purchases
 - Active chat badge supports inline rename:
   - Tap chat title in the Chat header to edit.
   - Saved title appears in both Chat and Library.
 - `Export` opens from the Chat header icon instead of a tab.
 - On some compact layouts, iOS may prioritize icon rendering for special-role grouped tabs even if text is provided.
-- Transcript bubbles are tappable for per-chunk playback only when recording is stopped.
+- Transcript bubbles are tappable for per-chunk playback and on-demand transcription only when recording is stopped.
+- Chunk-tap transcription keeps original spoken language (auto-detect + no translation).
 
 ## Why This Design
 - Native behavior and consistency with Apple navigation guidance.

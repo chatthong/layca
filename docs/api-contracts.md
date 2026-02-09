@@ -20,14 +20,22 @@
 
 ### `playTranscriptChunk(_ row: TranscriptRow) -> Void`
 - Plays one transcript row chunk from the active session audio file.
+- Also triggers on-demand Whisper transcription for that row and updates row text if inference succeeds.
+- On-demand transcription always uses Whisper language auto-detect (`preferredLanguageCode = "auto"`).
+- On-demand transcription uses the pre-flight prompt template with Language Focus + context keywords as `initial_prompt`.
+- If inference returns empty text, backend reports `No speech detected in this chunk.`
 - Requires valid row offsets (`startOffset`, `endOffset`) and recording must be stopped.
 - If constraints are not met, call is a no-op.
 
 ## PreflightService
 
-### `prepare(languageCodes:remainingCreditSeconds:) async throws -> PreflightConfig`
+### `prepare(languageCodes:focusKeywords:remainingCreditSeconds:) async throws -> PreflightConfig`
 - Validates credits.
-- Builds prompt string from language focus.
+- Builds prompt string from language focus and context keywords.
+
+### `buildPrompt(languageCodes:keywords:) -> String`
+- Returns:
+  - `This is a verbatim transcript of a meeting in [LANGUAGES]. The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language. Do not translate. Context: [KEYWORDS].`
 
 ## LiveSessionPipeline
 
@@ -39,6 +47,7 @@
   - stopped
 - Uses native CoreML Silero VAD for speech detection when available.
 - Uses native CoreML WeSpeaker embedding (`wespeaker_v2.mlmodelc`) for speaker matching when available.
+- Emits deferred transcript placeholder text during recording; Whisper transcription is run later on tap.
 - Falls back to amplitude-threshold gating if VAD cannot initialize.
 - Falls back to lightweight heuristic speaker matching if speaker model cannot initialize.
 
@@ -77,6 +86,10 @@
 ### `appendTranscript(sessionID:event:) -> Void`
 - Appends transcript row, updates duration, persists `segments.json` snapshot.
 - Persists `startOffset`/`endOffset` on each row for chunk playback.
+- Stores deferred placeholder text until bubble-tap transcription updates row text.
+
+### `updateTranscriptRow(sessionID:rowID:text:language:) -> Void`
+- Patches one persisted transcript row with inferred Whisper text/language.
 
 ### `snapshotSessions() -> [ChatSession]`
 - Returns session list for Library UI.

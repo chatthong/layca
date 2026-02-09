@@ -5,6 +5,8 @@
 - **Primary durable store:** filesystem (`Documents/Sessions`).
 - **Bundled runtime asset:** CoreML VAD model directory in app bundle (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) for offline startup.
 - **Bundled runtime asset:** CoreML speaker model directory in app bundle (`wespeaker_v2.mlmodelc`) for offline startup.
+- **Bundled runtime asset:** Whisper decoder model file in app bundle (`ggml-large-v3-turbo.bin`) for offline startup.
+- **Bundled runtime asset:** Whisper CoreML encoder directory in app bundle (`ggml-large-v3-turbo-encoder.mlmodelc`) for encoder acceleration.
 - **Planned:** migrate/extend to `SwiftData` for long-term query/index workflows.
 
 ## Runtime Entities (Current)
@@ -29,6 +31,7 @@
 - `avatarPalette: [Color]`
 - `startOffset: Double?` (seconds in `session_full.m4a`)
 - `endOffset: Double?` (seconds in `session_full.m4a`)
+- `text` initially stores deferred placeholder and is replaced by on-demand Whisper result after bubble tap.
 
 ### Speaker Profile (session-scoped)
 - `label: String` (e.g., `Speaker A`)
@@ -51,9 +54,12 @@ Documents/
    - refresh session duration
    - keep row chunk offsets for playback
    - rewrite `segments.json` snapshot
-3. On recording stop:
+3. On each bubble-tap transcription update:
+   - patch one existing row text/language
+   - rewrite `segments.json` snapshot
+4. On recording stop:
    - mark session status to `ready`
-4. On future deletion flow:
+5. On future deletion flow:
    - remove session row/state first, then filesystem assets.
 
 ## Consistency Rules Implemented

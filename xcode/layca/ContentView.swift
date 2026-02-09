@@ -52,6 +52,7 @@ struct ContentView: View {
                         usedHours: backend.usedHours,
                         selectedLanguageCodes: selectedLanguageCodesBinding,
                         languageSearchText: languageSearchTextBinding,
+                        focusContextKeywords: focusContextKeywordsBinding,
                         filteredFocusLanguages: filteredFocusLanguages,
                         isICloudSyncEnabled: iCloudSyncBinding,
                         isRestoringPurchases: backend.isRestoringPurchases,
@@ -143,6 +144,13 @@ private extension ContentView {
         Binding(
             get: { backend.languageSearchText },
             set: { backend.languageSearchText = $0 }
+        )
+    }
+
+    var focusContextKeywordsBinding: Binding<String> {
+        Binding(
+            get: { backend.focusContextKeywords },
+            set: { backend.focusContextKeywords = $0 }
         )
     }
 
@@ -349,7 +357,7 @@ struct ChatSession: Identifiable {
 }
 
 struct TranscriptRow: Identifiable {
-    let id: UUID = UUID()
+    let id: UUID
     let speaker: String
     let text: String
     let time: String
@@ -358,6 +366,28 @@ struct TranscriptRow: Identifiable {
     let avatarPalette: [Color]
     let startOffset: Double?
     let endOffset: Double?
+
+    nonisolated init(
+        id: UUID = UUID(),
+        speaker: String,
+        text: String,
+        time: String,
+        language: String,
+        avatarSymbol: String,
+        avatarPalette: [Color],
+        startOffset: Double?,
+        endOffset: Double?
+    ) {
+        self.id = id
+        self.speaker = speaker
+        self.text = text
+        self.time = time
+        self.language = language
+        self.avatarSymbol = avatarSymbol
+        self.avatarPalette = avatarPalette
+        self.startOffset = startOffset
+        self.endOffset = endOffset
+    }
 
     static func makeDemoRows(chatNumber: Int) -> [TranscriptRow] {
         struct BaseMessage {

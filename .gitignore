@@ -49,3 +49,5 @@ fastlane/test_output/
 # Model and runtime artifacts (optional large local files)
 Models/
 Documents/Sessions/
+xcode/layca/ggml-large-v3-turbo.bin
+xcode/layca/ggml-large-v3-turbo-encoder.mlmodelc/

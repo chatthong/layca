@@ -6,6 +6,7 @@ struct SettingTabView: View {
 
     @Binding var selectedLanguageCodes: Set<String>
     @Binding var languageSearchText: String
+    @Binding var focusContextKeywords: String
 
     let filteredFocusLanguages: [FocusLanguage]
 
@@ -119,6 +120,16 @@ struct SettingTabView: View {
             }
 
             TextField("Search name / code (en, eng)", text: $languageSearchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(.white.opacity(0.58))
+                )
+
+            TextField("Context keywords (product names, people, jargon)", text: $focusContextKeywords)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .padding(.horizontal, 12)

@@ -22,6 +22,7 @@ enum PreflightError: LocalizedError {
 struct PreflightService {
     func prepare(
         languageCodes: Set<String>,
+        focusKeywords: String,
         remainingCreditSeconds: Double
     ) async throws -> PreflightConfig {
         guard remainingCreditSeconds > 0 else {
@@ -29,7 +30,7 @@ struct PreflightService {
         }
 
         let normalizedLanguageCodes = languageCodes.map { $0.lowercased() }.sorted()
-        let prompt = buildPrompt(languageCodes: normalizedLanguageCodes)
+        let prompt = buildPrompt(languageCodes: normalizedLanguageCodes, keywords: focusKeywords)
 
         return PreflightConfig(
             prompt: prompt,
@@ -37,17 +38,16 @@ struct PreflightService {
         )
     }
 
-    private func buildPrompt(languageCodes: [String]) -> String {
+    func buildPrompt(languageCodes: [String], keywords: String) -> String {
         let locale = Locale(identifier: "en_US")
         let names = languageCodes.map { code in
             locale.localizedString(forLanguageCode: code) ?? code.uppercased()
         }
+        let languageList = names.isEmpty ? "multiple languages" : names.joined(separator: ", ")
+        let normalizedKeywords = keywords.trimmingCharacters(in: .whitespacesAndNewlines)
+        let context = normalizedKeywords.isEmpty ? "none" : normalizedKeywords
 
-        if names.isEmpty {
-            return "This is a meeting."
-        }
-
-        return "This is a meeting in \(names.joined(separator: ", "))."
+        return "This is a verbatim transcript of a meeting in \(languageList). The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language. Do not translate. Context: \(context)."
     }
 }
 
@@ -292,11 +292,6 @@ actor LiveSessionPipeline {
         let samples: [Float]
     }
 
-    private struct WhisperResult {
-        let languageID: String
-        let text: String
-    }
-
     private var continuation: AsyncStream<PipelineEvent>.Continuation?
     private var isRunning = false
     private var speakerEmbeddings: [String: [Float]] = [:]
@@ -329,6 +324,7 @@ actor LiveSessionPipeline {
     private let pendingChunksBeforeNewSpeaker = 2
     private let maxSpeakersPerSession = 6
     private let speakerFallbackThreshold: Double = 0.11
+    private let deferredTranscriptPlaceholder = "Tap this bubble to transcribe this chunk."
 
     func start(config: LivePipelineConfig) -> AsyncStream<PipelineEvent> {
         AsyncStream(bufferingPolicy: .bufferingNewest(500)) { continuation in
@@ -524,37 +520,23 @@ actor LiveSessionPipeline {
 
         let chunkSeconds = max((last.timestamp + last.duration) - first.timestamp, 0.2)
 
-        async let whisperResult = whisper(chunk: chunk, config: config)
         async let speakerID = identifySpeaker(chunk: chunk)
 
-        let transcript = await whisperResult
         let speaker = await speakerID
+        let languageCode = "AUTO"
 
         let event = PipelineTranscriptEvent(
             id: UUID(),
             sessionID: config.sessionID,
             speakerID: speaker,
-            languageID: transcript.languageID,
-            text: transcript.text,
+            languageID: languageCode,
+            text: deferredTranscriptPlaceholder,
             startOffset: first.timestamp,
             endOffset: first.timestamp + chunkSeconds
         )
 
         continuation?.yield(.transcript(event, chunkSeconds: chunkSeconds))
         chunkCounter += 1
-    }
-
-    private func whisper(chunk: [AudioFrame], config: LivePipelineConfig) async -> WhisperResult {
-        let languageCode = config.languageCodes.first ?? "en"
-        let seconds = chunkDuration(for: chunk)
-        let avgAmplitude = chunk.map(\.amplitude).reduce(0, +) / Double(max(chunk.count, 1))
-        let zcr = chunk.map(\.zeroCrossingRate).reduce(0, +) / Double(max(chunk.count, 1))
-
-        let levelPercent = Int((avgAmplitude * 100).rounded())
-        let paceHint = zcr > 0.16 ? "fast" : "steady"
-        let text = "Speech chunk captured (\(String(format: "%.1f", seconds))s, \(paceHint) pace, level \(levelPercent)%)."
-
-        return WhisperResult(languageID: languageCode.uppercased(), text: text)
     }
 
     private func identifySpeaker(chunk: [AudioFrame]) async -> String {
@@ -907,6 +889,7 @@ actor SessionStore {
         let baseColor = Color(hex: profile.colorHex)
 
         let row = TranscriptRow(
+            id: event.id,
             speaker: profile.label,
             text: event.text,
             time: Self.formatTimestamp(seconds: event.startOffset),
@@ -919,6 +902,37 @@ actor SessionStore {
 
         session.rows.append(row)
         session.durationSeconds = max(session.durationSeconds, event.endOffset)
+        persistSegmentsSnapshot(for: session)
+        sessions[sessionID] = session
+    }
+
+    func updateTranscriptRow(
+        sessionID: UUID,
+        rowID: UUID,
+        text: String,
+        language: String
+    ) {
+        guard var session = sessions[sessionID] else {
+            return
+        }
+
+        guard let index = session.rows.firstIndex(where: { $0.id == rowID }) else {
+            return
+        }
+
+        let existing = session.rows[index]
+        session.rows[index] = TranscriptRow(
+            id: existing.id,
+            speaker: existing.speaker,
+            text: text,
+            time: existing.time,
+            language: language,
+            avatarSymbol: existing.avatarSymbol,
+            avatarPalette: existing.avatarPalette,
+            startOffset: existing.startOffset,
+            endOffset: existing.endOffset
+        )
+
         persistSegmentsSnapshot(for: session)
         sessions[sessionID] = session
     }
@@ -991,6 +1005,7 @@ final class AppBackend: ObservableObject {
 
     @Published var selectedLanguageCodes: Set<String> = ["en", "th"]
     @Published var languageSearchText = ""
+    @Published var focusContextKeywords = ""
 
     @Published var totalHours: Double = 40
     @Published var usedHours: Double = 12.6
@@ -1009,10 +1024,12 @@ final class AppBackend: ObservableObject {
     private let pipeline = LiveSessionPipeline()
     private let sessionStore = SessionStore()
     private let masterRecorder = MasterAudioRecorder()
+    private let whisperTranscriber = WhisperGGMLCoreMLService()
 
     private var streamTask: Task<Void, Never>?
     private var chunkPlayer: AVAudioPlayer?
     private var chunkStopTask: Task<Void, Never>?
+    private var transcribingRowIDs: Set<UUID> = []
     private var chatCounter = 0
 
     init() {
@@ -1128,6 +1145,7 @@ final class AppBackend: ObservableObject {
         do {
             let config = try await preflightService.prepare(
                 languageCodes: selectedLanguageCodes,
+                focusKeywords: focusContextKeywords,
                 remainingCreditSeconds: remainingSeconds
             )
 
@@ -1220,8 +1238,76 @@ final class AppBackend: ObservableObject {
                     self.stopChunkPlayback()
                 }
             }
+
+            Task { [weak self] in
+                guard let self else {
+                    return
+                }
+                await self.transcribeChunkOnDemand(
+                    row: row,
+                    sessionID: sessionID,
+                    startOffset: startOffset,
+                    endOffset: endOffset
+                )
+            }
         } catch {
             stopChunkPlayback()
+        }
+    }
+
+    private func transcribeChunkOnDemand(
+        row: TranscriptRow,
+        sessionID: UUID,
+        startOffset: Double,
+        endOffset: Double
+    ) async {
+        guard !transcribingRowIDs.contains(row.id) else {
+            return
+        }
+
+        transcribingRowIDs.insert(row.id)
+        defer {
+            transcribingRowIDs.remove(row.id)
+            if preflightStatusMessage == "Transcribing selected chunk..." {
+                preflightStatusMessage = nil
+            }
+        }
+        preflightStatusMessage = "Transcribing selected chunk..."
+
+        guard let audioURL = await sessionStore.audioFileURL(for: sessionID) else {
+            preflightStatusMessage = "Unable to load session audio for transcription."
+            return
+        }
+
+        do {
+            let initialPrompt = preflightService.buildPrompt(
+                languageCodes: selectedLanguageCodes.map { $0.lowercased() }.sorted(),
+                keywords: focusContextKeywords
+            )
+            let result = try await whisperTranscriber.transcribe(
+                audioURL: audioURL,
+                startOffset: startOffset,
+                endOffset: endOffset,
+                preferredLanguageCode: "auto",
+                initialPrompt: initialPrompt
+            )
+
+            let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                preflightStatusMessage = "No speech detected in this chunk."
+                return
+            }
+
+            await sessionStore.updateTranscriptRow(
+                sessionID: sessionID,
+                rowID: row.id,
+                text: trimmed,
+                language: result.languageID.uppercased()
+            )
+            await refreshSessionsFromStore()
+            preflightStatusMessage = nil
+        } catch {
+            preflightStatusMessage = error.localizedDescription
         }
     }
 
