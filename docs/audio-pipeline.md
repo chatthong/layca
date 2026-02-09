@@ -49,6 +49,9 @@
   - `preferredLanguageCode = "auto"` (language auto-detect)
   - `translate = false` (never translate)
   - `initial_prompt` comes from Language Focus + context keywords
+- Whisper initializes lazily on first chunk-tap transcription (no app-launch prewarm).
+- Default Whisper startup path is non-CoreML encoder for reliability; set `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1` to opt in.
+- In default mode, CoreML encoder load-failure logs for `ggml-large-v3-turbo-encoder.mlmodelc` are expected and non-fatal.
 - If output is empty or appears to echo prompt instructions, backend applies fallback reruns (without prompt and detected-language retry) before returning no-speech.
 - Playback is disabled while recording is active.
 - If offsets are missing or invalid, bubble remains non-playable.

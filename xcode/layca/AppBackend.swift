@@ -1031,8 +1031,6 @@ final class AppBackend: ObservableObject {
     private var chunkPlayer: AVAudioPlayer?
     private var chunkStopTask: Task<Void, Never>?
     private var attemptedTranscriptionRowIDs: Set<UUID> = []
-    private var whisperPrewarmTask: Task<Void, Never>?
-    private var isWhisperPrewarmed = false
     private var chatCounter = 0
 
     init() {
@@ -1058,7 +1056,6 @@ final class AppBackend: ObservableObject {
     }
 
     func bootstrap() async {
-        prewarmWhisperIfNeeded()
         await createNewSessionIfNeeded()
     }
 
@@ -1134,7 +1131,6 @@ final class AppBackend: ObservableObject {
             return
         }
 
-        prewarmWhisperIfNeeded()
         stopChunkPlayback()
 
         if activeSessionID == nil {
@@ -1278,9 +1274,6 @@ final class AppBackend: ObservableObject {
         transcribingRowIDs.insert(row.id)
         attemptedTranscriptionRowIDs.insert(row.id)
 
-        if let prewarmTask = whisperPrewarmTask {
-            await prewarmTask.value
-        }
         defer {
             transcribingRowIDs.remove(row.id)
         }
@@ -1403,33 +1396,6 @@ final class AppBackend: ObservableObject {
         ) {
             activeSessionID = id
             await refreshSessionsFromStore()
-        }
-    }
-
-    private func prewarmWhisperIfNeeded() {
-        guard !isWhisperPrewarmed else {
-            return
-        }
-        guard whisperPrewarmTask == nil else {
-            return
-        }
-
-        whisperPrewarmTask = Task(priority: .utility) { [weak self] in
-            guard let self else {
-                return
-            }
-
-            do {
-                try await self.whisperTranscriber.prepareIfNeeded()
-                await MainActor.run { [weak self] in
-                    self?.isWhisperPrewarmed = true
-                    self?.whisperPrewarmTask = nil
-                }
-            } catch {
-                await MainActor.run { [weak self] in
-                    self?.whisperPrewarmTask = nil
-                }
-            }
         }
     }
 

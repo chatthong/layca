@@ -40,6 +40,8 @@ actor WhisperGGMLCoreMLService {
         static let modelDownloadURL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true"
         static let targetSampleRate: Double = 16_000
         static let minimumModelSizeBytes: Int64 = 1_000_000_000
+        static let coreMLEncoderEnvKey = "LAYCA_ENABLE_WHISPER_COREML_ENCODER"
+        static let coreMLEncoderEnabledByDefault = false
     }
 
     private let fileManager: FileManager
@@ -349,33 +351,45 @@ actor WhisperGGMLCoreMLService {
     }
 
     private func ensureModelFile() async throws -> URL {
-        if let bundled = bundledModelFileURL(), isValidModelFile(at: bundled) {
+        let coreMLEncoderEnabled = isCoreMLEncoderEnabled()
+        if coreMLEncoderEnabled,
+           let bundled = bundledModelFileURL(),
+           isValidModelFile(at: bundled) {
             return bundled
         }
 
         try fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
 
         let cachedModelURL = rootDirectory.appendingPathComponent(Constants.modelFileName)
+        if !coreMLEncoderEnabled {
+            try removeCachedCoreMLEncoderIfPresent()
+        }
+
         if !isValidModelFile(at: cachedModelURL) {
-            guard let remoteURL = URL(string: Constants.modelDownloadURL) else {
-                throw WhisperGGMLCoreMLError.modelUnavailable
+            if let bundled = bundledModelFileURL(), isValidModelFile(at: bundled) {
+                try materializeCachedModel(from: bundled, to: cachedModelURL)
+            } else {
+                guard let remoteURL = URL(string: Constants.modelDownloadURL) else {
+                    throw WhisperGGMLCoreMLError.modelUnavailable
+                }
+
+                let (temporaryURL, response) = try await URLSession.shared.download(from: remoteURL)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                    throw WhisperGGMLCoreMLError.downloadFailed
+                }
+
+                if fileManager.fileExists(atPath: cachedModelURL.path) {
+                    try? fileManager.removeItem(at: cachedModelURL)
+                }
+                try fileManager.moveItem(at: temporaryURL, to: cachedModelURL)
             }
 
-            let (temporaryURL, response) = try await URLSession.shared.download(from: remoteURL)
-            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                throw WhisperGGMLCoreMLError.downloadFailed
-            }
-
-            if fileManager.fileExists(atPath: cachedModelURL.path) {
-                try? fileManager.removeItem(at: cachedModelURL)
-            }
-            try fileManager.moveItem(at: temporaryURL, to: cachedModelURL)
             guard isValidModelFile(at: cachedModelURL) else {
                 throw WhisperGGMLCoreMLError.modelUnavailable
             }
         }
 
-        if let bundledEncoder = bundledEncoderDirectoryURL() {
+        if coreMLEncoderEnabled, let bundledEncoder = bundledEncoderDirectoryURL() {
             let targetEncoder = rootDirectory.appendingPathComponent(Constants.encoderDirectoryName, isDirectory: true)
             if !hasRequiredCoreMLFiles(at: targetEncoder) {
                 try fileManager.createDirectory(at: targetEncoder, withIntermediateDirectories: true)
@@ -384,6 +398,39 @@ actor WhisperGGMLCoreMLService {
         }
 
         return cachedModelURL
+    }
+
+    private func isCoreMLEncoderEnabled() -> Bool {
+        guard let rawValue = ProcessInfo.processInfo.environment[Constants.coreMLEncoderEnvKey]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        else {
+            return Constants.coreMLEncoderEnabledByDefault
+        }
+
+        switch rawValue {
+        case "1", "true", "yes", "on":
+            return true
+        case "0", "false", "no", "off":
+            return false
+        default:
+            return Constants.coreMLEncoderEnabledByDefault
+        }
+    }
+
+    private func removeCachedCoreMLEncoderIfPresent() throws {
+        let encoderURL = rootDirectory.appendingPathComponent(Constants.encoderDirectoryName, isDirectory: true)
+        guard fileManager.fileExists(atPath: encoderURL.path) else {
+            return
+        }
+        try fileManager.removeItem(at: encoderURL)
+    }
+
+    private func materializeCachedModel(from source: URL, to destination: URL) throws {
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
+        }
+        try fileManager.copyItem(at: source, to: destination)
     }
 
     private func bundledModelFileURL() -> URL? {

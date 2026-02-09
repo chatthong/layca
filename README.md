@@ -25,8 +25,10 @@
 
 ### A. Core Engine Strategy
 
-- **Inference target:** `whisper.cpp` with CoreML encoder acceleration (`ggml-large-v3-turbo-encoder.mlmodelc`) and on-demand chunk transcription.
+- **Inference target:** `whisper.cpp` with on-demand chunk transcription and optional CoreML encoder acceleration (`ggml-large-v3-turbo-encoder.mlmodelc`).
 - **Decoder model:** `ggml-large-v3-turbo.bin` bundled in app resources (with cache/download fallback).
+- **Whisper startup mode:** no automatic prewarm on app launch; transcription engine initializes lazily on first chunk tap.
+- **CoreML encoder mode:** disabled by default for startup reliability; can be re-enabled with `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`.
 - **Pre-flight behavior:** credits and language prompt are validated before recording.
 
 ### B. Audio Stack
@@ -118,6 +120,8 @@ Documents/
 - Chunk rows are persisted with placeholder transcript text and are transcribed by Whisper on tap.
 - Tap transcription runs with `preferredLanguageCode = "auto"` and `translate = false` to keep original spoken language (no translation).
 - Whisper prompt-leak fallback is implemented: if output echoes the instruction prompt, inference reruns without prompt.
+- Whisper context initialization is lazy (first chunk tap may be slower once).
+- CoreML encoder is opt-in (`LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`); default path avoids ANE/CoreML plan-build startup stalls.
 
 #### Storage, Update, and Sync Hooks
 - `AppBackend.swift`

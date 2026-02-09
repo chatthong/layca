@@ -6,7 +6,8 @@
 - **Bundled runtime asset:** CoreML VAD model directory in app bundle (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) for offline startup.
 - **Bundled runtime asset:** CoreML speaker model directory in app bundle (`wespeaker_v2.mlmodelc`) for offline startup.
 - **Bundled runtime asset:** Whisper decoder model file in app bundle (`ggml-large-v3-turbo.bin`) for offline startup.
-- **Bundled runtime asset:** Whisper CoreML encoder directory in app bundle (`ggml-large-v3-turbo-encoder.mlmodelc`) for encoder acceleration.
+- **Bundled runtime asset:** Whisper CoreML encoder directory in app bundle (`ggml-large-v3-turbo-encoder.mlmodelc`) for optional encoder acceleration.
+- **Runtime cache workspace:** `Library/Caches/WhisperGGML` for cached Whisper decoder and optional CoreML encoder assets.
 - **Planned:** migrate/extend to `SwiftData` for long-term query/index workflows.
 
 ## Runtime Entities (Current)

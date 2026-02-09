@@ -21,6 +21,7 @@
 ### `playTranscriptChunk(_ row: TranscriptRow) -> Void`
 - Plays one transcript row chunk from the active session audio file.
 - Also triggers on-demand Whisper transcription for that row and updates row text if inference succeeds.
+- Whisper context is initialized lazily by this path (no startup prewarm task).
 - On-demand transcription always uses Whisper language auto-detect (`preferredLanguageCode = "auto"`).
 - On-demand transcription uses the pre-flight prompt template with Language Focus + context keywords as `initial_prompt`.
 - If inference returns empty text, backend reports `No speech detected in this chunk.`
@@ -77,6 +78,17 @@
 
 ### `reset() -> Void`
 - Stateless reset hook (kept for pipeline lifecycle symmetry).
+
+## WhisperGGMLCoreMLService
+
+### `prepareIfNeeded() async throws -> Void`
+- Initializes Whisper context and runs a one-time warmup inference.
+- Available for explicit warmup flows, but is not called automatically on app launch.
+
+### `transcribe(audioURL:startOffset:endOffset:preferredLanguageCode:initialPrompt:) async throws -> WhisperTranscriptionResult`
+- Loads chunk audio, resamples to 16kHz, and runs `whisper.cpp`.
+- Default runtime path uses non-CoreML encoder for reliability.
+- CoreML encoder path can be enabled with environment variable `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`.
 
 ## SessionStore
 

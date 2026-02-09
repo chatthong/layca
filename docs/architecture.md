@@ -34,10 +34,12 @@
 - Audio capture uses real `AVAudioEngine`.
 - VAD uses native CoreML Silero (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) with bundled offline model.
 - Speaker branch uses native CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) with bundled offline model.
-- Whisper transcription is deferred to bubble-tap action (`whisper.cpp` + CoreML encoder), not auto-run during live chunking.
+- Whisper transcription is deferred to bubble-tap action (`whisper.cpp`), not auto-run during live chunking.
 - Tap transcription runs with Whisper auto language detection (`preferredLanguageCode = "auto"`) and `translate = false`.
 - Whisper prompt template is built from Language Focus + context keywords.
 - If output appears to echo the prompt text, the backend reruns inference without prompt.
+- Whisper is initialized lazily on first transcription request (no app-launch prewarm).
+- CoreML encoder is opt-in via `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`; default startup path uses non-CoreML encoder flow for reliability.
 - Chunk slicing defaults are tuned longer to reduce over-splitting: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
 - Chunk playback is gated off while recording to avoid audio-session conflicts.
 

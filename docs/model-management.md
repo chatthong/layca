@@ -12,7 +12,7 @@
 - Bundled VAD directory: app bundle `silero-vad-unified-256ms-v6.0.0.mlmodelc` (CoreML Silero, offline-first)
 - Bundled speaker directory: app bundle `wespeaker_v2.mlmodelc` (CoreML WeSpeaker, offline-first)
 - Bundled Whisper decoder file: app bundle `ggml-large-v3-turbo.bin` (offline-first)
-- Bundled Whisper encoder directory: app bundle `ggml-large-v3-turbo-encoder.mlmodelc` (CoreML encoder acceleration)
+- Bundled Whisper encoder directory: app bundle `ggml-large-v3-turbo-encoder.mlmodelc` (optional CoreML encoder acceleration)
 - Whisper runtime framework: `Frameworks/whisper.xcframework` (static XCFramework)
 
 ## Whisper Inference Behavior (Chunk Tap)
@@ -25,6 +25,13 @@
 - Empty result guard:
   - If still empty in auto mode, backend reruns once with detected language.
 
+## Whisper Startup / Backend Selection
+- App does not prewarm Whisper automatically on launch.
+- Whisper context initializes lazily when first chunk transcription is requested.
+- Default mode disables CoreML encoder path for startup reliability.
+- Set `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1` to opt in to CoreML encoder path.
+- In default mode, a log like `failed to load Core ML model ... ggml-large-v3-turbo-encoder.mlmodelc` is expected and non-fatal.
+
 ## Pre-flight Behavior
 1. User taps record.
 2. Pre-flight validates available credits.
@@ -33,6 +40,7 @@
 
 ## Notes
 - Model resolution order for Whisper decoder:
-  1. bundled `ggml-large-v3-turbo.bin`
-  2. cached copy
+  1. cached `Library/Caches/WhisperGGML/ggml-large-v3-turbo.bin`
+  2. bundled `ggml-large-v3-turbo.bin` (copied into cache when needed)
   3. runtime download fallback (if not available locally)
+- CoreML encoder cache (`Library/Caches/WhisperGGML/ggml-large-v3-turbo-encoder.mlmodelc`) is only materialized when CoreML encoder mode is enabled.

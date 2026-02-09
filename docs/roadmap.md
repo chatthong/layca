@@ -39,6 +39,14 @@
 - Playback is disabled while recording, and rows without valid offsets are non-playable.
 - Recorder button tap issue fixed by disabling hit-testing on decorative overlays.
 
+### Whisper Startup Reliability Hardening
+- `AppBackend.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
+- Removed automatic Whisper prewarm on app bootstrap and recording start.
+- Whisper context now initializes lazily on first chunk transcription request.
+- Default Whisper mode now avoids CoreML encoder startup path to prevent ANE/CoreML plan-build stalls.
+- Added opt-in switch for CoreML encoder path via `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`.
+- In default mode, CoreML encoder load-failure logs are expected and non-fatal.
+
 ### Settings Cleanup (Model UI Removed)
 - `SettingTabView.swift`, `ContentView.swift`, `AppBackend.swift`
 - Removed Settings model change/download card and model-select callbacks.
@@ -50,7 +58,8 @@
   - prompt building from selected languages
   - credit exhaustion guard behavior
   - speaker profile stability across chunks
-- Build + tests validated on iOS simulator.
+- Build validated on iOS simulator.
+- `laycaTests` currently has compile failures unrelated to this change (`PreflightService.prepare` callsites missing `focusKeywords`).
 
 ## Next Priority
 1. Add playback/transcription UX polish (playing-state indicator, active-bubble highlight, transcription-progress state).
