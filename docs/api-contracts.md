@@ -23,6 +23,22 @@
 - Requires valid row offsets (`startOffset`, `endOffset`) and recording must be stopped.
 - If constraints are not met, call is a no-op.
 
+### `editTranscriptRow(_ row: TranscriptRow, text: String) -> Void`
+- Applies a manual transcript text edit for a row.
+- Keeps row language metadata and persists updated text immediately.
+
+### `editSpeakerName(_ row: TranscriptRow, name: String) -> Void`
+- Renames the speaker profile for `row.speakerID`.
+- Propagates the updated name to every row in the active session with the same `speakerID`.
+
+### `changeSpeaker(_ row: TranscriptRow, to speakerID: String) -> Void`
+- Reassigns one row to another existing speaker profile in the active session.
+- Updates speaker label/avatar color metadata on that row to match the target speaker profile.
+
+### `retranscribeTranscriptRow(_ row: TranscriptRow) -> Void`
+- Re-runs Whisper for the row's chunk range from session audio.
+- Uses auto language detect with translation disabled and patches row text/language.
+
 ## PreflightService
 
 ### `prepare(languageCodes:focusKeywords:remainingCreditSeconds:) async throws -> PreflightConfig`
@@ -101,6 +117,12 @@
 
 ### `updateTranscriptRow(sessionID:rowID:text:language:) -> Void`
 - Patches one persisted transcript row with inferred Whisper text/language.
+
+### `updateSpeakerName(sessionID:speakerID:newName:) -> Void`
+- Renames one stored speaker profile and updates all rows that reference that `speakerID`.
+
+### `changeTranscriptRowSpeaker(sessionID:rowID:targetSpeakerID:) -> Void`
+- Rebinds a row to another existing speaker profile in the same session.
 
 ### `snapshotSessions() -> [ChatSession]`
 - Returns session list for Library UI.

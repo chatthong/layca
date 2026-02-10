@@ -25,10 +25,15 @@ struct ContentView: View {
                         activeSessionDateText: backend.activeSessionDateText,
                         liveChatItems: backend.activeTranscriptRows,
                         transcribingRowIDs: backend.transcribingRowIDs,
+                        isTranscriptionBusy: backend.isTranscriptionBusy,
                         preflightMessage: backend.preflightStatusMessage,
                         canPlayTranscriptChunks: !backend.isRecording,
                         onRecordTap: backend.toggleRecording,
                         onTranscriptTap: backend.playTranscriptChunk,
+                        onManualEditTranscript: backend.editTranscriptRow,
+                        onEditSpeakerName: backend.editSpeakerName,
+                        onChangeSpeaker: backend.changeSpeaker,
+                        onRetranscribeTranscript: backend.retranscribeTranscriptRow,
                         onExportTap: { isExportPresented = true },
                         onRenameSessionTitle: backend.renameActiveSessionTitle
                     )
@@ -359,6 +364,7 @@ struct ChatSession: Identifiable {
 
 struct TranscriptRow: Identifiable {
     let id: UUID
+    let speakerID: String
     let speaker: String
     let text: String
     let time: String
@@ -370,6 +376,7 @@ struct TranscriptRow: Identifiable {
 
     nonisolated init(
         id: UUID = UUID(),
+        speakerID: String,
         speaker: String,
         text: String,
         time: String,
@@ -380,6 +387,7 @@ struct TranscriptRow: Identifiable {
         endOffset: Double?
     ) {
         self.id = id
+        self.speakerID = speakerID
         self.speaker = speaker
         self.text = text
         self.time = time
@@ -450,6 +458,7 @@ struct TranscriptRow: Identifiable {
         return baseMessages.map { message in
             let avatar = avatarForSpeaker(message.speaker)
             return TranscriptRow(
+                speakerID: message.speaker,
                 speaker: message.speaker,
                 text: message.text,
                 time: message.time,

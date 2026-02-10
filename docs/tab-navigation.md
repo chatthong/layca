@@ -43,6 +43,12 @@
 - `Export` opens from the Chat header icon instead of a tab.
 - On some compact layouts, iOS may prioritize icon rendering for special-role grouped tabs even if text is provided.
 - Transcript bubbles are tappable for per-chunk playback only when recording is stopped.
+- Long-press on a transcript bubble opens actions for:
+  - `Edit Text`
+  - `Edit Speaker Name` (syncs all rows with same `speakerID`)
+  - `Change Speaker` (pick another existing speaker profile)
+  - `Transcribe Again`
+- Bubble long-press is disabled while recording and while queued/active transcription is in progress.
 - Chunk transcription runs automatically in queue order and keeps original spoken language (auto-detect + no translation).
 
 ## Why This Design

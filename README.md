@@ -135,6 +135,13 @@ Documents/
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Chat bubble tap plays that chunk from `session_full.m4a`.
+- Chat bubble long-press opens actions for:
+  - manual text edit
+  - speaker rename (syncs all rows with same `speakerID`)
+  - speaker reassignment to another existing speaker profile
+  - "Transcribe Again" retry
+- Bubble long-press is disabled while recording and while queued/active transcription work is running.
+- Bubble option UI is extracted into a dedicated component (`Views/Components/TranscriptBubbleOptionButton.swift`).
 - Row transcription status clears reliably and reports `"No speech detected in this chunk."` when inference returns empty text.
 - Chunk playback is only enabled when recording is stopped.
 - Recorder card hit-testing fix applied so `Record` is tappable.

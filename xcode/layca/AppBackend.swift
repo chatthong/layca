@@ -894,6 +894,7 @@ actor SessionStore {
 
         let row = TranscriptRow(
             id: event.id,
+            speakerID: event.speakerID,
             speaker: profile.label,
             text: event.text,
             time: Self.formatTimestamp(seconds: event.startOffset),
@@ -927,6 +928,7 @@ actor SessionStore {
         let existing = session.rows[index]
         session.rows[index] = TranscriptRow(
             id: existing.id,
+            speakerID: existing.speakerID,
             speaker: existing.speaker,
             text: text,
             time: existing.time,
@@ -941,8 +943,86 @@ actor SessionStore {
         sessions[sessionID] = session
     }
 
-    private func speakerProfile(for label: String, in table: inout [String: SpeakerProfile]) -> SpeakerProfile {
-        if let profile = table[label] {
+    func updateSpeakerName(
+        sessionID: UUID,
+        speakerID: String,
+        newName: String
+    ) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, var session = sessions[sessionID] else {
+            return
+        }
+
+        guard let profile = session.speakers[speakerID] else {
+            return
+        }
+
+        session.speakers[speakerID] = SpeakerProfile(
+            label: trimmed,
+            colorHex: profile.colorHex,
+            avatarSymbol: profile.avatarSymbol
+        )
+
+        for index in session.rows.indices where session.rows[index].speakerID == speakerID {
+            let existing = session.rows[index]
+            session.rows[index] = TranscriptRow(
+                id: existing.id,
+                speakerID: existing.speakerID,
+                speaker: trimmed,
+                text: existing.text,
+                time: existing.time,
+                language: existing.language,
+                avatarSymbol: existing.avatarSymbol,
+                avatarPalette: existing.avatarPalette,
+                startOffset: existing.startOffset,
+                endOffset: existing.endOffset
+            )
+        }
+
+        persistSegmentsSnapshot(for: session)
+        sessions[sessionID] = session
+    }
+
+    func changeTranscriptRowSpeaker(
+        sessionID: UUID,
+        rowID: UUID,
+        targetSpeakerID: String
+    ) {
+        guard var session = sessions[sessionID] else {
+            return
+        }
+
+        guard let rowIndex = session.rows.firstIndex(where: { $0.id == rowID }),
+              let targetProfile = session.speakers[targetSpeakerID]
+        else {
+            return
+        }
+
+        let existing = session.rows[rowIndex]
+        guard existing.speakerID != targetSpeakerID else {
+            return
+        }
+
+        let baseColor = Color(hex: targetProfile.colorHex)
+        session.rows[rowIndex] = TranscriptRow(
+            id: existing.id,
+            speakerID: targetSpeakerID,
+            speaker: targetProfile.label,
+            text: existing.text,
+            time: existing.time,
+            language: existing.language,
+            avatarSymbol: targetProfile.avatarSymbol,
+            avatarPalette: [baseColor, .white.opacity(0.72)],
+            startOffset: existing.startOffset,
+            endOffset: existing.endOffset
+        )
+
+        persistSegmentsSnapshot(for: session)
+        sessions[sessionID] = session
+    }
+
+    private func speakerProfile(for speakerID: String, in table: inout [String: SpeakerProfile]) -> SpeakerProfile {
+        if let profile = table[speakerID] {
             return profile
         }
 
@@ -958,8 +1038,8 @@ actor SessionStore {
         let colorHex = colors.randomElement() ?? "#0EA5E9"
         let symbol = symbols.randomElement() ?? "person.fill"
 
-        let profile = SpeakerProfile(label: label, colorHex: colorHex, avatarSymbol: symbol)
-        table[label] = profile
+        let profile = SpeakerProfile(label: speakerID, colorHex: colorHex, avatarSymbol: symbol)
+        table[speakerID] = profile
         return profile
     }
 
@@ -973,6 +1053,7 @@ actor SessionStore {
 
     private func persistSegmentsSnapshot(for session: StoredSession) {
         struct SegmentSnapshot: Codable {
+            let speakerID: String
             let speaker: String
             let text: String
             let time: String
@@ -983,6 +1064,7 @@ actor SessionStore {
 
         let snapshots = session.rows.map { row in
             SegmentSnapshot(
+                speakerID: row.speakerID,
                 speaker: row.speaker,
                 text: row.text,
                 time: row.time,
@@ -1029,6 +1111,7 @@ final class AppBackend: ObservableObject {
     @Published var activeSessionID: UUID?
     @Published var activeTranscriptRows: [TranscriptRow] = []
     @Published var transcribingRowIDs: Set<UUID> = []
+    @Published var isTranscriptionBusy = false
 
     @Published var preflightStatusMessage: String?
 
@@ -1137,6 +1220,73 @@ final class AppBackend: ObservableObject {
     func playTranscriptChunk(_ row: TranscriptRow) {
         Task {
             await playTranscriptChunkInternal(row)
+        }
+    }
+
+    func editTranscriptRow(_ row: TranscriptRow, text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let sessionID = activeSessionID else {
+            return
+        }
+
+        // Manual edits should not be overwritten by any queued auto job.
+        attemptedTranscriptionRowIDs.insert(row.id)
+        queuedTranscriptionRowIDs.remove(row.id)
+        queuedChunkTranscriptions.removeAll { $0.rowID == row.id }
+        updateTranscriptionBusyState()
+
+        Task {
+            await sessionStore.updateTranscriptRow(
+                sessionID: sessionID,
+                rowID: row.id,
+                text: trimmed,
+                language: row.language
+            )
+            await refreshSessionsFromStore()
+            preflightStatusMessage = nil
+        }
+    }
+
+    func editSpeakerName(_ row: TranscriptRow, name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let sessionID = activeSessionID else {
+            return
+        }
+
+        Task {
+            await sessionStore.updateSpeakerName(
+                sessionID: sessionID,
+                speakerID: row.speakerID,
+                newName: trimmed
+            )
+            await refreshSessionsFromStore()
+            preflightStatusMessage = nil
+        }
+    }
+
+    func changeSpeaker(_ row: TranscriptRow, to speakerID: String) {
+        guard let sessionID = activeSessionID else {
+            return
+        }
+
+        Task {
+            await sessionStore.changeTranscriptRowSpeaker(
+                sessionID: sessionID,
+                rowID: row.id,
+                targetSpeakerID: speakerID
+            )
+            await refreshSessionsFromStore()
+            preflightStatusMessage = nil
+        }
+    }
+
+    func retranscribeTranscriptRow(_ row: TranscriptRow) {
+        guard let sessionID = activeSessionID else {
+            return
+        }
+
+        Task {
+            await retranscribeTranscriptRowInternal(row, sessionID: sessionID)
         }
     }
 
@@ -1259,6 +1409,69 @@ final class AppBackend: ObservableObject {
         }
     }
 
+    private func retranscribeTranscriptRowInternal(_ row: TranscriptRow, sessionID: UUID) async {
+        guard !isRecording,
+              let startOffset = row.startOffset,
+              let endOffset = row.endOffset,
+              endOffset > startOffset
+        else {
+            return
+        }
+
+        guard !transcribingRowIDs.contains(row.id) else {
+            return
+        }
+
+        // Treat manual re-transcribe as authoritative for this row.
+        attemptedTranscriptionRowIDs.insert(row.id)
+        queuedTranscriptionRowIDs.remove(row.id)
+        queuedChunkTranscriptions.removeAll { $0.rowID == row.id }
+        updateTranscriptionBusyState()
+
+        guard let audioURL = await sessionStore.audioFileURL(for: sessionID) else {
+            preflightStatusMessage = "Unable to load session audio for transcription."
+            return
+        }
+
+        transcribingRowIDs.insert(row.id)
+        updateTranscriptionBusyState()
+        defer {
+            transcribingRowIDs.remove(row.id)
+            updateTranscriptionBusyState()
+        }
+
+        do {
+            let initialPrompt = preflightService.buildPrompt(
+                languageCodes: selectedLanguageCodes.map { $0.lowercased() }.sorted(),
+                keywords: focusContextKeywords
+            )
+            let result = try await whisperTranscriber.transcribe(
+                audioURL: audioURL,
+                startOffset: startOffset,
+                endOffset: endOffset,
+                preferredLanguageCode: "auto",
+                initialPrompt: initialPrompt
+            )
+
+            let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                preflightStatusMessage = "No speech detected in this chunk."
+                return
+            }
+
+            await sessionStore.updateTranscriptRow(
+                sessionID: sessionID,
+                rowID: row.id,
+                text: trimmed,
+                language: result.languageID.uppercased()
+            )
+            await refreshSessionsFromStore()
+            preflightStatusMessage = nil
+        } catch {
+            preflightStatusMessage = error.localizedDescription
+        }
+    }
+
     private func transcribeQueuedChunk(
         rowID: UUID,
         sessionID: UUID,
@@ -1273,9 +1486,11 @@ final class AppBackend: ObservableObject {
 
         transcribingRowIDs.insert(rowID)
         attemptedTranscriptionRowIDs.insert(rowID)
+        updateTranscriptionBusyState()
 
         defer {
             transcribingRowIDs.remove(rowID)
+            updateTranscriptionBusyState()
         }
 
         do {
@@ -1334,6 +1549,7 @@ final class AppBackend: ObservableObject {
                 sampleRate: sampleRate
             )
         )
+        updateTranscriptionBusyState()
         startQueuedTranscriptionWorkerIfNeeded()
     }
 
@@ -1354,11 +1570,13 @@ final class AppBackend: ObservableObject {
         while !Task.isCancelled {
             guard !queuedChunkTranscriptions.isEmpty else {
                 queuedTranscriptionTask = nil
+                updateTranscriptionBusyState()
                 return
             }
 
             let next = queuedChunkTranscriptions.removeFirst()
             queuedTranscriptionRowIDs.remove(next.rowID)
+            updateTranscriptionBusyState()
 
             await transcribeQueuedChunk(
                 rowID: next.rowID,
@@ -1369,6 +1587,11 @@ final class AppBackend: ObservableObject {
         }
 
         queuedTranscriptionTask = nil
+        updateTranscriptionBusyState()
+    }
+
+    private func updateTranscriptionBusyState() {
+        isTranscriptionBusy = !transcribingRowIDs.isEmpty || !queuedChunkTranscriptions.isEmpty
     }
 
     private func stopChunkPlayback() {

@@ -9,10 +9,15 @@ struct ChatTabView: View {
     let activeSessionDateText: String
     let liveChatItems: [TranscriptRow]
     let transcribingRowIDs: Set<UUID>
+    let isTranscriptionBusy: Bool
     let preflightMessage: String?
     let canPlayTranscriptChunks: Bool
     let onRecordTap: () -> Void
     let onTranscriptTap: (TranscriptRow) -> Void
+    let onManualEditTranscript: (TranscriptRow, String) -> Void
+    let onEditSpeakerName: (TranscriptRow, String) -> Void
+    let onChangeSpeaker: (TranscriptRow, String) -> Void
+    let onRetranscribeTranscript: (TranscriptRow) -> Void
     let onExportTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
 
@@ -285,14 +290,24 @@ struct ChatTabView: View {
             ForEach(liveChatItems) { item in
                 HStack(alignment: .top, spacing: 10) {
                     avatarView(for: item)
-                    Button {
-                        onTranscriptTap(item)
-                    } label: {
+                    TranscriptBubbleOptionButton(
+                        item: item,
+                        liveChatItems: liveChatItems,
+                        isRecording: isRecording,
+                        isTranscriptionBusy: isTranscriptionBusy,
+                        isItemTranscribing: transcribingRowIDs.contains(item.id),
+                        isPlayable: isTranscriptBubblePlayable(item),
+                        onTap: {
+                            onTranscriptTap(item)
+                        },
+                        onManualEditTranscript: onManualEditTranscript,
+                        onEditSpeakerName: onEditSpeakerName,
+                        onChangeSpeaker: onChangeSpeaker,
+                        onRetranscribeTranscript: onRetranscribeTranscript
+                    ) {
                         messageBubble(for: item)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!isTranscriptBubblePlayable(item))
                 }
             }
         }

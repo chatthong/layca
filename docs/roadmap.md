@@ -31,6 +31,14 @@
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Transcript bubble tap now plays only that row's chunk from session audio.
+- Added transcript-bubble long-press action menu:
+  - manual transcript edit
+  - speaker rename (sync all rows by `speakerID`)
+  - change row speaker to another existing speaker profile
+  - "Transcribe Again" retry action
+- Bubble long-press is disabled while recording and while queued/active transcription work is running.
+- Extracted bubble-option UI logic into dedicated component file:
+  - `Views/Components/TranscriptBubbleOptionButton.swift`
 - Chunk transcription now runs automatically in backend queue order and patches row text in place.
 - Queued transcription uses Whisper auto language detection (`preferredLanguageCode = "auto"`) and `translate = false`.
 - Added stuck-state fix for transcription status (transcribing indicator always clears).

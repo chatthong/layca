@@ -24,6 +24,7 @@
 
 ### Transcript Row (runtime model)
 - `id: UUID`
+- `speakerID: String` (stable per-session speaker identity key)
 - `speaker: String`
 - `text: String`
 - `time: String` (`HH:mm:ss`)
@@ -38,6 +39,7 @@
 - `label: String` (e.g., `Speaker A`)
 - `colorHex: String`
 - `avatarSymbol: String`
+- Stored in a dictionary keyed by `speakerID`.
 
 ## Filesystem Layout
 ```text
@@ -58,9 +60,12 @@ Documents/
 3. On each queued transcription update:
    - patch one existing row text/language
    - rewrite `segments.json` snapshot
-4. On recording stop:
+4. On speaker edit/reassign actions:
+   - rename all rows by shared `speakerID` or rebind one row to another `speakerID`
+   - rewrite `segments.json` snapshot
+5. On recording stop:
    - mark session status to `ready`
-5. On future deletion flow:
+6. On future deletion flow:
    - remove session row/state first, then filesystem assets.
 
 ## Consistency Rules Implemented
