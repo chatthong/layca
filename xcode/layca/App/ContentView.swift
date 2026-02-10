@@ -107,27 +107,35 @@ private extension ContentView {
                 .frame(width: 290)
             }
 
-            ToolbarItemGroup(placement: .primaryAction) {
-                ControlGroup {
-                    Button {
-                        beginMacRename()
-                    } label: {
-                        Label("Rename", systemImage: "pencil")
-                    }
-
-                    Button {
-                        isExportPresented = true
-                    } label: {
-                        Label("Export", systemImage: "square.and.arrow.up")
-                    }
-
-                    Button {
-                        startNewChatAndReturnToChat()
-                    } label: {
-                        Label("New Chat", systemImage: "plus.bubble")
-                    }
+            ToolbarItem(placement: .primaryAction) {
+                macToolbarActionButton(
+                    title: "Rename",
+                    systemImage: "pencil"
+                ) {
+                    beginMacRename()
                 }
-                .controlSize(.regular)
+            }
+
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+
+            ToolbarItem(placement: .primaryAction) {
+                macToolbarActionButton(
+                    title: "Share",
+                    systemImage: "square.and.arrow.up"
+                ) {
+                    isExportPresented = true
+                }
+            }
+
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+
+            ToolbarItem(placement: .primaryAction) {
+                macToolbarActionButton(
+                    title: "New Chat",
+                    systemImage: "plus.bubble"
+                ) {
+                    startNewChatAndReturnToChat()
+                }
             }
         }
         .onAppear {
@@ -332,6 +340,21 @@ private extension ContentView {
         }
         backend.renameActiveSessionTitle(trimmed)
         isMacRenameSheetPresented = false
+    }
+
+    @ViewBuilder
+    func macToolbarActionButton(
+        title: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 20, height: 20)
+        }
+        .buttonStyle(.plain)
+        .help(title)
     }
 #endif
 

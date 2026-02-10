@@ -56,6 +56,8 @@ struct MacWorkspaceSidebarView: View {
             createChatSection
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(sidebarBackground)
         .navigationTitle("Layca")
         .alert("Rename Chat", isPresented: renameAlertBinding, actions: {
             TextField("Chat name", text: $renameDraft)
@@ -94,6 +96,25 @@ struct MacWorkspaceSidebarView: View {
                 Text("This will permanently remove this chat and its recording.")
             }
         }
+    }
+
+    private var sidebarBackground: some View {
+        LinearGradient(
+            colors: [
+                Color(nsColor: .windowBackgroundColor),
+                Color(nsColor: .underPageBackgroundColor).opacity(0.94)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(alignment: .topLeading) {
+            Circle()
+                .fill(Color.accentColor.opacity(0.16))
+                .frame(width: 180, height: 180)
+                .blur(radius: 44)
+                .offset(x: -42, y: -48)
+        }
+        .ignoresSafeArea()
     }
 
     private var workspaceSection: some View {
