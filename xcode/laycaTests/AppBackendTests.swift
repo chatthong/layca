@@ -255,6 +255,116 @@ struct AppBackendTests {
         #expect(loaded == expected)
     }
 
+    @Test func deletingTranscriptRowRemovesItFromStoreAndDiskSnapshot() async throws {
+        let fileManager = FileManager.default
+        let tempSessionsURL = fileManager.temporaryDirectory
+            .appendingPathComponent("layca-tests-sessions-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: tempSessionsURL) }
+
+        let store = SessionStore(fileManager: fileManager, sessionsDirectory: tempSessionsURL)
+        let sessionID = try await store.createSession(title: "Chat Trim", languageHints: ["en"])
+        let firstRowID = UUID()
+        let secondRowID = UUID()
+
+        let first = PipelineTranscriptEvent(
+            id: firstRowID,
+            sessionID: sessionID,
+            speakerID: "speaker-a",
+            languageID: "EN",
+            text: "Maybe silence chunk",
+            startOffset: 1.0,
+            endOffset: 2.0,
+            samples: [0.1, 0.2],
+            sampleRate: 16_000
+        )
+        let second = PipelineTranscriptEvent(
+            id: secondRowID,
+            sessionID: sessionID,
+            speakerID: "speaker-b",
+            languageID: "EN",
+            text: "Keep this line",
+            startOffset: 4.0,
+            endOffset: 6.0,
+            samples: [0.1, 0.2],
+            sampleRate: 16_000
+        )
+
+        await store.appendTranscript(sessionID: sessionID, event: first)
+        await store.appendTranscript(sessionID: sessionID, event: second)
+        await store.deleteTranscriptRow(sessionID: sessionID, rowID: firstRowID)
+
+        let rows = await store.transcriptRows(for: sessionID)
+        #expect(rows.count == 1)
+        #expect(rows.first?.id == secondRowID)
+
+        let reloadedStore = SessionStore(fileManager: fileManager, sessionsDirectory: tempSessionsURL)
+        let reloadedRows = await reloadedStore.transcriptRows(for: sessionID)
+        #expect(reloadedRows.count == 1)
+        #expect(reloadedRows.first?.id == secondRowID)
+    }
+
+    @Test func sessionDurationTracksLatestTranscriptOffset() async throws {
+        let fileManager = FileManager.default
+        let tempSessionsURL = fileManager.temporaryDirectory
+            .appendingPathComponent("layca-tests-sessions-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: tempSessionsURL) }
+
+        let store = SessionStore(fileManager: fileManager, sessionsDirectory: tempSessionsURL)
+        let sessionID = try await store.createSession(title: "Chat Duration", languageHints: ["en"])
+
+        let first = PipelineTranscriptEvent(
+            id: UUID(),
+            sessionID: sessionID,
+            speakerID: "speaker-a",
+            languageID: "EN",
+            text: "Line 1",
+            startOffset: 1.0,
+            endOffset: 2.5,
+            samples: [0.1, 0.2],
+            sampleRate: 16_000
+        )
+        let second = PipelineTranscriptEvent(
+            id: UUID(),
+            sessionID: sessionID,
+            speakerID: "speaker-b",
+            languageID: "EN",
+            text: "Line 2",
+            startOffset: 3.0,
+            endOffset: 7.25,
+            samples: [0.1, 0.2],
+            sampleRate: 16_000
+        )
+
+        await store.appendTranscript(sessionID: sessionID, event: first)
+        await store.appendTranscript(sessionID: sessionID, event: second)
+
+        let duration = await store.sessionDurationSeconds(for: sessionID)
+        #expect(duration == 7.25)
+    }
+
+    @Test func hasRecordedAudioOnlyWhenSessionFileContainsData() async throws {
+        let fileManager = FileManager.default
+        let tempSessionsURL = fileManager.temporaryDirectory
+            .appendingPathComponent("layca-tests-sessions-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: tempSessionsURL) }
+
+        let store = SessionStore(fileManager: fileManager, sessionsDirectory: tempSessionsURL)
+        let sessionID = try await store.createSession(title: "Chat Audio Presence", languageHints: ["en"])
+
+        let initiallyHasAudio = await store.hasRecordedAudio(for: sessionID)
+        #expect(initiallyHasAudio == false)
+
+        guard let audioURL = await store.audioFileURL(for: sessionID) else {
+            Issue.record("Expected audio URL for created session.")
+            return
+        }
+
+        try Data([0x1, 0x2, 0x3]).write(to: audioURL, options: .atomic)
+
+        let hasAudioAfterWrite = await store.hasRecordedAudio(for: sessionID)
+        #expect(hasAudioAfterWrite == true)
+    }
+
     @Test func deletingSessionRemovesItFromStoreAndDisk() async throws {
         let fileManager = FileManager.default
         let tempSessionsURL = fileManager.temporaryDirectory

@@ -79,6 +79,7 @@ struct LivePipelineConfig: Sendable {
 enum MasterRecorderError: LocalizedError {
     case microphonePermissionDenied
     case unableToStart
+    case unableToFinalizeRecording
 
     var errorDescription: String? {
         switch self {
@@ -86,6 +87,8 @@ enum MasterRecorderError: LocalizedError {
             return "Microphone permission is required for recording."
         case .unableToStart:
             return "Unable to start audio recording."
+        case .unableToFinalizeRecording:
+            return "Unable to finalize recorded audio."
         }
     }
 }
@@ -93,9 +96,12 @@ enum MasterRecorderError: LocalizedError {
 @MainActor
 final class MasterAudioRecorder: NSObject, AVAudioRecorderDelegate {
     private var recorder: AVAudioRecorder?
+    private var appendSourceURL: URL?
+    private var segmentRecordingURL: URL?
+    private var destinationURL: URL?
 
-    func startRecording(to destinationURL: URL) async throws {
-        stopAndReset()
+    func startRecording(to destinationURL: URL, appendIfPossible: Bool = true) async throws {
+        try? await stop()
 
         let hasPermission = await requestPermission()
         guard hasPermission else {
@@ -111,14 +117,36 @@ final class MasterAudioRecorder: NSObject, AVAudioRecorderDelegate {
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
         ]
 
+        let fileManager = FileManager.default
         let parentDirectory = destinationURL.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: parentDirectory, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: parentDirectory, withIntermediateDirectories: true)
 
-        if FileManager.default.fileExists(atPath: destinationURL.path) {
-            try FileManager.default.removeItem(at: destinationURL)
+        let shouldAppend = appendIfPossible
+            && fileManager.fileExists(atPath: destinationURL.path)
+            && ((try? destinationURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) > 0
+
+        let recordingURL: URL
+        if shouldAppend {
+            let temporaryURL = fileManager.temporaryDirectory
+                .appendingPathComponent("layca-record-segment-\(UUID().uuidString).m4a")
+            if fileManager.fileExists(atPath: temporaryURL.path) {
+                try? fileManager.removeItem(at: temporaryURL)
+            }
+            recordingURL = temporaryURL
+            appendSourceURL = destinationURL
+            segmentRecordingURL = temporaryURL
+        } else {
+            if fileManager.fileExists(atPath: destinationURL.path) {
+                try fileManager.removeItem(at: destinationURL)
+            }
+            recordingURL = destinationURL
+            appendSourceURL = nil
+            segmentRecordingURL = nil
         }
 
-        let recorder = try AVAudioRecorder(url: destinationURL, settings: settings)
+        self.destinationURL = destinationURL
+
+        let recorder = try AVAudioRecorder(url: recordingURL, settings: settings)
         recorder.delegate = self
         recorder.prepareToRecord()
 
@@ -129,15 +157,68 @@ final class MasterAudioRecorder: NSObject, AVAudioRecorderDelegate {
         self.recorder = recorder
     }
 
-    func stop() {
-        stopAndReset()
+    func stop() async throws {
+        if let recorder {
+            recorder.stop()
+            self.recorder = nil
+            try? await Task.sleep(nanoseconds: 180_000_000)
+        } else {
+            self.recorder = nil
+        }
+
+        if let sourceURL = appendSourceURL,
+           let segmentURL = segmentRecordingURL,
+           let destinationURL {
+            do {
+                try await mergeAudioFilesWithRetries(
+                    sourceURL: sourceURL,
+                    appendedURL: segmentURL,
+                    outputURL: destinationURL
+                )
+            } catch {
+                cleanupTemporaryRecordingFile()
+                resetAppendState()
+                deactivateAudioSessionIfSupported()
+                throw error
+            }
+        }
+
+        cleanupTemporaryRecordingFile()
+        resetAppendState()
+        deactivateAudioSessionIfSupported()
     }
 
-    private func stopAndReset() {
-        recorder?.stop()
-        recorder = nil
+    private func mergeAudioFilesWithRetries(sourceURL: URL, appendedURL: URL, outputURL: URL) async throws {
+        let maxAttempts = 3
+        var lastError: Error?
 
-        deactivateAudioSessionIfSupported()
+        for attempt in 1...maxAttempts {
+            do {
+                try await mergeAudioFiles(sourceURL: sourceURL, appendedURL: appendedURL, outputURL: outputURL)
+                return
+            } catch {
+                lastError = error
+                guard attempt < maxAttempts else {
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 180_000_000)
+            }
+        }
+
+        throw lastError ?? MasterRecorderError.unableToFinalizeRecording
+    }
+
+    private func resetAppendState() {
+        appendSourceURL = nil
+        segmentRecordingURL = nil
+        destinationURL = nil
+    }
+
+    private func cleanupTemporaryRecordingFile() {
+        guard let segmentRecordingURL else {
+            return
+        }
+        try? FileManager.default.removeItem(at: segmentRecordingURL)
     }
 
     private func requestPermission() async -> Bool {
@@ -177,6 +258,61 @@ final class MasterAudioRecorder: NSObject, AVAudioRecorderDelegate {
         let session = AVAudioSession.sharedInstance()
         try? session.setActive(false, options: .notifyOthersOnDeactivation)
 #endif
+    }
+
+    private func mergeAudioFiles(sourceURL: URL, appendedURL: URL, outputURL: URL) async throws {
+        let sourceAsset = AVURLAsset(url: sourceURL)
+        let appendedAsset = AVURLAsset(url: appendedURL)
+        let composition = AVMutableComposition()
+
+        guard let compositionTrack = composition.addMutableTrack(
+            withMediaType: .audio,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else {
+            throw MasterRecorderError.unableToFinalizeRecording
+        }
+
+        let sourceDuration = try await sourceAsset.load(.duration)
+        let sourceTrack = try await sourceAsset.loadTracks(withMediaType: .audio).first
+        if let sourceTrack {
+            try compositionTrack.insertTimeRange(
+                CMTimeRange(start: .zero, duration: sourceDuration),
+                of: sourceTrack,
+                at: .zero
+            )
+        }
+
+        let appendedDuration = try await appendedAsset.load(.duration)
+        guard let appendedTrack = try await appendedAsset.loadTracks(withMediaType: .audio).first else {
+            throw MasterRecorderError.unableToFinalizeRecording
+        }
+        try compositionTrack.insertTimeRange(
+            CMTimeRange(start: .zero, duration: appendedDuration),
+            of: appendedTrack,
+            at: sourceDuration
+        )
+
+        let fileManager = FileManager.default
+        let tempOutputURL = outputURL.deletingLastPathComponent()
+            .appendingPathComponent("layca-record-merged-\(UUID().uuidString).m4a")
+
+        if fileManager.fileExists(atPath: tempOutputURL.path) {
+            try? fileManager.removeItem(at: tempOutputURL)
+        }
+
+        guard let exporter = AVAssetExportSession(
+            asset: composition,
+            presetName: AVAssetExportPresetAppleM4A
+        ) else {
+            throw MasterRecorderError.unableToFinalizeRecording
+        }
+        exporter.shouldOptimizeForNetworkUse = false
+        try await exporter.export(to: tempOutputURL, as: .m4a)
+
+        if fileManager.fileExists(atPath: outputURL.path) {
+            try fileManager.removeItem(at: outputURL)
+        }
+        try fileManager.moveItem(at: tempOutputURL, to: outputURL)
     }
 }
 
@@ -980,6 +1116,48 @@ actor SessionStore {
         return URL(fileURLWithPath: path)
     }
 
+    func sessionDurationSeconds(for sessionID: UUID) -> Double {
+        prepareIfNeeded()
+        return sessions[sessionID]?.durationSeconds ?? 0
+    }
+
+    func hasRecordedAudio(for sessionID: UUID) -> Bool {
+        prepareIfNeeded()
+        guard let path = sessions[sessionID]?.audioFilePath else {
+            return false
+        }
+
+        let fileURL = URL(fileURLWithPath: path)
+        let fileSize = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        return fileSize > 0
+    }
+
+    func audioDurationSeconds(for sessionID: UUID) async -> Double {
+        prepareIfNeeded()
+        guard let path = sessions[sessionID]?.audioFilePath else {
+            return 0
+        }
+
+        let url = URL(fileURLWithPath: path)
+        let asset = AVURLAsset(url: url)
+
+        if let duration = try? await asset.load(.duration) {
+            let seconds = CMTimeGetSeconds(duration)
+            if seconds.isFinite, seconds > 0 {
+                return seconds
+            }
+        }
+
+        if let player = try? AVAudioPlayer(contentsOf: url) {
+            let seconds = player.duration
+            if seconds.isFinite, seconds > 0 {
+                return seconds
+            }
+        }
+
+        return 0
+    }
+
     func appendTranscript(sessionID: UUID, event: PipelineTranscriptEvent) {
         prepareIfNeeded()
         guard var session = sessions[sessionID] else {
@@ -1039,6 +1217,24 @@ actor SessionStore {
         )
 
         persistSegmentsSnapshot(for: session)
+        sessions[sessionID] = session
+    }
+
+    func deleteTranscriptRow(sessionID: UUID, rowID: UUID) {
+        prepareIfNeeded()
+        guard var session = sessions[sessionID] else {
+            return
+        }
+
+        let originalCount = session.rows.count
+        session.rows.removeAll { $0.id == rowID }
+        guard session.rows.count != originalCount else {
+            return
+        }
+
+        session.durationSeconds = session.rows.compactMap(\.endOffset).max() ?? 0
+        persistSegmentsSnapshot(for: session)
+        persistSessionMetadata(for: session)
         sessions[sessionID] = session
     }
 
@@ -1557,6 +1753,7 @@ final class AppBackend: ObservableObject {
     private var queuedTranscriptionTask: Task<Void, Never>?
     private var queuedManualRetranscriptions: [QueuedManualRetranscription] = []
     private var queuedManualRetranscriptionTask: Task<Void, Never>?
+    private var currentRecordingBaseOffset: Double = 0
     private var chatCounter = 0
     private var isHydratingPersistedState = false
 
@@ -1889,7 +2086,16 @@ final class AppBackend: ObservableObject {
                 return
             }
 
-            try await masterRecorder.startRecording(to: audioFileURL)
+            let hasRecordedAudio = await sessionStore.hasRecordedAudio(for: sessionID)
+            let measuredAudioDuration = await sessionStore.audioDurationSeconds(for: sessionID)
+            let storedDuration = max(0, await sessionStore.sessionDurationSeconds(for: sessionID))
+            currentRecordingBaseOffset = hasRecordedAudio
+                ? (measuredAudioDuration > 0 ? measuredAudioDuration : storedDuration)
+                : 0
+            try await masterRecorder.startRecording(
+                to: audioFileURL,
+                appendIfPossible: hasRecordedAudio
+            )
 
             await sessionStore.updateSessionConfig(
                 sessionID: sessionID,
@@ -1918,7 +2124,12 @@ final class AppBackend: ObservableObject {
         await pipeline.stop()
         streamTask?.cancel()
         streamTask = nil
-        masterRecorder.stop()
+        do {
+            try await masterRecorder.stop()
+        } catch {
+            preflightStatusMessage = error.localizedDescription
+        }
+        currentRecordingBaseOffset = 0
 
         if let activeSessionID {
             await sessionStore.setSessionStatus(.ready, for: activeSessionID)
@@ -2025,7 +2236,7 @@ final class AppBackend: ObservableObject {
 
             let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
-                preflightStatusMessage = "No speech detected in this chunk."
+                await dropTranscriptRowWithoutSpeech(sessionID: sessionID, rowID: row.id)
                 return
             }
 
@@ -2077,7 +2288,7 @@ final class AppBackend: ObservableObject {
 
             let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
-                preflightStatusMessage = "No speech detected in this chunk."
+                await dropTranscriptRowWithoutSpeech(sessionID: sessionID, rowID: rowID)
                 return
             }
 
@@ -2121,6 +2332,18 @@ final class AppBackend: ObservableObject {
         )
         updateTranscriptionBusyState()
         startQueuedTranscriptionWorkerIfNeeded()
+    }
+
+    private func dropTranscriptRowWithoutSpeech(sessionID: UUID, rowID: UUID) async {
+        queuedTranscriptionRowIDs.remove(rowID)
+        queuedChunkTranscriptions.removeAll { $0.rowID == rowID }
+        queuedManualRetranscriptionRowIDs.remove(rowID)
+        queuedManualRetranscriptions.removeAll { $0.rowID == rowID }
+        updateTranscriptionBusyState()
+
+        await sessionStore.deleteTranscriptRow(sessionID: sessionID, rowID: rowID)
+        await refreshSessionsFromStore()
+        preflightStatusMessage = nil
     }
 
     private func startQueuedTranscriptionWorkerIfNeeded() {
@@ -2240,13 +2463,14 @@ final class AppBackend: ObservableObject {
             recordingSeconds = seconds
 
         case .transcript(let transcript, let chunkSeconds):
-            await sessionStore.appendTranscript(sessionID: sessionID, event: transcript)
+            let adjustedTranscript = transcriptWithRecordingOffsetApplied(transcript)
+            await sessionStore.appendTranscript(sessionID: sessionID, event: adjustedTranscript)
             await refreshSessionsFromStore()
             enqueueChunkForAutomaticTranscription(
-                rowID: transcript.id,
+                rowID: adjustedTranscript.id,
                 sessionID: sessionID,
-                samples: transcript.samples,
-                sampleRate: transcript.sampleRate
+                samples: adjustedTranscript.samples,
+                sampleRate: adjustedTranscript.sampleRate
             )
 
             usedHours = min(totalHours, usedHours + (chunkSeconds / 3600))
@@ -2297,6 +2521,24 @@ final class AppBackend: ObservableObject {
         } else {
             activeTranscriptRows = []
         }
+    }
+
+    private func transcriptWithRecordingOffsetApplied(_ transcript: PipelineTranscriptEvent) -> PipelineTranscriptEvent {
+        guard currentRecordingBaseOffset > 0 else {
+            return transcript
+        }
+
+        return PipelineTranscriptEvent(
+            id: transcript.id,
+            sessionID: transcript.sessionID,
+            speakerID: transcript.speakerID,
+            languageID: transcript.languageID,
+            text: transcript.text,
+            startOffset: transcript.startOffset + currentRecordingBaseOffset,
+            endOffset: transcript.endOffset + currentRecordingBaseOffset,
+            samples: transcript.samples,
+            sampleRate: transcript.sampleRate
+        )
     }
 
     private func loadPersistedSettings() {

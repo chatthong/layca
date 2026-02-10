@@ -98,20 +98,34 @@ struct ChatTabView: View {
     }
 
     private var chatContent: some View {
+#if os(macOS)
+        chatContentBody
+            .laycaHideNavigationBar()
+#else
+        chatContentBody
+            .laycaHideNavigationBar()
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                recorderTabBarAccessory
+            }
+#endif
+    }
+
+    private var chatContentBody: some View {
         ZStack {
             backgroundFill
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 18) {
+#if os(macOS)
                     recorderCard
+#endif
                     liveSegmentsCard
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 10)
-                .padding(.bottom, 30)
+                .padding(.bottom, 24)
             }
         }
-        .laycaHideNavigationBar()
     }
 
     @ViewBuilder
@@ -198,6 +212,88 @@ struct ChatTabView: View {
         .padding(.vertical, 9)
         .background(.thinMaterial, in: Capsule(style: .continuous))
     }
+
+#if !os(macOS)
+    private var recorderTabBarAccessory: some View {
+        VStack(spacing: 6) {
+            if let preflightMessage {
+                Text(preflightMessage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.red.opacity(0.85))
+                    .padding(.horizontal, 12)
+            }
+
+            HStack(spacing: 10) {
+                recorderAccessoryWaveform
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isRecording ? "Recording" : "Ready")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(recordingTimeText)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.88)
+                }
+
+                Spacer(minLength: 8)
+
+                Button(action: onRecordTap) {
+                    HStack(spacing: 6) {
+                        Image(systemName: isRecording ? "stop.fill" : "record.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                        Text(isRecording ? "Stop" : "Record")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .foregroundStyle(isRecording ? Color.red.opacity(0.92) : .primary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(.thinMaterial)
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(.primary.opacity(0.14), lineWidth: 0.8)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(.regularMaterial)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(.primary.opacity(0.16), lineWidth: 0.9)
+            )
+            .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+    }
+
+    private var recorderAccessoryWaveform: some View {
+        HStack(alignment: .center, spacing: 2.5) {
+            ForEach(Array(waveformBars.prefix(20).enumerated()), id: \.offset) { _, level in
+                Capsule(style: .continuous)
+                    .fill(isRecording ? Color.red.opacity(0.82) : Color.accentColor.opacity(0.72))
+                    .frame(width: 2.6, height: max(CGFloat(level) * 18, 5))
+            }
+        }
+        .frame(width: 78, height: 32)
+        .padding(.horizontal, 6)
+        .background(
+            Capsule(style: .continuous)
+                .fill(.thinMaterial)
+        )
+    }
+#endif
 
     private var recorderCard: some View {
         VStack(alignment: .leading, spacing: 14) {
