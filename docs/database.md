@@ -5,6 +5,7 @@
 - **Primary durable store:** filesystem (`Documents/Sessions`) plus per-session metadata/segment snapshots.
 - **Settings durable store:** `UserDefaults` (`AppSettingsStore`) for app/UI state restore across relaunch.
 - **Platform note:** same session layout is used on iOS-family and macOS within each platform's app sandbox container.
+- **macOS style note:** sidebar-first `NavigationSplitView` and Landmarks-style toolbar controls do not change persistence schema or file layout.
 - **Bundled runtime asset:** CoreML VAD model directory in app bundle (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) for offline startup.
 - **Bundled runtime asset:** CoreML speaker model directory in app bundle (`wespeaker_v2.mlmodelc`) for offline startup.
 - **Bundled runtime asset:** Whisper decoder model file in app bundle (`ggml-large-v3-turbo.bin`) for offline startup.

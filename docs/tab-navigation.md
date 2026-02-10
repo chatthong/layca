@@ -39,8 +39,11 @@
   - `Share this chat`
   - `Delete`
 - Toolbar uses:
-  - segmented workspace picker (`Chat`, `Library`, `Setting`)
-  - action `ControlGroup` (`Rename`, `Export`, `New Chat`)
+  - no segmented workspace picker in the title area
+  - Landmarks-style Liquid Glass toolbar items on Chat detail:
+    - `Share` (`ToolbarItem`)
+    - grouped `Rename` + `New Chat` (`ToolbarItemGroup`)
+    - `Info` (`ToolbarItem`, opens `Setting`)
 - Chat detail view is split:
   - left pane: session summary + recorder controls
   - right pane: transcript list
@@ -70,6 +73,7 @@
   - Saved title appears in both Chat and Library.
 - Renaming from Library/sidebar context menu updates the same persisted session title used by Chat header.
 - `Export` opens from a header/toolbar action instead of a tab.
+  - On macOS, this action is the top-right `Share` toolbar item in Chat detail.
 - On some compact layouts, iOS may prioritize icon rendering for special-role grouped tabs even if text is provided.
 - Transcript bubbles are tappable for per-chunk playback only when recording is stopped.
 - Long-press on a transcript bubble opens actions for:

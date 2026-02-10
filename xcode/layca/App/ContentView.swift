@@ -12,19 +12,12 @@ struct ContentView: View {
     @State private var isExportPresented = false
 
     @State private var selectedTab: AppTab = .chat
-    @State private var isMacRenameSheetPresented = false
-    @State private var macRenameDraft = ""
 
     var body: some View {
         rootLayout
         .sheet(isPresented: $isExportPresented) {
             exportScreen
         }
-#if os(macOS)
-        .sheet(isPresented: $isMacRenameSheetPresented) {
-            macRenameSheet
-        }
-#endif
     }
 }
 
@@ -96,48 +89,6 @@ private extension ContentView {
             macDetailScreen
         }
         .navigationSplitViewStyle(.balanced)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Picker("Workspace", selection: macSectionBinding) {
-                    Text("Chat").tag(MacWorkspaceSection.chat)
-                    Text("Library").tag(MacWorkspaceSection.library)
-                    Text("Setting").tag(MacWorkspaceSection.setting)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 290)
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                macToolbarActionButton(
-                    title: "Rename",
-                    systemImage: "pencil"
-                ) {
-                    beginMacRename()
-                }
-            }
-
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-
-            ToolbarItem(placement: .primaryAction) {
-                macToolbarActionButton(
-                    title: "Share",
-                    systemImage: "square.and.arrow.up"
-                ) {
-                    isExportPresented = true
-                }
-            }
-
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-
-            ToolbarItem(placement: .primaryAction) {
-                macToolbarActionButton(
-                    title: "New Chat",
-                    systemImage: "plus.bubble"
-                ) {
-                    startNewChatAndReturnToChat()
-                }
-            }
-        }
         .onAppear {
             if selectedTab == .newChat {
                 selectedTab = .chat
@@ -195,6 +146,7 @@ private extension ContentView {
             activeSessionDateText: backend.activeSessionDateText,
             liveChatItems: backend.activeTranscriptRows,
             transcribingRowIDs: backend.transcribingRowIDs,
+            queuedRetranscriptionRowIDs: backend.queuedManualRetranscriptionRowIDs,
             isTranscriptionBusy: backend.isTranscriptionBusy,
             preflightMessage: backend.preflightStatusMessage,
             canPlayTranscriptChunks: !backend.isRecording,
@@ -205,7 +157,11 @@ private extension ContentView {
             onChangeSpeaker: backend.changeSpeaker,
             onRetranscribeTranscript: backend.retranscribeTranscriptRow,
             onExportTap: { isExportPresented = true },
-            onRenameSessionTitle: beginMacRename
+            onRenameSessionTitle: backend.renameActiveSessionTitle,
+            onNewChatTap: startNewChatAndReturnToChat,
+            onOpenSettingsTap: {
+                selectedTab = .setting
+            }
         )
     }
 
@@ -239,31 +195,6 @@ private extension ContentView {
         )
     }
 
-    var macRenameSheet: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Rename Active Chat")
-                .font(.title3.weight(.semibold))
-            TextField("Chat name", text: $macRenameDraft)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit {
-                    commitMacRename()
-                }
-
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    isMacRenameSheetPresented = false
-                }
-                Button("Save") {
-                    commitMacRename()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(macRenameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(20)
-        .frame(width: 420)
-    }
 #endif
 
     func chatScreen(showsTopToolbar: Bool) -> some View {
@@ -275,6 +206,7 @@ private extension ContentView {
             activeSessionDateText: backend.activeSessionDateText,
             liveChatItems: backend.activeTranscriptRows,
             transcribingRowIDs: backend.transcribingRowIDs,
+            queuedRetranscriptionRowIDs: backend.queuedManualRetranscriptionRowIDs,
             isTranscriptionBusy: backend.isTranscriptionBusy,
             preflightMessage: backend.preflightStatusMessage,
             canPlayTranscriptChunks: !backend.isRecording,
@@ -326,37 +258,6 @@ private extension ContentView {
         backend.startNewChat()
         selectedTab = .chat
     }
-
-#if os(macOS)
-    func beginMacRename() {
-        macRenameDraft = backend.activeSessionTitle
-        isMacRenameSheetPresented = true
-    }
-
-    func commitMacRename() {
-        let trimmed = macRenameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return
-        }
-        backend.renameActiveSessionTitle(trimmed)
-        isMacRenameSheetPresented = false
-    }
-
-    @ViewBuilder
-    func macToolbarActionButton(
-        title: String,
-        systemImage: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .semibold))
-                .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help(title)
-    }
-#endif
 
     var exportScreen: some View {
         let gradientColors: [Color]

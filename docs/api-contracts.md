@@ -9,12 +9,14 @@
 
 ### `startNewChat() -> Void`
 - Creates a new session and switches active session.
+- Used by macOS Chat-detail toolbar `New Chat` action.
 
 ### `activateSession(_ session: ChatSession) -> Void`
 - Sets active session and pushes its rows to chat UI.
 
 ### `renameActiveSessionTitle(_ newTitle: String) -> Void`
 - Renames active session title (used by Chat header inline rename).
+- Also used by macOS Chat-detail toolbar `Rename` flow (rename sheet -> commit).
 
 ### `renameSession(_ session: ChatSession, to newTitle: String) -> Void`
 - Renames a specific session (used by Library/sidebar context-menu rename actions).
@@ -26,6 +28,12 @@
 ### `shareText(for session: ChatSession) -> String`
 - Returns share-ready plain text for a session (title/date + transcript rows).
 - Used by Library/sidebar `Share this chat` action.
+
+## macOS Workspace UI Actions (View-level Wiring)
+- Chat-detail toolbar `Share` action presents export sheet (`isExportPresented`) from `ContentView`.
+- Chat-detail toolbar `Rename` action presents rename sheet, then calls `renameActiveSessionTitle(_:)`.
+- Chat-detail toolbar `New Chat` action calls `startNewChat()`.
+- Chat-detail toolbar `Info` action switches workspace to `Setting`.
 
 ### `toggleLanguageFocus(_ code: String) -> Void`
 - Adds/removes language code used to build pre-flight prompt.

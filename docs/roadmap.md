@@ -85,10 +85,19 @@
 
 ### macOS Native Workspace + Permission Hardening
 - `App/ContentView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `layca.xcodeproj/project.pbxproj`
-- Added dedicated macOS workspace shell using `NavigationSplitView`, sidebar sections, and toolbar control group actions.
+- Added dedicated macOS workspace shell using `NavigationSplitView` and sidebar workspace sections.
 - Added desktop-optimized chat/library/settings views for macOS (instead of reusing iOS tab layout).
 - Added microphone permission status and actions in macOS settings plus deep-link action from recorder denial state.
 - Added macOS codesigning entitlement wiring for sandbox audio input so app appears in Privacy > Microphone after permission request.
+
+### macOS Toolbar Style Alignment (Landmarks Liquid Glass)
+- `App/ContentView.swift`, `Views/Mac/MacProWorkspaceView.swift`
+- Removed top toolbar segmented workspace picker from macOS root split view.
+- Moved top-right chat actions to Chat detail toolbar using Landmarks-style composition:
+  - `ToolbarItem` for `Share`
+  - `ToolbarItemGroup` for `Rename` + `New Chat`
+  - `ToolbarItem` for `Info` (switches to `Setting`)
+- Applied `.toolbar(removing: .title)` in Chat detail to match Liquid Glass presentation.
 
 ### Library + Sidebar Chat Actions
 - `Features/Library/LibraryTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `App/ContentView.swift`, `App/AppBackend.swift`

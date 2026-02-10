@@ -6,6 +6,7 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
     let isRecording: Bool
     let isTranscriptionBusy: Bool
     let isItemTranscribing: Bool
+    let isItemQueuedForRetranscription: Bool
     let isPlayable: Bool
     let onTap: () -> Void
     let onManualEditTranscript: (TranscriptRow, String) -> Void
@@ -54,7 +55,7 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
                         } label: {
                             Label("Transcribe Again", systemImage: "waveform.and.mic")
                         }
-                        .disabled(!isPlayable || isItemTranscribing)
+                        .disabled(!isPlayable || isItemTranscribing || isItemQueuedForRetranscription)
                     }
             } else {
                 bubbleButton
@@ -80,7 +81,7 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
     }
 
     private var isContextMenuEnabled: Bool {
-        !isRecording && !isTranscriptionBusy
+        !isRecording
     }
 
     private func beginTranscriptEdit(_ row: TranscriptRow) {

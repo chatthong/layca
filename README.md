@@ -64,9 +64,9 @@ Documents/
 ## 3. UI/UX Strategy: Chat-First 💬
 
 - **iOS/iPadOS/visionOS/tvOS shell:** `TabView` with `Chat`, `Library`, `Setting`, plus a dedicated `New Chat` action tab.
-- **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Chat`, `Library`, `Setting`) and a top toolbar segmented picker + action `ControlGroup`.
+- **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Chat`, `Library`, `Setting`) and no top segmented workspace picker.
 - **Chat workspace:** Recorder card + live transcript bubbles.
-- **Header/session actions:** Active chat rename + export actions.
+- **Header/session actions:** macOS chat detail toolbar uses Landmarks-style liquid-glass toolbar items: `Share`, grouped `Rename` + `New Chat`, and `Info` (opens `Setting`).
 - **Settings workspace:** Hours credit, language focus, context keywords, iCloud toggle, purchase restore, and macOS microphone access controls.
 - **Library workspace:** Session switcher with long-press/right-click action group (`Rename`, `Share this chat`, `Delete`) on session rows.
 - **macOS recent chats sidebar:** Same long-press/right-click action group (`Rename`, `Share this chat`, `Delete`).
@@ -144,6 +144,7 @@ Documents/
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Chat bubble tap plays that chunk from `session_full.m4a`.
 - macOS uses dedicated workspace views (sidebar/detail) rather than iOS-style tabs.
+- macOS chat detail toolbar uses SwiftUI `ToolbarItem` + `ToolbarItemGroup` composition with `.toolbar(removing: .title)` for Liquid Glass-style controls.
 - Library rows now support long-press action menu: `Rename`, `Share this chat`, `Delete`.
 - macOS sidebar `Recent Chats` rows now support the same action menu: `Rename`, `Share this chat`, `Delete`.
 - macOS settings includes live microphone permission status and actions (`Allow Microphone Access` / `Open System Settings`).

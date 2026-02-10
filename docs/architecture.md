@@ -40,6 +40,7 @@
 - App shell is platform-aware:
   - iOS-family uses `TabView`/`TabSection`.
   - macOS uses `NavigationSplitView` with sidebar workspace sections and dedicated detail views.
+  - macOS Chat detail toolbar uses Landmarks-style `ToolbarItem` + `ToolbarItemGroup` Liquid Glass controls (`Share`, grouped `Rename` + `New Chat`, and `Info` to open `Setting`).
 - VAD uses native CoreML Silero (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) with bundled offline model.
 - Speaker branch uses native CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) with bundled offline model.
 - Runtime model asset sources are organized under `Models/RuntimeAssets/`.

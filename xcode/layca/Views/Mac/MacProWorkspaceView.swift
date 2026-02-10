@@ -56,8 +56,6 @@ struct MacWorkspaceSidebarView: View {
             createChatSection
         }
         .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .background(sidebarBackground)
         .navigationTitle("Layca")
         .alert("Rename Chat", isPresented: renameAlertBinding, actions: {
             TextField("Chat name", text: $renameDraft)
@@ -98,43 +96,23 @@ struct MacWorkspaceSidebarView: View {
         }
     }
 
-    private var sidebarBackground: some View {
-        LinearGradient(
-            colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .underPageBackgroundColor).opacity(0.94)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .overlay(alignment: .topLeading) {
-            Circle()
-                .fill(Color.accentColor.opacity(0.16))
-                .frame(width: 180, height: 180)
-                .blur(radius: 44)
-                .offset(x: -42, y: -48)
-        }
-        .ignoresSafeArea()
-    }
-
     private var workspaceSection: some View {
         Section("Workspace") {
             ForEach(Array(MacWorkspaceSection.allCases), id: \.self) { section in
                 Button {
                     selectedSection = section
                 } label: {
-                    HStack(spacing: 8) {
-                        Label(section.title, systemImage: section.symbol)
-                        Spacer()
-                    }
-                    .contentShape(Rectangle())
+                    Label(section.title, systemImage: section.symbol)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
-                .padding(.vertical, 4)
-                .listRowBackground(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(selectedSection == section ? Color.accentColor.opacity(0.20) : .clear)
-                )
+                .overlay(alignment: .trailing) {
+                    if selectedSection == section {
+                        Image(systemName: "checkmark")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
     }
@@ -204,8 +182,6 @@ struct MacWorkspaceSidebarView: View {
                 Label("New Chat", systemImage: "plus.bubble")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
         }
     }
 
@@ -241,6 +217,7 @@ struct MacChatWorkspaceView: View {
     let activeSessionDateText: String
     let liveChatItems: [TranscriptRow]
     let transcribingRowIDs: Set<UUID>
+    let queuedRetranscriptionRowIDs: Set<UUID>
     let isTranscriptionBusy: Bool
     let preflightMessage: String?
     let canPlayTranscriptChunks: Bool
@@ -251,40 +228,134 @@ struct MacChatWorkspaceView: View {
     let onChangeSpeaker: (TranscriptRow, String) -> Void
     let onRetranscribeTranscript: (TranscriptRow) -> Void
     let onExportTap: () -> Void
-    let onRenameSessionTitle: () -> Void
+    let onRenameSessionTitle: (String) -> Void
+    let onNewChatTap: () -> Void
+    let onOpenSettingsTap: () -> Void
+    @State private var titleDraft = ""
+    @State private var isEditingTitle = false
+    @State private var isTitleHovered = false
+    @FocusState private var isTitleFieldFocused: Bool
 
     var body: some View {
-        ZStack {
-            background
+        HSplitView {
+            leftPane
+                .frame(minWidth: 300, idealWidth: 340, maxWidth: 420)
 
-            HSplitView {
-                leftPane
-                    .frame(minWidth: 300, idealWidth: 340, maxWidth: 420)
-
-                transcriptPane
-                    .frame(minWidth: 520)
+            transcriptPane
+                .frame(minWidth: 520)
+        }
+        .padding(16)
+        .navigationTitle("")
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                if isEditingTitle {
+                    toolbarTitleEditor
+                } else {
+                    toolbarTitleLabel
+                }
             }
-            .padding(16)
+
+            ToolbarSpacer(.flexible)
+
+            ToolbarItem {
+                Button(action: onExportTap) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .help("Share")
+            }
+
+            ToolbarSpacer(.fixed)
+
+            ToolbarItemGroup {
+                Button(action: onNewChatTap) {
+                    Image(systemName: "plus.bubble")
+                }
+                .help("New Chat")
+            }
+
+            ToolbarSpacer(.fixed)
+
+            ToolbarItem {
+                Button(action: onOpenSettingsTap) {
+                    Image(systemName: "info")
+                }
+                .help("Open Setting")
+            }
+        }
+        .onAppear {
+            titleDraft = activeSessionTitle
+        }
+        .onChange(of: activeSessionTitle) { _, newTitle in
+            if !isEditingTitle {
+                titleDraft = newTitle
+            }
         }
     }
 
-    private var background: some View {
-        LinearGradient(
-            colors: [
-                Color(nsColor: .windowBackgroundColor),
-                Color(nsColor: .underPageBackgroundColor).opacity(0.94)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .overlay(alignment: .topTrailing) {
-            Circle()
-                .fill(Color.accentColor.opacity(0.12))
-                .frame(width: 240, height: 240)
-                .blur(radius: 42)
-                .offset(x: 70, y: -80)
+    private var toolbarTitleLabel: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(activeSessionTitle)
+                .font(.headline.weight(.semibold))
+                .lineLimit(1)
+
+            if isTitleHovered {
+                Image(systemName: "pencil")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
+            }
         }
-        .ignoresSafeArea()
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isTitleHovered = hovering
+            }
+        }
+        .onTapGesture {
+            beginTitleRename()
+        }
+        .help("Rename Chat")
+    }
+
+    @ViewBuilder
+    private var toolbarTitleEditor: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            TextField("Chat name", text: $titleDraft)
+                .textFieldStyle(.plain)
+                .font(.headline.weight(.semibold))
+                .lineLimit(1)
+                .focused($isTitleFieldFocused)
+                .onSubmit {
+                    commitTitleRename()
+                }
+
+            Button(action: commitTitleRename) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            }
+            .buttonStyle(.plain)
+            .help("Save")
+
+            Button(action: cancelTitleRename) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Cancel")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .frame(width: 292, alignment: .leading)
     }
 
     private var leftPane: some View {
@@ -302,12 +373,6 @@ struct MacChatWorkspaceView: View {
                     .font(.title3.weight(.semibold))
                     .lineLimit(1)
 
-                Text(activeSessionDateText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Divider()
-
                 LabeledContent("Rows", value: "\(liveChatItems.count)")
                     .font(.subheadline)
             }
@@ -316,16 +381,18 @@ struct MacChatWorkspaceView: View {
             HStack {
                 Label("Session", systemImage: "bubble.left.and.bubble.right")
                 Spacer()
-                ControlGroup {
-                    Button(action: onRenameSessionTitle) {
+                HStack(spacing: 8) {
+                    Button(action: beginTitleRename) {
                         Image(systemName: "pencil")
                     }
                     .help("Rename")
+                    .buttonStyle(.borderless)
 
                     Button(action: onExportTap) {
                         Image(systemName: "square.and.arrow.up")
                     }
                     .help("Export")
+                    .buttonStyle(.borderless)
                 }
             }
         }
@@ -341,6 +408,11 @@ struct MacChatWorkspaceView: View {
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
+
+                Text(activeSessionDateText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
 
                 Button {
                     onRecordTap()
@@ -408,6 +480,7 @@ struct MacChatWorkspaceView: View {
                             isRecording: isRecording,
                             isTranscriptionBusy: isTranscriptionBusy,
                             isItemTranscribing: transcribingRowIDs.contains(item.id),
+                            isItemQueuedForRetranscription: queuedRetranscriptionRowIDs.contains(item.id),
                             isPlayable: isRowPlayable(item),
                             onTap: {
                                 onTranscriptTap(item)
@@ -417,7 +490,11 @@ struct MacChatWorkspaceView: View {
                             onChangeSpeaker: onChangeSpeaker,
                             onRetranscribeTranscript: onRetranscribeTranscript
                         ) {
-                            transcriptRow(for: item)
+                            transcriptRow(
+                                for: item,
+                                isTranscribing: transcribingRowIDs.contains(item.id),
+                                isQueued: queuedRetranscriptionRowIDs.contains(item.id)
+                            )
                         }
                         .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
                         .listRowSeparator(.hidden)
@@ -440,7 +517,7 @@ struct MacChatWorkspaceView: View {
         }
     }
 
-    private func transcriptRow(for item: TranscriptRow) -> some View {
+    private func transcriptRow(for item: TranscriptRow, isTranscribing: Bool, isQueued: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text(item.speaker)
@@ -458,10 +535,34 @@ struct MacChatWorkspaceView: View {
                             .fill(.quaternary.opacity(0.75))
                     )
             }
-            Text(displayText(for: item))
-                .font(.subheadline)
-                .foregroundStyle(.primary.opacity(0.90))
+
+            if isTranscribing {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Transcribing chunk...")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.red.opacity(0.86))
+                }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity)
+            } else if isQueued {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange.opacity(0.88))
+                    Text("Queued for Transcribe Again...")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.orange.opacity(0.88))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity)
+            } else {
+                Text(displayText(for: item))
+                    .font(.subheadline)
+                    .foregroundStyle(.primary.opacity(0.90))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(10)
         .background(
@@ -472,6 +573,7 @@ struct MacChatWorkspaceView: View {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .stroke(.primary.opacity(0.08), lineWidth: 0.8)
         )
+        .animation(.easeInOut(duration: 0.2), value: isTranscribing || isQueued)
     }
 
     private func displayText(for item: TranscriptRow) -> String {
@@ -491,6 +593,32 @@ struct MacChatWorkspaceView: View {
 
     private func isMicrophonePermissionMessage(_ message: String) -> Bool {
         message.localizedCaseInsensitiveContains("microphone permission")
+    }
+
+    private func beginTitleRename() {
+        titleDraft = activeSessionTitle
+        isEditingTitle = true
+        DispatchQueue.main.async {
+            isTitleFieldFocused = true
+        }
+    }
+
+    private func commitTitleRename() {
+        let trimmedTitle = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTitle.isEmpty {
+            onRenameSessionTitle(trimmedTitle)
+            titleDraft = trimmedTitle
+        } else {
+            titleDraft = activeSessionTitle
+        }
+        isEditingTitle = false
+        isTitleFieldFocused = false
+    }
+
+    private func cancelTitleRename() {
+        titleDraft = activeSessionTitle
+        isEditingTitle = false
+        isTitleFieldFocused = false
     }
 }
 
@@ -590,17 +718,7 @@ struct MacLibraryWorkspaceView: View {
                 .listStyle(.inset)
             }
         }
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(nsColor: .windowBackgroundColor),
-                    Color(nsColor: .underPageBackgroundColor).opacity(0.95)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-        )
+        .navigationTitle("Library")
         .alert("Rename Chat", isPresented: renameAlertBinding, actions: {
             TextField("Chat name", text: $renameDraft)
             Button("Cancel", role: .cancel) {
@@ -773,17 +891,7 @@ struct MacSettingsWorkspaceView: View {
             }
         }
         .formStyle(.grouped)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(nsColor: .windowBackgroundColor),
-                    Color(nsColor: .underPageBackgroundColor).opacity(0.95)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-        )
+        .navigationTitle("Setting")
         .onAppear {
             refreshMicrophonePermission()
         }

@@ -1498,6 +1498,11 @@ final class AppBackend: ObservableObject {
         let sampleRate: Double
     }
 
+    private struct QueuedManualRetranscription: Sendable {
+        let rowID: UUID
+        let sessionID: UUID
+    }
+
     @Published var isRecording = false
     @Published var recordingSeconds: Double = 0
     @Published var waveformBars: [Double] = Array(repeating: 0.03, count: 9)
@@ -1531,6 +1536,7 @@ final class AppBackend: ObservableObject {
     }
     @Published var activeTranscriptRows: [TranscriptRow] = []
     @Published var transcribingRowIDs: Set<UUID> = []
+    @Published private(set) var queuedManualRetranscriptionRowIDs: Set<UUID> = []
     @Published var isTranscriptionBusy = false
 
     @Published var preflightStatusMessage: String?
@@ -1549,6 +1555,8 @@ final class AppBackend: ObservableObject {
     private var queuedTranscriptionRowIDs: Set<UUID> = []
     private var queuedChunkTranscriptions: [QueuedChunkTranscription] = []
     private var queuedTranscriptionTask: Task<Void, Never>?
+    private var queuedManualRetranscriptions: [QueuedManualRetranscription] = []
+    private var queuedManualRetranscriptionTask: Task<Void, Never>?
     private var chatCounter = 0
     private var isHydratingPersistedState = false
 
@@ -1707,13 +1715,13 @@ final class AppBackend: ObservableObject {
 
     func playTranscriptChunk(_ row: TranscriptRow) {
         Task {
-            await playTranscriptChunkInternal(row)
+            await playTranscriptChunkInternal(row, sessionID: resolvedSessionID(for: row))
         }
     }
 
     func editTranscriptRow(_ row: TranscriptRow, text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let sessionID = activeSessionID else {
+        guard !trimmed.isEmpty, let sessionID = resolvedSessionID(for: row) else {
             return
         }
 
@@ -1721,6 +1729,8 @@ final class AppBackend: ObservableObject {
         attemptedTranscriptionRowIDs.insert(row.id)
         queuedTranscriptionRowIDs.remove(row.id)
         queuedChunkTranscriptions.removeAll { $0.rowID == row.id }
+        queuedManualRetranscriptionRowIDs.remove(row.id)
+        queuedManualRetranscriptions.removeAll { $0.rowID == row.id }
         updateTranscriptionBusyState()
 
         Task {
@@ -1737,7 +1747,7 @@ final class AppBackend: ObservableObject {
 
     func editSpeakerName(_ row: TranscriptRow, name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let sessionID = activeSessionID else {
+        guard !trimmed.isEmpty, let sessionID = resolvedSessionID(for: row) else {
             return
         }
 
@@ -1753,7 +1763,7 @@ final class AppBackend: ObservableObject {
     }
 
     func changeSpeaker(_ row: TranscriptRow, to speakerID: String) {
-        guard let sessionID = activeSessionID else {
+        guard let sessionID = resolvedSessionID(for: row) else {
             return
         }
 
@@ -1769,13 +1779,82 @@ final class AppBackend: ObservableObject {
     }
 
     func retranscribeTranscriptRow(_ row: TranscriptRow) {
-        guard let sessionID = activeSessionID else {
+        guard let sessionID = resolvedSessionID(for: row) else {
+            preflightStatusMessage = "Unable to locate this transcript row in an active chat."
             return
         }
 
-        Task {
-            await retranscribeTranscriptRowInternal(row, sessionID: sessionID)
+        guard let startOffset = row.startOffset,
+              let endOffset = row.endOffset,
+              endOffset > startOffset
+        else {
+            preflightStatusMessage = "This transcript row has no valid audio range to transcribe again."
+            return
         }
+
+        guard !queuedManualRetranscriptionRowIDs.contains(row.id) else {
+            return
+        }
+
+        // Manual re-transcribe takes ownership over any stale auto-transcription job.
+        attemptedTranscriptionRowIDs.insert(row.id)
+        queuedTranscriptionRowIDs.remove(row.id)
+        queuedChunkTranscriptions.removeAll { $0.rowID == row.id }
+
+        queuedManualRetranscriptionRowIDs.insert(row.id)
+        queuedManualRetranscriptions.append(
+            QueuedManualRetranscription(
+                rowID: row.id,
+                sessionID: sessionID
+            )
+        )
+        updateTranscriptionBusyState()
+        startManualRetranscriptionWorkerIfNeeded()
+    }
+
+    private func startManualRetranscriptionWorkerIfNeeded() {
+        guard queuedManualRetranscriptionTask == nil else {
+            return
+        }
+
+        queuedManualRetranscriptionTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+            await self.drainQueuedManualRetranscriptions()
+        }
+    }
+
+    private func drainQueuedManualRetranscriptions() async {
+        while !Task.isCancelled {
+            guard !queuedManualRetranscriptions.isEmpty else {
+                queuedManualRetranscriptionTask = nil
+                updateTranscriptionBusyState()
+                return
+            }
+
+            guard queuedTranscriptionTask == nil,
+                  queuedChunkTranscriptions.isEmpty,
+                  transcribingRowIDs.isEmpty
+            else {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                continue
+            }
+
+            let next = queuedManualRetranscriptions.removeFirst()
+            queuedManualRetranscriptionRowIDs.remove(next.rowID)
+
+            guard let row = await findTranscriptRow(rowID: next.rowID, sessionID: next.sessionID) else {
+                updateTranscriptionBusyState()
+                continue
+            }
+
+            await retranscribeTranscriptRowInternal(row, sessionID: next.sessionID)
+            updateTranscriptionBusyState()
+        }
+
+        queuedManualRetranscriptionTask = nil
+        updateTranscriptionBusyState()
     }
 
     private func startRecording() async {
@@ -1849,9 +1928,9 @@ final class AppBackend: ObservableObject {
         await refreshSessionsFromStore()
     }
 
-    private func playTranscriptChunkInternal(_ row: TranscriptRow) async {
+    private func playTranscriptChunkInternal(_ row: TranscriptRow, sessionID: UUID?) async {
         guard !isRecording,
-              let sessionID = activeSessionID,
+              let sessionID,
               let startOffset = row.startOffset,
               let endOffset = row.endOffset,
               endOffset > startOffset
@@ -1896,11 +1975,16 @@ final class AppBackend: ObservableObject {
     }
 
     private func retranscribeTranscriptRowInternal(_ row: TranscriptRow, sessionID: UUID) async {
-        guard !isRecording,
-              let startOffset = row.startOffset,
+        guard !isRecording else {
+            preflightStatusMessage = "Stop recording before running Transcribe Again."
+            return
+        }
+
+        guard let startOffset = row.startOffset,
               let endOffset = row.endOffset,
               endOffset > startOffset
         else {
+            preflightStatusMessage = "This transcript row has no valid audio range to transcribe again."
             return
         }
 
@@ -2077,7 +2161,37 @@ final class AppBackend: ObservableObject {
     }
 
     private func updateTranscriptionBusyState() {
-        isTranscriptionBusy = !transcribingRowIDs.isEmpty || !queuedChunkTranscriptions.isEmpty
+        isTranscriptionBusy =
+            !transcribingRowIDs.isEmpty ||
+            !queuedChunkTranscriptions.isEmpty ||
+            !queuedManualRetranscriptions.isEmpty
+    }
+
+    private func findTranscriptRow(rowID: UUID, sessionID: UUID) async -> TranscriptRow? {
+        if let row = sessions
+            .first(where: { $0.id == sessionID })?
+            .rows
+            .first(where: { $0.id == rowID }) {
+            return row
+        }
+
+        let rows = await sessionStore.transcriptRows(for: sessionID)
+        return rows.first(where: { $0.id == rowID })
+    }
+
+    private func resolvedSessionID(for row: TranscriptRow) -> UUID? {
+        if let activeSessionID,
+           sessions.first(where: { $0.id == activeSessionID })?.rows.contains(where: { $0.id == row.id }) == true {
+            return activeSessionID
+        }
+
+        if let matchingSession = sessions.first(where: { session in
+            session.rows.contains(where: { $0.id == row.id })
+        }) {
+            return matchingSession.id
+        }
+
+        return activeSessionID
     }
 
     private func stopChunkPlayback() {

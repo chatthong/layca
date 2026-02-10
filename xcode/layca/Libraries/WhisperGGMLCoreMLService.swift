@@ -52,6 +52,7 @@ actor WhisperGGMLCoreMLService {
     private var context: OpaquePointer?
     private var activeModelPath: String?
     private var didWarmupInference = false
+    private var shouldForceCPUContext = false
 
     init(fileManager: FileManager = .default, rootDirectory: URL? = nil) {
         self.fileManager = fileManager
@@ -361,6 +362,7 @@ actor WhisperGGMLCoreMLService {
 
     private func ensureContext() async throws -> OpaquePointer {
         let modelURL = try await ensureModelFile()
+        let shouldUseGPUPath = isCoreMLEncoderEnabled()
 
         if let context, activeModelPath == modelURL.path {
             return context
@@ -371,20 +373,36 @@ actor WhisperGGMLCoreMLService {
             self.context = nil
         }
 
-        var params = whisper_context_default_params()
-#if targetEnvironment(simulator)
-        params.use_gpu = false
-#else
-        params.flash_attn = true
-#endif
+        if shouldUseGPUPath,
+           !shouldForceCPUContext,
+           let created = makeContext(modelURL: modelURL, useGPU: true) {
+            self.context = created
+            self.activeModelPath = modelURL.path
+            self.didWarmupInference = false
+            return created
+        }
 
-        guard let created = whisper_init_from_file_with_params(modelURL.path, params) else {
+        guard let fallback = makeContext(modelURL: modelURL, useGPU: false) else {
             throw WhisperGGMLCoreMLError.contextInitializationFailed
         }
 
-        self.context = created
+        shouldForceCPUContext = true
+        self.context = fallback
         self.activeModelPath = modelURL.path
-        return created
+        self.didWarmupInference = false
+        return fallback
+    }
+
+    private func makeContext(modelURL: URL, useGPU: Bool) -> OpaquePointer? {
+        var params = whisper_context_default_params()
+#if targetEnvironment(simulator)
+        params.use_gpu = false
+        params.flash_attn = false
+#else
+        params.use_gpu = useGPU
+        params.flash_attn = useGPU
+#endif
+        return whisper_init_from_file_with_params(modelURL.path, params)
     }
 
     private func ensureModelFile() async throws -> URL {

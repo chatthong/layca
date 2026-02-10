@@ -9,6 +9,7 @@ struct ChatTabView: View {
     let activeSessionDateText: String
     let liveChatItems: [TranscriptRow]
     let transcribingRowIDs: Set<UUID>
+    let queuedRetranscriptionRowIDs: Set<UUID>
     let isTranscriptionBusy: Bool
     let preflightMessage: String?
     let canPlayTranscriptChunks: Bool
@@ -34,6 +35,7 @@ struct ChatTabView: View {
         activeSessionDateText: String,
         liveChatItems: [TranscriptRow],
         transcribingRowIDs: Set<UUID>,
+        queuedRetranscriptionRowIDs: Set<UUID>,
         isTranscriptionBusy: Bool,
         preflightMessage: String?,
         canPlayTranscriptChunks: Bool,
@@ -54,6 +56,7 @@ struct ChatTabView: View {
         self.activeSessionDateText = activeSessionDateText
         self.liveChatItems = liveChatItems
         self.transcribingRowIDs = transcribingRowIDs
+        self.queuedRetranscriptionRowIDs = queuedRetranscriptionRowIDs
         self.isTranscriptionBusy = isTranscriptionBusy
         self.preflightMessage = preflightMessage
         self.canPlayTranscriptChunks = canPlayTranscriptChunks
@@ -373,6 +376,7 @@ struct ChatTabView: View {
                         isRecording: isRecording,
                         isTranscriptionBusy: isTranscriptionBusy,
                         isItemTranscribing: transcribingRowIDs.contains(item.id),
+                        isItemQueuedForRetranscription: queuedRetranscriptionRowIDs.contains(item.id),
                         isPlayable: isTranscriptBubblePlayable(item),
                         onTap: {
                             onTranscriptTap(item)
@@ -434,6 +438,17 @@ struct ChatTabView: View {
                         .multilineTextAlignment(.leading)
                 }
                 .transition(.opacity)
+            } else if queuedRetranscriptionRowIDs.contains(item.id) {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange.opacity(0.88))
+                    Text("Queued for Transcribe Again...")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.orange.opacity(0.88))
+                        .multilineTextAlignment(.leading)
+                }
+                .transition(.opacity)
             } else {
                 Text(item.text)
                     .font(.body)
@@ -451,7 +466,10 @@ struct ChatTabView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(.white.opacity(0.55), lineWidth: 0.8)
         )
-        .animation(.easeInOut(duration: 0.2), value: transcribingRowIDs.contains(item.id))
+        .animation(
+            .easeInOut(duration: 0.2),
+            value: transcribingRowIDs.contains(item.id) || queuedRetranscriptionRowIDs.contains(item.id)
+        )
     }
 
     private func speakerMeta(for item: TranscriptRow) -> some View {
