@@ -253,7 +253,7 @@ struct MacChatWorkspaceView: View {
                 }
             }
 
-            ToolbarSpacer(.flexible)
+
 
             ToolbarItem {
                 Button(action: onExportTap) {
@@ -269,15 +269,6 @@ struct MacChatWorkspaceView: View {
                     Image(systemName: "plus.bubble")
                 }
                 .help("New Chat")
-            }
-
-            ToolbarSpacer(.fixed)
-
-            ToolbarItem {
-                Button(action: onOpenSettingsTap) {
-                    Image(systemName: "info")
-                }
-                .help("Open Setting")
             }
         }
         .onAppear {
