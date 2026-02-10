@@ -484,7 +484,7 @@ actor LiveSessionPipeline {
     private let pendingChunksBeforeNewSpeaker = 2
     private let maxSpeakersPerSession = 6
     private let speakerFallbackThreshold: Double = 0.11
-    private let deferredTranscriptPlaceholder = "Queued for automatic transcription..."
+    private let deferredTranscriptPlaceholder = "Message queued for automatic transcription..."
 
     func start(config: LivePipelineConfig) -> AsyncStream<PipelineEvent> {
         AsyncStream(bufferingPolicy: .bufferingNewest(500)) { continuation in
@@ -1886,7 +1886,7 @@ final class AppBackend: ObservableObject {
 
         let transcriptBody: String
         if session.rows.isEmpty {
-            transcriptBody = "No transcript rows in this chat yet."
+            transcriptBody = "No messages in this chat yet."
         } else {
             transcriptBody = session.rows
                 .map { row in
@@ -1977,7 +1977,7 @@ final class AppBackend: ObservableObject {
 
     func retranscribeTranscriptRow(_ row: TranscriptRow) {
         guard let sessionID = resolvedSessionID(for: row) else {
-            preflightStatusMessage = "Unable to locate this transcript row in an active chat."
+            preflightStatusMessage = "Unable to locate this message in an active chat."
             return
         }
 
@@ -1985,7 +1985,7 @@ final class AppBackend: ObservableObject {
               let endOffset = row.endOffset,
               endOffset > startOffset
         else {
-            preflightStatusMessage = "This transcript row has no valid audio range to transcribe again."
+            preflightStatusMessage = "This message has no valid audio range to transcribe again."
             return
         }
 
@@ -2195,7 +2195,7 @@ final class AppBackend: ObservableObject {
               let endOffset = row.endOffset,
               endOffset > startOffset
         else {
-            preflightStatusMessage = "This transcript row has no valid audio range to transcribe again."
+            preflightStatusMessage = "This message has no valid audio range to transcribe again."
             return
         }
 

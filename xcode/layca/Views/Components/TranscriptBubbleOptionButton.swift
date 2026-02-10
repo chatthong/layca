@@ -171,7 +171,7 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
                 sheetBackground
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Manual edit for this chunk transcript.")
+                    Text("Manual edit for this message transcript.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 

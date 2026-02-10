@@ -18,7 +18,7 @@ enum WhisperGGMLCoreMLError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidChunkOffsets:
-            return "Invalid chunk range for Whisper transcription."
+            return "Invalid message range for Whisper transcription."
         case .modelUnavailable:
             return "Whisper model file is not available."
         case .downloadFailed:
@@ -26,9 +26,9 @@ enum WhisperGGMLCoreMLError: LocalizedError {
         case .contextInitializationFailed:
             return "Whisper failed to initialize model context."
         case .noAudioSamples:
-            return "No audio samples were found for this chunk."
+            return "No audio samples were found for this message."
         case .inferenceFailed:
-            return "Whisper failed while transcribing this chunk."
+            return "Whisper failed while transcribing this message."
         }
     }
 }

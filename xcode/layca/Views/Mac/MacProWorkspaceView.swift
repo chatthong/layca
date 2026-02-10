@@ -235,6 +235,10 @@ struct MacChatWorkspaceView: View {
     @State private var isEditingTitle = false
     @State private var isTitleHovered = false
     @FocusState private var isTitleFieldFocused: Bool
+    @State private var isTranscriptNearBottom = true
+    @State private var hasPendingNewMessage = false
+
+    private let transcriptBottomAnchorID = "layca.mac.transcript.bottom"
 
     var body: some View {
         transcriptPane
@@ -438,46 +442,103 @@ struct MacChatWorkspaceView: View {
     }
 
     private var transcriptPane: some View {
-        Group {
-            if liveChatItems.isEmpty {
-                ContentUnavailableView(
-                    "No Transcript Yet",
-                    systemImage: "waveform.badge.magnifyingglass",
-                    description: Text("Start recording to stream transcript rows here.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List {
-                    ForEach(liveChatItems, id: \.id) { item in
-                        TranscriptBubbleOptionButton(
-                            item: item,
-                            liveChatItems: liveChatItems,
-                            isRecording: isRecording,
-                            isTranscriptionBusy: isTranscriptionBusy,
-                            isItemTranscribing: transcribingRowIDs.contains(item.id),
-                            isItemQueuedForRetranscription: queuedRetranscriptionRowIDs.contains(item.id),
-                            isPlayable: isRowPlayable(item),
-                            onTap: {
-                                onTranscriptTap(item)
-                            },
-                            onManualEditTranscript: onManualEditTranscript,
-                            onEditSpeakerName: onEditSpeakerName,
-                            onChangeSpeaker: onChangeSpeaker,
-                            onRetranscribeTranscript: onRetranscribeTranscript
-                        ) {
-                            transcriptRow(
-                                for: item,
-                                isTranscribing: transcribingRowIDs.contains(item.id),
-                                isQueued: queuedRetranscriptionRowIDs.contains(item.id)
-                            )
+        ScrollViewReader { proxy in
+            ZStack(alignment: .bottomTrailing) {
+                Group {
+                    if liveChatItems.isEmpty {
+                        ContentUnavailableView(
+                            "No Messages Yet",
+                            systemImage: "waveform.badge.magnifyingglass",
+                            description: Text("Start recording to stream transcript messages here.")
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        List {
+                            ForEach(liveChatItems, id: \.id) { item in
+                                TranscriptBubbleOptionButton(
+                                    item: item,
+                                    liveChatItems: liveChatItems,
+                                    isRecording: isRecording,
+                                    isTranscriptionBusy: isTranscriptionBusy,
+                                    isItemTranscribing: transcribingRowIDs.contains(item.id),
+                                    isItemQueuedForRetranscription: queuedRetranscriptionRowIDs.contains(item.id),
+                                    isPlayable: isRowPlayable(item),
+                                    onTap: {
+                                        onTranscriptTap(item)
+                                    },
+                                    onManualEditTranscript: onManualEditTranscript,
+                                    onEditSpeakerName: onEditSpeakerName,
+                                    onChangeSpeaker: onChangeSpeaker,
+                                    onRetranscribeTranscript: onRetranscribeTranscript
+                                ) {
+                                    transcriptRow(
+                                        for: item,
+                                        isTranscribing: transcribingRowIDs.contains(item.id),
+                                        isQueued: queuedRetranscriptionRowIDs.contains(item.id)
+                                    )
+                                }
+                                .id(item.id)
+                                .onAppear {
+                                    handleTranscriptRowVisible(item.id)
+                                }
+                                .onDisappear {
+                                    handleTranscriptRowHidden(item.id)
+                                }
+                                .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                            }
+
+                            Color.clear
+                                .frame(height: 1)
+                                .id(transcriptBottomAnchorID)
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
                         }
-                        .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
                     }
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
+
+                if hasPendingNewMessage && !isTranscriptNearBottom {
+                    Button {
+                        scrollToTranscriptBottom(using: proxy, animated: true)
+                        hasPendingNewMessage = false
+                    } label: {
+                        Label("New message", systemImage: "arrow.down.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.plain)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(.regularMaterial)
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(.primary.opacity(0.16), lineWidth: 0.9)
+                    )
+                    .shadow(color: .black.opacity(0.14), radius: 8, x: 0, y: 4)
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 20)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.18), value: hasPendingNewMessage && !isTranscriptNearBottom)
+            .onAppear {
+                DispatchQueue.main.async {
+                    scrollToTranscriptBottom(using: proxy, animated: false)
+                }
+            }
+            .onChange(of: transcriptUpdateSignature) { _, _ in
+                handleTranscriptUpdate(using: proxy)
+            }
+            .onChange(of: isTranscriptNearBottom) { _, nearBottom in
+                if nearBottom {
+                    hasPendingNewMessage = false
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -506,7 +567,7 @@ struct MacChatWorkspaceView: View {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
-                    Text("Transcribing chunk...")
+                    Text("Transcribing message...")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.red.opacity(0.86))
                 }
@@ -544,7 +605,7 @@ struct MacChatWorkspaceView: View {
 
     private func displayText(for item: TranscriptRow) -> String {
         let trimmed = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "No transcript text." : trimmed
+        return trimmed.isEmpty ? "No message text." : trimmed
     }
 
     private func isRowPlayable(_ item: TranscriptRow) -> Bool {
@@ -559,6 +620,66 @@ struct MacChatWorkspaceView: View {
 
     private func isMicrophonePermissionMessage(_ message: String) -> Bool {
         message.localizedCaseInsensitiveContains("microphone permission")
+    }
+
+    private var transcriptUpdateSignature: Int {
+        var hasher = Hasher()
+        hasher.combine(liveChatItems.count)
+        for item in liveChatItems {
+            hasher.combine(item.id)
+            hasher.combine(item.text)
+            hasher.combine(item.startOffset ?? -1)
+            hasher.combine(item.endOffset ?? -1)
+            hasher.combine(transcribingRowIDs.contains(item.id))
+            hasher.combine(queuedRetranscriptionRowIDs.contains(item.id))
+        }
+        return hasher.finalize()
+    }
+
+    private func handleTranscriptRowVisible(_ rowID: UUID) {
+        guard rowID == liveChatItems.last?.id else {
+            return
+        }
+        isTranscriptNearBottom = true
+    }
+
+    private func handleTranscriptRowHidden(_ rowID: UUID) {
+        guard rowID == liveChatItems.last?.id else {
+            return
+        }
+        isTranscriptNearBottom = false
+    }
+
+    private func handleTranscriptUpdate(using proxy: ScrollViewProxy) {
+        guard !liveChatItems.isEmpty else {
+            hasPendingNewMessage = false
+            return
+        }
+
+        if isTranscriptNearBottom {
+            scrollToTranscriptBottom(using: proxy, animated: true)
+            hasPendingNewMessage = false
+        } else {
+            hasPendingNewMessage = true
+        }
+    }
+
+    private func scrollToTranscriptBottom(using proxy: ScrollViewProxy, animated: Bool) {
+        let scrollAction = {
+            if let lastID = liveChatItems.last?.id {
+                proxy.scrollTo(lastID, anchor: .bottom)
+            } else {
+                proxy.scrollTo(transcriptBottomAnchorID, anchor: .bottom)
+            }
+        }
+
+        if animated {
+            withAnimation(.easeOut(duration: 0.2)) {
+                scrollAction()
+            }
+        } else {
+            scrollAction()
+        }
     }
 
     private func beginTitleRename() {
@@ -637,7 +758,7 @@ struct MacLibraryWorkspaceView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Text("\(session.rows.count) rows")
+                                Text("\(session.rows.count) messages")
                                     .font(.caption.weight(.semibold))
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)

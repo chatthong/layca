@@ -26,6 +26,14 @@ struct ChatTabView: View {
     @State private var titleDraft = ""
     @State private var isEditingTitle = false
     @FocusState private var isTitleFieldFocused: Bool
+    @State private var isUserNearBottom = true
+    @State private var hasPendingNewMessage = false
+    @State private var scrollViewportHeight: CGFloat = 0
+    @State private var scrollContentBottom: CGFloat = 0
+
+    private let transcriptScrollSpace = "layca.chat.transcript.scroll"
+    private let transcriptBottomAnchorID = "layca.chat.transcript.bottom"
+    private let transcriptBottomTolerance: CGFloat = 78
 
     init(
         isRecording: Bool,
@@ -111,19 +119,65 @@ struct ChatTabView: View {
     }
 
     private var chatContentBody: some View {
-        ZStack {
-            backgroundFill
+        ScrollViewReader { proxy in
+            ZStack(alignment: .bottomTrailing) {
+                ZStack {
+                    backgroundFill
 
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 18) {
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 18) {
 #if os(macOS)
-                    recorderCard
+                            recorderCard
 #endif
-                    liveSegmentsCard
+                            liveSegmentsCard
+                            transcriptBottomMarker
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.top, 10)
+                        .padding(.bottom, 24)
+                    }
+                    .coordinateSpace(name: transcriptScrollSpace)
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: ChatTranscriptViewportHeightPreferenceKey.self,
+                                value: proxy.size.height
+                            )
+                        }
+                    )
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 10)
-                .padding(.bottom, 24)
+
+                if hasPendingNewMessage && !isUserNearBottom {
+                    newMessageButton {
+                        scrollToTranscriptBottom(using: proxy, animated: true)
+                        hasPendingNewMessage = false
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.bottom, floatingButtonBottomPadding)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.18), value: hasPendingNewMessage && !isUserNearBottom)
+            .onAppear {
+                DispatchQueue.main.async {
+                    scrollToTranscriptBottom(using: proxy, animated: false)
+                }
+            }
+            .onChange(of: transcriptUpdateSignature) { _, _ in
+                handleTranscriptUpdate(using: proxy)
+            }
+            .onChange(of: isUserNearBottom) { _, nearBottom in
+                if nearBottom {
+                    hasPendingNewMessage = false
+                }
+            }
+            .onPreferenceChange(ChatTranscriptViewportHeightPreferenceKey.self) { height in
+                scrollViewportHeight = height
+                refreshBottomTracking()
+            }
+            .onPreferenceChange(ChatTranscriptContentBottomPreferenceKey.self) { bottom in
+                scrollContentBottom = bottom
+                refreshBottomTracking()
             }
         }
     }
@@ -419,7 +473,7 @@ struct ChatTabView: View {
     private var liveSegmentsCard: some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack {
-                Text("Latest Transcript")
+                Text("Latest Messages")
                     .font(.headline)
                     .foregroundStyle(.primary)
                 Spacer()
@@ -490,7 +544,7 @@ struct ChatTabView: View {
                     ProgressView()
                         .controlSize(.small)
                         .tint(.red.opacity(0.82))
-                    Text("Transcribing chunk...")
+                    Text("Transcribing message...")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.red.opacity(0.82))
                         .multilineTextAlignment(.leading)
@@ -586,6 +640,100 @@ struct ChatTabView: View {
         return endOffset > startOffset
     }
 
+    private var transcriptUpdateSignature: Int {
+        var hasher = Hasher()
+        hasher.combine(liveChatItems.count)
+        for item in liveChatItems {
+            hasher.combine(item.id)
+            hasher.combine(item.text)
+            hasher.combine(item.startOffset ?? -1)
+            hasher.combine(item.endOffset ?? -1)
+            hasher.combine(transcribingRowIDs.contains(item.id))
+            hasher.combine(queuedRetranscriptionRowIDs.contains(item.id))
+        }
+        return hasher.finalize()
+    }
+
+    private var floatingButtonBottomPadding: CGFloat {
+#if os(macOS)
+        return 24
+#else
+        return 106
+#endif
+    }
+
+    private var transcriptBottomMarker: some View {
+        Color.clear
+            .frame(height: 1)
+            .id(transcriptBottomAnchorID)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: ChatTranscriptContentBottomPreferenceKey.self,
+                        value: proxy.frame(in: .named(transcriptScrollSpace)).maxY
+                    )
+                }
+            )
+    }
+
+    private func newMessageButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label("New message", systemImage: "arrow.down.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
+        .background(
+            Capsule(style: .continuous)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(.primary.opacity(0.16), lineWidth: 0.9)
+        )
+        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
+    }
+
+    private func refreshBottomTracking() {
+        guard scrollViewportHeight > 0 else {
+            return
+        }
+
+        let nearBottom = scrollContentBottom <= (scrollViewportHeight + transcriptBottomTolerance)
+        if nearBottom != isUserNearBottom {
+            isUserNearBottom = nearBottom
+        }
+    }
+
+    private func handleTranscriptUpdate(using proxy: ScrollViewProxy) {
+        guard !liveChatItems.isEmpty else {
+            hasPendingNewMessage = false
+            return
+        }
+
+        if isUserNearBottom {
+            scrollToTranscriptBottom(using: proxy, animated: true)
+            hasPendingNewMessage = false
+        } else {
+            hasPendingNewMessage = true
+        }
+    }
+
+    private func scrollToTranscriptBottom(using proxy: ScrollViewProxy, animated: Bool) {
+        let scrollAction = {
+            proxy.scrollTo(transcriptBottomAnchorID, anchor: .bottom)
+        }
+
+        if animated {
+            withAnimation(.easeOut(duration: 0.2)) {
+                scrollAction()
+            }
+        } else {
+            scrollAction()
+        }
+    }
+
     private func beginTitleRename() {
         titleDraft = activeSessionTitle
         withAnimation(.spring(response: 0.25, dampingFraction: 0.86)) {
@@ -617,5 +765,21 @@ struct ChatTabView: View {
             isEditingTitle = false
         }
         isTitleFieldFocused = false
+    }
+}
+
+private struct ChatTranscriptViewportHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct ChatTranscriptContentBottomPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
