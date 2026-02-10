@@ -20,10 +20,10 @@
 - SwiftUI `TabView` with `TabSection` groups.
 - `New Chat` uses a special tab role to stay in a separate group.
 - Tabs are split into dedicated files:
-  - `ChatTabView.swift`
-  - `SettingTabView.swift`
-  - `LibraryTabView.swift`
-- `ContentView.swift` keeps shared state and dispatches actions across tab components.
+  - `Features/Chat/ChatTabView.swift`
+  - `Features/Settings/SettingsTabView.swift`
+  - `Features/Library/LibraryTabView.swift`
+- `App/ContentView.swift` keeps shared state and dispatches actions across tab components.
 
 ## macOS Layout
 - App shell uses `NavigationSplitView` instead of bottom tabs.

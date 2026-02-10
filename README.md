@@ -27,6 +27,7 @@
 
 - **Inference target:** `whisper.cpp` with automatic queued chunk transcription and optional CoreML encoder acceleration (`ggml-large-v3-turbo-encoder.mlmodelc`).
 - **Decoder model:** `ggml-large-v3-turbo.bin` bundled in app resources (with cache/download fallback).
+- **Model source layout in project:** `xcode/layca/Models/RuntimeAssets/` (copied into app resources at build time).
 - **Whisper startup mode:** no automatic prewarm on app launch; transcription engine initializes lazily on first queued chunk.
 - **CoreML encoder mode:** disabled by default for startup reliability; can be re-enabled with `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`.
 - **Pre-flight behavior:** credits and language prompt are validated before recording.
@@ -105,12 +106,12 @@ Documents/
 ### Implemented
 
 #### Dynamic Pre-Flight Backend (Credits + Language Prompt)
-- `AppBackend.swift`
+- `App/AppBackend.swift`
 - `PreflightService` checks remaining credit and builds prompt text:
   - `This is a verbatim transcript of a meeting in [LANGUAGES]. The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language, including profanity, violence, drug terms, and other sensitive words. Do not censor, mask, or replace words. Do not translate. Context: [KEYWORDS].`
 
 #### Live Pipeline Backend (4-Track Style, Concurrent)
-- `AppBackend.swift`
+- `App/AppBackend.swift`
 - `Libraries/SileroVADCoreMLService.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
 - `LiveSessionPipeline` actor emits:
   - waveform updates (visualizer timing)
@@ -125,13 +126,13 @@ Documents/
 - CoreML encoder is opt-in (`LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`); default path avoids ANE/CoreML plan-build startup stalls.
 
 #### Storage, Update, and Sync Hooks
-- `AppBackend.swift`
+- `App/AppBackend.swift`
 - `SessionStore` creates `session_full.m4a` + `segments.json`.
 - Appends transcript rows, persists segment snapshots, and keeps stable speaker profile (color/avatar) per session.
 - Credit deduction per chunk and iCloud-sync hook point are included.
 
 #### App Orchestration + UI Wiring
-- `AppBackend.swift`, `ContentView.swift`, `ChatTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`
+- `App/AppBackend.swift`, `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and language settings.
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
@@ -156,6 +157,13 @@ Documents/
   - prompt building from selected languages
   - model fallback behavior
   - speaker profile stability across chunks
+
+#### Project Structure Cleanup
+- App orchestration moved to `App/` (`laycaApp.swift`, `ContentView.swift`, `AppBackend.swift`).
+- Feature screens moved to `Features/` (`Chat`, `Library`, `Settings`).
+- Shared UI helpers moved to `Views/Shared/`.
+- Domain models extracted to `Models/Domain/` (`FocusLanguage`, `ChatSession`, `TranscriptRow`).
+- Runtime model assets moved to `Models/RuntimeAssets/`.
 
 #### macOS Permission + Signing Notes
 - `NSMicrophoneUsageDescription` is required for runtime microphone prompts.

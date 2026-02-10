@@ -3,13 +3,13 @@
 ## Completed In This Chat
 
 ### Dynamic Pre-Flight Backend (Credits + Language Prompt)
-- `AppBackend.swift`
+- `App/AppBackend.swift`
 - `PreflightService` checks remaining credit and builds prompt:
   - `This is a verbatim transcript of a meeting in [LANGUAGES]. The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language, including profanity, violence, drug terms, and other sensitive words. Do not censor, mask, or replace words. Do not translate. Context: [KEYWORDS].`
 - Added settings-backed context keyword input for prompt context.
 
 ### Live Pipeline Backend (4-Track Style, Concurrent)
-- `AppBackend.swift`, `Libraries/SileroVADCoreMLService.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
+- `App/AppBackend.swift`, `Libraries/SileroVADCoreMLService.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
 - `LiveSessionPipeline` actor emits:
   - waveform updates (visualizer timing)
   - CoreML Silero VAD chunking behavior
@@ -19,14 +19,14 @@
 - Chunk split defaults are tuned longer (`silenceCutoff=1.2s`, `minChunk=3.2s`, `maxChunk=12s`) to reduce over-splitting.
 
 ### Storage, Update, and Sync Hooks
-- `AppBackend.swift`
+- `App/AppBackend.swift`
 - `SessionStore` creates `session_full.m4a` + `segments.json`.
 - Appends transcript rows, persists segment snapshots, and keeps stable speaker profile (color/avatar) per session.
 - Credit deduction per chunk and iCloud-sync hook point are included.
 - Added row-level transcript text update path for automatic queued Whisper inference results.
 
 ### App Orchestration + UI Wiring
-- `AppBackend.swift`, `ContentView.swift`, `ChatTabView.swift`
+- `App/AppBackend.swift`, `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`
 - `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and language settings.
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
@@ -48,14 +48,14 @@
 - Recorder button tap issue fixed by disabling hit-testing on decorative overlays.
 
 ### Automatic Chunk Transcription Queue
-- `AppBackend.swift`, `ChatTabView.swift`
+- `App/AppBackend.swift`, `Features/Chat/ChatTabView.swift`
 - Removed transcription trigger from transcript-bubble tap (tap remains playback-only).
 - Added serial queue processing so finished chunks are transcribed one-by-one automatically.
 - Added queue dedup guards to avoid duplicate transcription jobs per row.
 - Updated placeholder/transcribing UI copy to reflect automatic queue processing.
 
 ### Whisper Startup Reliability Hardening
-- `AppBackend.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
+- `App/AppBackend.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
 - Removed automatic Whisper prewarm on app bootstrap and recording start.
 - Whisper context now initializes lazily on first chunk transcription request.
 - Default Whisper mode now avoids CoreML encoder startup path to prevent ANE/CoreML plan-build stalls.
@@ -63,12 +63,12 @@
 - In default mode, CoreML encoder load-failure logs are expected and non-fatal.
 
 ### Settings Cleanup (Model UI Removed)
-- `SettingTabView.swift`, `ContentView.swift`, `AppBackend.swift`
+- `Features/Settings/SettingsTabView.swift`, `App/ContentView.swift`, `App/AppBackend.swift`
 - Removed Settings model change/download card and model-select callbacks.
 - Added context-keywords input for Whisper `initial_prompt`.
 
 ### macOS Native Workspace + Permission Hardening
-- `ContentView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `layca.xcodeproj/project.pbxproj`
+- `App/ContentView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `layca.xcodeproj/project.pbxproj`
 - Added dedicated macOS workspace shell using `NavigationSplitView`, sidebar sections, and toolbar control group actions.
 - Added desktop-optimized chat/library/settings views for macOS (instead of reusing iOS tab layout).
 - Added microphone permission status and actions in macOS settings plus deep-link action from recorder denial state.
@@ -81,6 +81,25 @@
   - credit exhaustion guard behavior
   - speaker profile stability across chunks
 - Build validated on iOS simulator and macOS destination.
+
+### Project Structure Cleanup
+- Reorganized app orchestration files into `App/`:
+  - `App/laycaApp.swift`
+  - `App/ContentView.swift`
+  - `App/AppBackend.swift`
+- Reorganized UI feature files into `Features/`:
+  - `Features/Chat/ChatTabView.swift`
+  - `Features/Library/LibraryTabView.swift`
+  - `Features/Settings/SettingsTabView.swift`
+- Extracted shared UI helpers into `Views/Shared/`:
+  - `Views/Shared/LiquidBackdrop.swift`
+  - `Views/Shared/View+LiquidGlassStyle.swift`
+  - `Views/Shared/View+PlatformCompatibility.swift`
+- Extracted domain models into `Models/Domain/`:
+  - `Models/Domain/FocusLanguage.swift`
+  - `Models/Domain/ChatSession.swift`
+  - `Models/Domain/TranscriptRow.swift`
+- Moved runtime model assets to `Models/RuntimeAssets/`.
 
 ## Next Priority
 1. Add playback/transcription UX polish (playing-state indicator, active-bubble highlight, transcription-progress state).

@@ -8,6 +8,7 @@
 - **Bundled runtime asset:** CoreML speaker model directory in app bundle (`wespeaker_v2.mlmodelc`) for offline startup.
 - **Bundled runtime asset:** Whisper decoder model file in app bundle (`ggml-large-v3-turbo.bin`) for offline startup.
 - **Bundled runtime asset:** Whisper CoreML encoder directory in app bundle (`ggml-large-v3-turbo-encoder.mlmodelc`) for optional encoder acceleration.
+- **Project source location for bundled model assets:** `xcode/layca/Models/RuntimeAssets/` (copied into app resources during build).
 - **Runtime cache workspace:** `Library/Caches/WhisperGGML` for cached Whisper decoder and optional CoreML encoder assets.
 - **Planned:** migrate/extend to `SwiftData` for long-term query/index workflows.
 

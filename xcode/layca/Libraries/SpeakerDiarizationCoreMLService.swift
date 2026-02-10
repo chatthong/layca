@@ -21,6 +21,8 @@ enum SpeakerDiarizationCoreMLError: LocalizedError {
 actor SpeakerDiarizationCoreMLService {
     private struct Constants {
         static let modelDirectoryName = "wespeaker_v2.mlmodelc"
+        static let modelName = "wespeaker_v2"
+        static let bundledSubdirectories = ["Models/RuntimeAssets", "Models"]
         static let sampleRate: Double = 16_000
         static let inputSamples = 160_000
         static let waveformBatch = 3
@@ -153,15 +155,35 @@ actor SpeakerDiarizationCoreMLService {
     }
 
     private func bundledModelDirectory() -> URL? {
+        for subdirectory in Constants.bundledSubdirectories {
+            if let directURL = Bundle.main.resourceURL?
+                .appendingPathComponent(subdirectory, isDirectory: true)
+                .appendingPathComponent(Constants.modelDirectoryName, isDirectory: true),
+               hasAllRequiredFiles(at: directURL) {
+                return directURL
+            }
+        }
+
         let directURL = Bundle.main.resourceURL?
             .appendingPathComponent(Constants.modelDirectoryName, isDirectory: true)
-
         if let directURL, hasAllRequiredFiles(at: directURL) {
             return directURL
         }
 
-        if let namedURL = Bundle.main.url(forResource: "wespeaker_v2", withExtension: "mlmodelc"),
-           hasAllRequiredFiles(at: namedURL) {
+        for subdirectory in Constants.bundledSubdirectories {
+            if let namedURL = Bundle.main.url(
+                forResource: Constants.modelName,
+                withExtension: "mlmodelc",
+                subdirectory: subdirectory
+            ), hasAllRequiredFiles(at: namedURL) {
+                return namedURL
+            }
+        }
+
+        if let namedURL = Bundle.main.url(
+            forResource: Constants.modelName,
+            withExtension: "mlmodelc"
+        ), hasAllRequiredFiles(at: namedURL) {
             return namedURL
         }
 

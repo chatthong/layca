@@ -15,6 +15,7 @@
 - Bundled Whisper decoder file: app bundle `ggml-large-v3-turbo.bin` (offline-first)
 - Bundled Whisper encoder directory: app bundle `ggml-large-v3-turbo-encoder.mlmodelc` (optional CoreML encoder acceleration)
 - Whisper runtime framework: `Frameworks/whisper.xcframework` (static XCFramework)
+- Project source directory for bundled model assets: `xcode/layca/Models/RuntimeAssets/`
 
 ## Whisper Inference Behavior (Auto Queue)
 - Language mode: `preferredLanguageCode = "auto"` (always auto-detect for queued chunk transcription)
@@ -41,6 +42,7 @@
 
 ## Notes
 - App runtime does not apply a profanity/sensitive-term post-filter on transcript text.
+- Bundle model lookup supports both `Models/RuntimeAssets/` and legacy root-resource fallback paths.
 - Model resolution order for Whisper decoder:
   1. cached `Library/Caches/WhisperGGML/ggml-large-v3-turbo.bin`
   2. bundled `ggml-large-v3-turbo.bin` (copied into cache when needed)

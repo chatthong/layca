@@ -24,6 +24,8 @@ enum SileroVADCoreMLError: LocalizedError {
 actor SileroVADCoreMLService {
     private struct Constants {
         static let modelDirectoryName = "silero-vad-unified-256ms-v6.0.0.mlmodelc"
+        static let modelName = "silero-vad-unified-256ms-v6.0.0"
+        static let bundledSubdirectories = ["Models/RuntimeAssets", "Models"]
         static let sampleRate: Double = 16_000
         static let windowSamples = 4_160
         static let hopSamples = 512
@@ -154,15 +156,33 @@ actor SileroVADCoreMLService {
     }
 
     private func bundledModelDirectory() -> URL? {
+        for subdirectory in Constants.bundledSubdirectories {
+            if let directURL = Bundle.main.resourceURL?
+                .appendingPathComponent(subdirectory, isDirectory: true)
+                .appendingPathComponent(Constants.modelDirectoryName, isDirectory: true),
+               hasAllRequiredFiles(at: directURL) {
+                return directURL
+            }
+        }
+
         let directURL = Bundle.main.resourceURL?
             .appendingPathComponent(Constants.modelDirectoryName, isDirectory: true)
-
         if let directURL, hasAllRequiredFiles(at: directURL) {
             return directURL
         }
 
+        for subdirectory in Constants.bundledSubdirectories {
+            if let namedURL = Bundle.main.url(
+                forResource: Constants.modelName,
+                withExtension: "mlmodelc",
+                subdirectory: subdirectory
+            ), hasAllRequiredFiles(at: namedURL) {
+                return namedURL
+            }
+        }
+
         if let namedURL = Bundle.main.url(
-            forResource: "silero-vad-unified-256ms-v6.0.0",
+            forResource: Constants.modelName,
             withExtension: "mlmodelc"
         ), hasAllRequiredFiles(at: namedURL) {
             return namedURL

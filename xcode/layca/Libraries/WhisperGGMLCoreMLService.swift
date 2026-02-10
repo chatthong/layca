@@ -36,7 +36,10 @@ enum WhisperGGMLCoreMLError: LocalizedError {
 actor WhisperGGMLCoreMLService {
     private struct Constants {
         static let modelFileName = "ggml-large-v3-turbo.bin"
+        static let modelName = "ggml-large-v3-turbo"
         static let encoderDirectoryName = "ggml-large-v3-turbo-encoder.mlmodelc"
+        static let encoderModelName = "ggml-large-v3-turbo-encoder"
+        static let bundledSubdirectories = ["Models/RuntimeAssets", "Models"]
         static let modelDownloadURL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true"
         static let targetSampleRate: Double = 16_000
         static let minimumModelSizeBytes: Int64 = 1_000_000_000
@@ -468,12 +471,31 @@ actor WhisperGGMLCoreMLService {
     }
 
     private func bundledModelFileURL() -> URL? {
+        for subdirectory in Constants.bundledSubdirectories {
+            if let direct = Bundle.main.resourceURL?
+                .appendingPathComponent(subdirectory, isDirectory: true)
+                .appendingPathComponent(Constants.modelFileName),
+               fileManager.fileExists(atPath: direct.path) {
+                return direct
+            }
+        }
+
         if let direct = Bundle.main.resourceURL?.appendingPathComponent(Constants.modelFileName),
            fileManager.fileExists(atPath: direct.path) {
             return direct
         }
 
-        return Bundle.main.url(forResource: "ggml-large-v3-turbo", withExtension: "bin")
+        for subdirectory in Constants.bundledSubdirectories {
+            if let named = Bundle.main.url(
+                forResource: Constants.modelName,
+                withExtension: "bin",
+                subdirectory: subdirectory
+            ), fileManager.fileExists(atPath: named.path) {
+                return named
+            }
+        }
+
+        return Bundle.main.url(forResource: Constants.modelName, withExtension: "bin")
     }
 
     private func isValidModelFile(at url: URL) -> Bool {
@@ -488,14 +510,35 @@ actor WhisperGGMLCoreMLService {
     }
 
     private func bundledEncoderDirectoryURL() -> URL? {
+        for subdirectory in Constants.bundledSubdirectories {
+            if let direct = Bundle.main.resourceURL?
+                .appendingPathComponent(subdirectory, isDirectory: true)
+                .appendingPathComponent(Constants.encoderDirectoryName, isDirectory: true),
+               hasRequiredCoreMLFiles(at: direct) {
+                return direct
+            }
+        }
+
         if let direct = Bundle.main.resourceURL?
             .appendingPathComponent(Constants.encoderDirectoryName, isDirectory: true),
            hasRequiredCoreMLFiles(at: direct) {
             return direct
         }
 
-        if let named = Bundle.main.url(forResource: "ggml-large-v3-turbo-encoder", withExtension: "mlmodelc"),
-           hasRequiredCoreMLFiles(at: named) {
+        for subdirectory in Constants.bundledSubdirectories {
+            if let named = Bundle.main.url(
+                forResource: Constants.encoderModelName,
+                withExtension: "mlmodelc",
+                subdirectory: subdirectory
+            ), hasRequiredCoreMLFiles(at: named) {
+                return named
+            }
+        }
+
+        if let named = Bundle.main.url(
+            forResource: Constants.encoderModelName,
+            withExtension: "mlmodelc"
+        ), hasRequiredCoreMLFiles(at: named) {
             return named
         }
 

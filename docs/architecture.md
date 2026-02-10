@@ -7,9 +7,9 @@
 - Native platform-adapted shell: tab-driven on iOS-family and split-view workspace on macOS.
 
 ## High-Level Modules
-1. App Shell + State Coordinator (`ContentView`)
-2. Platform UI Components (`ChatTabView`, `SettingTabView`, `LibraryTabView`, `Views/Mac/MacProWorkspaceView`)
-3. Backend Orchestrator (`AppBackend`)
+1. App Shell + State Coordinator (`App/ContentView.swift`)
+2. Platform UI Components (`Features/Chat/ChatTabView.swift`, `Features/Settings/SettingsTabView.swift`, `Features/Library/LibraryTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`)
+3. Backend Orchestrator (`App/AppBackend.swift`)
 4. Preflight Layer (`PreflightService`)
 5. Live Pipeline (`LiveSessionPipeline`)
 6. Storage Layer (`SessionStore` + filesystem)
@@ -39,6 +39,7 @@
   - macOS uses `NavigationSplitView` with sidebar workspace sections and dedicated detail views.
 - VAD uses native CoreML Silero (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) with bundled offline model.
 - Speaker branch uses native CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) with bundled offline model.
+- Runtime model asset sources are organized under `Models/RuntimeAssets/`.
 - Whisper transcription runs automatically through a serial queue (`whisper.cpp`) as chunks are produced.
 - Automatic transcription runs with Whisper auto language detection (`preferredLanguageCode = "auto"`) and `translate = false`.
 - Whisper prompt template is built from Language Focus + context keywords.
@@ -53,25 +54,40 @@
 ## Folder Layout (Current)
 ```text
 xcode/layca/
-├── ContentView.swift
-├── ChatTabView.swift
-├── SettingTabView.swift
-├── LibraryTabView.swift
-├── View+PlatformCompatibility.swift
+├── App/
+│   ├── laycaApp.swift
+│   ├── ContentView.swift
+│   └── AppBackend.swift
+├── Features/
+│   ├── Chat/ChatTabView.swift
+│   ├── Library/LibraryTabView.swift
+│   └── Settings/SettingsTabView.swift
+├── Models/
+│   ├── Domain/
+│   │   ├── FocusLanguage.swift
+│   │   ├── ChatSession.swift
+│   │   └── TranscriptRow.swift
+│   └── RuntimeAssets/
+│       ├── ggml-large-v3-turbo.bin
+│       ├── ggml-large-v3-turbo-encoder.mlmodelc/
+│       ├── silero-vad-unified-256ms-v6.0.0.mlmodelc/
+│       └── wespeaker_v2.mlmodelc/
 ├── Views/
-│   └── Mac/
-│       └── MacProWorkspaceView.swift
-├── AppBackend.swift
+│   ├── Components/
+│   │   └── TranscriptBubbleOptionButton.swift
+│   ├── Mac/
+│   │   └── MacProWorkspaceView.swift
+│   └── Shared/
+│       ├── LiquidBackdrop.swift
+│       ├── View+LiquidGlassStyle.swift
+│       └── View+PlatformCompatibility.swift
 ├── Libraries/
 │   ├── SileroVADCoreMLService.swift
 │   ├── SpeakerDiarizationCoreMLService.swift
 │   └── WhisperGGMLCoreMLService.swift
 ├── Frameworks/
 │   └── whisper.xcframework/
-├── ggml-large-v3-turbo.bin
-├── ggml-large-v3-turbo-encoder.mlmodelc/
-├── silero-vad-unified-256ms-v6.0.0.mlmodelc/
-└── wespeaker_v2.mlmodelc/
+└── Assets.xcassets/
 ```
 
 ## Non-Functional Constraints

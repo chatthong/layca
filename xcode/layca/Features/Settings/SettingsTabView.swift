@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct SettingTabView: View {
+struct SettingsTabView: View {
     let totalHours: Double
     let usedHours: Double
 

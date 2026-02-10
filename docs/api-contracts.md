@@ -82,6 +82,7 @@
 
 ### `prepareIfNeeded() async throws -> Void`
 - Resolves bundled `silero-vad-unified-256ms-v6.0.0.mlmodelc` first.
+- Bundle lookup supports `Models/RuntimeAssets/` and root-resource fallback locations.
 - Falls back to cache/download if bundle resource is unavailable.
 
 ### `ingest(samples:sampleRate:) throws -> Float?`
@@ -94,6 +95,7 @@
 
 ### `prepareIfNeeded() async throws -> Void`
 - Resolves bundled `wespeaker_v2.mlmodelc` first.
+- Bundle lookup supports `Models/RuntimeAssets/` and root-resource fallback locations.
 - Falls back to cache/download if bundle resource is unavailable.
 
 ### `embedding(for:sampleRate:) throws -> [Float]?`
@@ -106,6 +108,7 @@
 
 ### `prepareIfNeeded() async throws -> Void`
 - Initializes Whisper context and runs a one-time warmup inference.
+- Bundle lookup for decoder/encoder supports `Models/RuntimeAssets/` and root-resource fallback locations.
 - Available for explicit warmup flows, but is not called automatically on app launch.
 
 ### `transcribe(audioURL:startOffset:endOffset:preferredLanguageCode:initialPrompt:) async throws -> WhisperTranscriptionResult`
