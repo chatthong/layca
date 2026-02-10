@@ -19,7 +19,7 @@
 - Language mode: `preferredLanguageCode = "auto"` (always auto-detect for queued chunk transcription)
 - Translation: disabled (`translate = false`)
 - Prompt: `initial_prompt` from settings-driven template:
-  - `This is a verbatim transcript of a meeting in [LANGUAGES]. The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language. Do not translate. Context: [KEYWORDS].`
+  - `This is a verbatim transcript of a meeting in [LANGUAGES]. The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language, including profanity, violence, drug terms, and other sensitive words. Do not censor, mask, or replace words. Do not translate. Context: [KEYWORDS].`
 - Prompt leak guard:
   - If output appears to echo instruction text, backend reruns once without prompt.
 - Empty result guard:
@@ -39,6 +39,7 @@
 4. Pipeline starts when pre-flight succeeds.
 
 ## Notes
+- App runtime does not apply a profanity/sensitive-term post-filter on transcript text.
 - Model resolution order for Whisper decoder:
   1. cached `Library/Caches/WhisperGGML/ggml-large-v3-turbo.bin`
   2. bundled `ggml-large-v3-turbo.bin` (copied into cache when needed)

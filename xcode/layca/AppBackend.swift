@@ -47,7 +47,7 @@ struct PreflightService {
         let normalizedKeywords = keywords.trimmingCharacters(in: .whitespacesAndNewlines)
         let context = normalizedKeywords.isEmpty ? "none" : normalizedKeywords
 
-        return "This is a verbatim transcript of a meeting in \(languageList). The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language. Do not translate. Context: \(context)."
+        return "This is a verbatim transcript of a meeting in \(languageList). The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language, including profanity, violence, drug terms, and other sensitive words. Do not censor, mask, or replace words. Do not translate. Context: \(context)."
     }
 }
 

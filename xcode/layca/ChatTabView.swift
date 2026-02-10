@@ -382,12 +382,18 @@ struct ChatTabView: View {
             Text(item.speaker)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.black.opacity(0.60))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(0)
 
             HStack(spacing: 3) {
                 Image(systemName: "globe")
                     .font(.caption2.weight(.bold))
-                Text(item.language)
+                Text(normalizedLanguageBadgeText(item.language))
                     .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(1)
+                    .allowsTightening(false)
             }
             .foregroundStyle(.black.opacity(0.45))
             .padding(.horizontal, 6)
@@ -396,7 +402,18 @@ struct ChatTabView: View {
                 Capsule(style: .continuous)
                     .fill(.white.opacity(0.52))
             )
+            .fixedSize(horizontal: true, vertical: true)
+            .layoutPriority(1)
         }
+    }
+
+    private func normalizedLanguageBadgeText(_ language: String) -> String {
+        let compact = language
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "\r", with: "")
+
+        return compact.isEmpty ? "??" : compact.uppercased()
     }
 
     private func timestampView(for item: TranscriptRow) -> some View {

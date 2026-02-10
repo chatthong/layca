@@ -14,6 +14,7 @@ struct AppBackendTests {
         #expect(config.languageCodes == ["en", "th"])
         #expect(config.prompt.contains("English"))
         #expect(config.prompt.contains("Thai"))
+        #expect(config.prompt.contains("Do not censor"))
     }
 
     @Test func preflightFailsWhenCreditsAreExhausted() async throws {
