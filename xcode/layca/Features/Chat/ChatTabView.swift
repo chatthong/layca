@@ -99,9 +99,7 @@ struct ChatTabView: View {
 
     private var chatContent: some View {
         ZStack {
-            backgroundGradient
-            LiquidBackdrop()
-                .ignoresSafeArea()
+            backgroundFill
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 18) {
@@ -116,28 +114,23 @@ struct ChatTabView: View {
         .laycaHideNavigationBar()
     }
 
-    private var backgroundGradient: some View {
-        let colors: [Color]
+    @ViewBuilder
+    private var backgroundFill: some View {
 #if os(macOS)
-        colors = [
+        LinearGradient(
+            colors: [
             Color(red: 0.91, green: 0.94, blue: 0.98),
             Color(red: 0.95, green: 0.96, blue: 0.99),
             Color(red: 0.90, green: 0.94, blue: 0.96)
-        ]
-#else
-        colors = [
-            Color(red: 0.88, green: 0.95, blue: 1.0),
-            Color(red: 0.95, green: 0.98, blue: 1.0),
-            Color(red: 0.90, green: 0.96, blue: 0.95)
-        ]
-#endif
-
-        return LinearGradient(
-            colors: colors,
+            ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
         .ignoresSafeArea()
+#else
+        Color(uiColor: .systemBackground)
+            .ignoresSafeArea()
+#endif
     }
 
     private var topToolbar: some View {
@@ -155,7 +148,7 @@ struct ChatTabView: View {
             .background(.ultraThinMaterial, in: Circle())
             .overlay(
                 Circle()
-                    .stroke(.white.opacity(0.55), lineWidth: 0.9)
+                    .stroke(.primary.opacity(0.14), lineWidth: 0.9)
             )
             .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 6)
         }
@@ -166,7 +159,7 @@ struct ChatTabView: View {
             if isEditingTitle {
                 HStack(spacing: 8) {
                     Image(systemName: "bubble.left.and.bubble.right.fill")
-                        .foregroundStyle(.black.opacity(0.85))
+                        .foregroundStyle(.primary)
 
                     TextField("Chat name", text: $titleDraft)
                         .textFieldStyle(.plain)
@@ -185,7 +178,7 @@ struct ChatTabView: View {
 
                     Button(action: cancelTitleRename) {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.black.opacity(0.48))
+                            .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -203,7 +196,7 @@ struct ChatTabView: View {
         .font(.subheadline)
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .glassCapsuleStyle()
+        .background(.thinMaterial, in: Capsule(style: .continuous))
     }
 
     private var recorderCard: some View {
@@ -214,11 +207,11 @@ struct ChatTabView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("New Recording")
                         .font(.headline)
-                        .foregroundStyle(.black.opacity(0.72))
+                        .foregroundStyle(.secondary)
 
                     Text(recordingTimeText)
                         .font(.system(size: 46, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.black.opacity(0.85))
+                        .foregroundStyle(.primary)
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
@@ -227,7 +220,7 @@ struct ChatTabView: View {
 
                     Text(activeSessionDateText)
                         .font(.caption)
-                        .foregroundStyle(.black.opacity(0.5))
+                        .foregroundStyle(.secondary)
 
                     if let preflightMessage {
                         Text(preflightMessage)
@@ -246,36 +239,16 @@ struct ChatTabView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(.white.opacity(0.55), lineWidth: 0.9)
+                .stroke(.primary.opacity(0.12), lineWidth: 0.9)
                 .allowsHitTesting(false)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [.white.opacity(0.25), .white.opacity(0.04)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .allowsHitTesting(false)
-        )
-        .shadow(color: .black.opacity(0.08), radius: 20, x: 0, y: 12)
+        .shadow(color: .black.opacity(0.06), radius: 10, x: 0, y: 6)
     }
 
     private var waveformPanel: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.06, green: 0.12, blue: 0.22).opacity(0.65),
-                            Color.black.opacity(0.45)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(.thinMaterial)
 
             HStack(alignment: .center, spacing: 3) {
                 ForEach(Array(waveformBars.enumerated()), id: \.offset) { _, level in
@@ -304,7 +277,7 @@ struct ChatTabView: View {
         .frame(width: 120, height: 126)
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(.white.opacity(0.12), lineWidth: 0.7)
+                .stroke(.primary.opacity(0.12), lineWidth: 0.7)
         )
     }
 
@@ -330,24 +303,16 @@ struct ChatTabView: View {
                 Text(isRecording ? "Pause" : "Record")
                     .fontWeight(.semibold)
             }
-            .foregroundStyle(isRecording ? Color.red.opacity(0.96) : .black.opacity(0.80))
+            .foregroundStyle(isRecording ? Color.red.opacity(0.96) : .primary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .background(
                 Capsule(style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: isRecording
-                                ? [Color.red.opacity(0.18), Color.white.opacity(0.20)]
-                                : [Color.white.opacity(0.52), Color.white.opacity(0.30)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(.regularMaterial)
             )
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(.white.opacity(0.48), lineWidth: 0.9)
+                    .stroke(.primary.opacity(0.12), lineWidth: 0.9)
             )
         }
         .buttonStyle(.plain)
@@ -360,11 +325,11 @@ struct ChatTabView: View {
             HStack {
                 Text("Latest Transcript")
                     .font(.headline)
-                    .foregroundStyle(.black.opacity(0.75))
+                    .foregroundStyle(.primary)
                 Spacer()
                 Label("Live", systemImage: "dot.radiowaves.left.and.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.black.opacity(0.55))
+                    .foregroundStyle(.secondary)
             }
 
             ForEach(liveChatItems) { item in
@@ -393,19 +358,16 @@ struct ChatTabView: View {
             }
         }
         .padding(18)
-        .liquidCard()
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.regularMaterial)
+        )
     }
 
     private func avatarView(for item: TranscriptRow) -> some View {
         ZStack {
             Circle()
-                .fill(
-                    LinearGradient(
-                        colors: item.avatarPalette,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(item.avatarPalette.first ?? .accentColor)
 
             Image(systemName: item.avatarSymbol)
                 .font(.system(size: 14, weight: .semibold))
@@ -452,7 +414,7 @@ struct ChatTabView: View {
             } else {
                 Text(item.text)
                     .font(.body)
-                    .foregroundStyle(.black.opacity(0.82))
+                    .foregroundStyle(.primary)
                     .multilineTextAlignment(.leading)
             }
         }
@@ -460,11 +422,11 @@ struct ChatTabView: View {
         .padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.white.opacity(0.50))
+                .fill(.regularMaterial)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(.white.opacity(0.55), lineWidth: 0.8)
+                .stroke(.primary.opacity(0.12), lineWidth: 0.8)
         )
         .animation(
             .easeInOut(duration: 0.2),
@@ -476,7 +438,7 @@ struct ChatTabView: View {
         HStack(spacing: 6) {
             Text(item.speaker)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.black.opacity(0.60))
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(0)
@@ -490,12 +452,12 @@ struct ChatTabView: View {
                     .minimumScaleFactor(1)
                     .allowsTightening(false)
             }
-            .foregroundStyle(.black.opacity(0.45))
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(
                 Capsule(style: .continuous)
-                    .fill(.white.opacity(0.52))
+                    .fill(.thinMaterial)
             )
             .fixedSize(horizontal: true, vertical: true)
             .layoutPriority(1)
@@ -514,7 +476,7 @@ struct ChatTabView: View {
     private func timestampView(for item: TranscriptRow) -> some View {
         Text(item.time)
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(.black.opacity(0.43))
+            .foregroundStyle(.secondary)
     }
 
     private func isTranscriptBubblePlayable(_ item: TranscriptRow) -> Bool {

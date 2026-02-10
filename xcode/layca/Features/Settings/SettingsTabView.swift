@@ -20,9 +20,7 @@ struct SettingsTabView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                backgroundGradient
-                LiquidBackdrop()
-                    .ignoresSafeArea()
+                backgroundFill
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 14) {
@@ -44,38 +42,33 @@ struct SettingsTabView: View {
         max(totalHours - usedHours, 0)
     }
 
-    private var backgroundGradient: some View {
-        let colors: [Color]
+    @ViewBuilder
+    private var backgroundFill: some View {
 #if os(macOS)
-        colors = [
-            Color(red: 0.91, green: 0.94, blue: 0.98),
-            Color(red: 0.95, green: 0.96, blue: 0.99),
-            Color(red: 0.90, green: 0.94, blue: 0.96)
-        ]
-#else
-        colors = [
-            Color(red: 0.88, green: 0.95, blue: 1.0),
-            Color(red: 0.95, green: 0.98, blue: 1.0),
-            Color(red: 0.90, green: 0.96, blue: 0.95)
-        ]
-#endif
-
-        return LinearGradient(
-            colors: colors,
+        LinearGradient(
+            colors: [
+                Color(red: 0.91, green: 0.94, blue: 0.98),
+                Color(red: 0.95, green: 0.96, blue: 0.99),
+                Color(red: 0.90, green: 0.94, blue: 0.96)
+            ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
         .ignoresSafeArea()
+#else
+        Color(uiColor: .systemBackground)
+            .ignoresSafeArea()
+#endif
     }
 
     private var settingsHeader: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Setting")
                 .font(.system(size: 36, weight: .bold, design: .rounded))
-                .foregroundStyle(.black.opacity(0.9))
+                .foregroundStyle(.primary)
             Text("Language focus and account sync")
                 .font(.subheadline)
-                .foregroundStyle(.black.opacity(0.6))
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -85,15 +78,15 @@ struct SettingsTabView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("Hours Credit")
                     .font(.headline)
-                    .foregroundStyle(.black.opacity(0.8))
+                    .foregroundStyle(.primary)
                 Spacer()
                 Text("\(remainingHours, specifier: "%.1f")h left")
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(.black.opacity(0.88))
+                    .foregroundStyle(.primary)
             }
 
             ProgressView(value: usedHours, total: totalHours)
-                .tint(.black.opacity(0.65))
+                .tint(.accentColor)
 
             HStack {
                 Text("\(usedHours, specifier: "%.1f")h used")
@@ -101,33 +94,36 @@ struct SettingsTabView: View {
                 Text("Total \(totalHours, specifier: "%.0f")h")
             }
             .font(.caption.weight(.semibold))
-            .foregroundStyle(.black.opacity(0.55))
+            .foregroundStyle(.secondary)
 
             Text("Refill hours before balance runs low to keep continuous transcription.")
                 .font(.subheadline)
-                .foregroundStyle(.black.opacity(0.6))
+                .foregroundStyle(.secondary)
         }
         .padding(18)
-        .liquidCard()
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.regularMaterial)
+        )
     }
 
     private var languageFocusCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Language Focus")
                 .font(.headline)
-                .foregroundStyle(.black.opacity(0.8))
+                .foregroundStyle(.primary)
             Text("Select multiple priority languages for faster and cleaner recognition.")
                 .font(.subheadline)
-                .foregroundStyle(.black.opacity(0.6))
+                .foregroundStyle(.secondary)
 
             HStack {
                 Text("\(selectedLanguageCodes.count) selected")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.black.opacity(0.55))
+                    .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(filteredFocusLanguages.count) shown")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.black.opacity(0.55))
+                    .foregroundStyle(.secondary)
             }
 
             TextField("Search name / code (en, eng)", text: $languageSearchText)
@@ -136,7 +132,7 @@ struct SettingsTabView: View {
                 .padding(.vertical, 9)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.white.opacity(0.58))
+                        .fill(.regularMaterial)
                 )
 
             TextField("Context keywords (product names, people, jargon)", text: $focusContextKeywords)
@@ -145,7 +141,7 @@ struct SettingsTabView: View {
                 .padding(.vertical, 9)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.white.opacity(0.58))
+                        .fill(.regularMaterial)
                 )
 
             ScrollView(showsIndicators: true) {
@@ -166,38 +162,41 @@ struct SettingsTabView: View {
             .frame(maxHeight: 230)
         }
         .padding(18)
-        .liquidCard()
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.regularMaterial)
+        )
     }
 
     private var iCloudAndPurchaseCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("iCloud & Purchases")
                 .font(.headline)
-                .foregroundStyle(.black.opacity(0.8))
+                .foregroundStyle(.primary)
 
             HStack(spacing: 10) {
                 Image(systemName: "person.crop.circle.badge.checkmark")
                     .font(.title3)
-                    .foregroundStyle(.black.opacity(0.7))
+                    .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("iCloud Account")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.black.opacity(0.75))
+                        .foregroundStyle(.primary)
                     Text("Connected and ready to sync chat sessions")
                         .font(.caption)
-                        .foregroundStyle(.black.opacity(0.55))
+                        .foregroundStyle(.secondary)
                 }
             }
 
             Toggle("Sync sessions via iCloud", isOn: $isICloudSyncEnabled)
-                .tint(.black.opacity(0.75))
+                .tint(.accentColor)
 
             Button(action: onRestorePurchases) {
                 HStack {
                     if isRestoringPurchases {
                         ProgressView()
                             .progressViewStyle(.circular)
-                            .tint(.black.opacity(0.75))
+                            .tint(.accentColor)
                     } else {
                         Image(systemName: "arrow.clockwise.circle.fill")
                             .font(.body.weight(.semibold))
@@ -205,12 +204,12 @@ struct SettingsTabView: View {
                     Text(isRestoringPurchases ? "Restoring..." : "Restore Purchases")
                         .fontWeight(.semibold)
                 }
-                .foregroundStyle(.black.opacity(0.82))
+                .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 11)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.white.opacity(0.58))
+                        .fill(.regularMaterial)
                 )
             }
             .buttonStyle(.plain)
@@ -218,11 +217,14 @@ struct SettingsTabView: View {
             if let restoreStatusMessage {
                 Text(restoreStatusMessage)
                     .font(.caption)
-                    .foregroundStyle(.black.opacity(0.58))
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(18)
-        .liquidCard()
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.regularMaterial)
+        )
     }
 }
 
@@ -241,13 +243,21 @@ private struct LanguageChip: View {
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .foregroundStyle(isSelected ? .white : .black.opacity(0.72))
+        .foregroundStyle(isSelected ? .white : .primary)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(isSelected ? .black.opacity(0.72) : .white.opacity(0.58))
+                .fill(isSelected ? Color.accentColor : unselectedBackgroundColor)
         )
+    }
+
+    private var unselectedBackgroundColor: Color {
+#if os(macOS)
+        Color.white.opacity(0.45)
+#else
+        Color(uiColor: .secondarySystemBackground)
+#endif
     }
 }

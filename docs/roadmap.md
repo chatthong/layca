@@ -90,14 +90,22 @@
 - Added microphone permission status and actions in macOS settings plus deep-link action from recorder denial state.
 - Added macOS codesigning entitlement wiring for sandbox audio input so app appears in Privacy > Microphone after permission request.
 
-### macOS Toolbar Style Alignment (Landmarks Liquid Glass)
+### macOS Toolbar Style Alignment (Native Composition)
 - `App/ContentView.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - Removed top toolbar segmented workspace picker from macOS root split view.
-- Moved top-right chat actions to Chat detail toolbar using Landmarks-style composition:
+- Moved top-right chat actions to Chat detail toolbar using native SwiftUI composition:
   - `ToolbarItem` for `Share`
   - `ToolbarItemGroup` for `Rename` + `New Chat`
   - `ToolbarItem` for `Info` (switches to `Setting`)
-- Applied `.toolbar(removing: .title)` in Chat detail to match Liquid Glass presentation.
+- Applied `.toolbar(removing: .title)` in Chat detail for a clean native toolbar layout.
+
+### Native Theme + Surface Simplification
+- `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`, `Features/Library/LibraryTabView.swift`, `Features/Settings/SettingsTabView.swift`, `Views/Components/TranscriptBubbleOptionButton.swift`, `Views/Shared/View+PlatformCompatibility.swift`
+- iOS-family backgrounds switched to plain `systemBackground` (removed live backdrop on iOS-family screens).
+- Card and control surfaces now use native SwiftUI material fills instead of custom liquid-card wrappers.
+- iOS-family appearance now follows automatic device light/dark switching.
+- Removed custom shared helper:
+  - `Views/Shared/View+LiquidGlassStyle.swift`
 
 ### Library + Sidebar Chat Actions
 - `Features/Library/LibraryTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `App/ContentView.swift`, `App/AppBackend.swift`
@@ -130,7 +138,6 @@
   - `Features/Settings/SettingsTabView.swift`
 - Extracted shared UI helpers into `Views/Shared/`:
   - `Views/Shared/LiquidBackdrop.swift`
-  - `Views/Shared/View+LiquidGlassStyle.swift`
   - `Views/Shared/View+PlatformCompatibility.swift`
 - Extracted domain models into `Models/Domain/`:
   - `Models/Domain/FocusLanguage.swift`

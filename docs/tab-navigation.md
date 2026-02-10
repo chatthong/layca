@@ -40,7 +40,7 @@
   - `Delete`
 - Toolbar uses:
   - no segmented workspace picker in the title area
-  - Landmarks-style Liquid Glass toolbar items on Chat detail:
+  - native SwiftUI toolbar items on Chat detail:
     - `Share` (`ToolbarItem`)
     - grouped `Rename` + `New Chat` (`ToolbarItemGroup`)
     - `Info` (`ToolbarItem`, opens `Setting`)
@@ -75,6 +75,7 @@
 - `Export` opens from a header/toolbar action instead of a tab.
   - On macOS, this action is the top-right `Share` toolbar item in Chat detail.
 - On some compact layouts, iOS may prioritize icon rendering for special-role grouped tabs even if text is provided.
+- iOS-family pages use plain `systemBackground` and native material cards/surfaces, so light/dark appearance follows device setting automatically.
 - Transcript bubbles are tappable for per-chunk playback only when recording is stopped.
 - Long-press on a transcript bubble opens actions for:
   - `Edit Text`

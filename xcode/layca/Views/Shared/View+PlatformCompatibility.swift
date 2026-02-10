@@ -37,7 +37,6 @@ extension View {
 #if os(iOS) || os(visionOS)
         self
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(backgroundColor, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
 #else

@@ -6,7 +6,7 @@
 - Session audio file path is reserved as `Documents/Sessions/{UUID}/session_full.m4a`.
 - Recording start is gated by runtime microphone permission.
 - On macOS, app signing must include sandbox audio-input entitlement for TCC registration.
-- On macOS, toolbar styling/navigation (Landmarks-style Liquid Glass controls) is UI-only and does not change capture/transcription behavior.
+- On macOS, toolbar styling/navigation (native SwiftUI toolbar composition) is UI-only and does not change capture/transcription behavior.
 
 ## Live Processing Pipeline
 

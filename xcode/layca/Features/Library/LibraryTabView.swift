@@ -15,9 +15,7 @@ struct LibraryTabView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                backgroundGradient
-                LiquidBackdrop()
-                    .ignoresSafeArea()
+                backgroundFill
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 14) {
@@ -26,7 +24,7 @@ struct LibraryTabView: View {
                             if sessions.isEmpty {
                                 Text("No sessions yet")
                                     .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.black.opacity(0.55))
+                                    .foregroundStyle(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.vertical, 4)
                             }
@@ -68,7 +66,10 @@ struct LibraryTabView: View {
                             }
                         }
                         .padding(18)
-                        .liquidCard()
+                        .background(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(.regularMaterial)
+                        )
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 18)
@@ -143,36 +144,31 @@ struct LibraryTabView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Library")
                 .font(.system(size: 36, weight: .bold, design: .rounded))
-                .foregroundStyle(.black.opacity(0.9))
+                .foregroundStyle(.primary)
             Text("Switch and load saved chat sessions")
                 .font(.subheadline)
-                .foregroundStyle(.black.opacity(0.6))
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var backgroundGradient: some View {
-        let colors: [Color]
+    @ViewBuilder
+    private var backgroundFill: some View {
 #if os(macOS)
-        colors = [
-            Color(red: 0.91, green: 0.94, blue: 0.98),
-            Color(red: 0.95, green: 0.96, blue: 0.99),
-            Color(red: 0.90, green: 0.94, blue: 0.96)
-        ]
-#else
-        colors = [
-            Color(red: 0.88, green: 0.95, blue: 1.0),
-            Color(red: 0.95, green: 0.98, blue: 1.0),
-            Color(red: 0.90, green: 0.96, blue: 0.95)
-        ]
-#endif
-
-        return LinearGradient(
-            colors: colors,
+        LinearGradient(
+            colors: [
+                Color(red: 0.91, green: 0.94, blue: 0.98),
+                Color(red: 0.95, green: 0.96, blue: 0.99),
+                Color(red: 0.90, green: 0.94, blue: 0.96)
+            ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
         .ignoresSafeArea()
+#else
+        Color(uiColor: .systemBackground)
+            .ignoresSafeArea()
+#endif
     }
 }
 
@@ -184,43 +180,51 @@ private struct SessionRow: View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(isActive ? Color.cyan.opacity(0.95) : Color.white.opacity(0.66))
+                    .fill(isActive ? Color.accentColor : inactiveIconBackgroundColor)
                 Image(systemName: isActive ? "checkmark.bubble.fill" : "bubble.left.and.bubble.right")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(isActive ? .white : .black.opacity(0.62))
+                    .foregroundStyle(isActive ? .white : .secondary)
             }
             .frame(width: 36, height: 36)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title)
                     .font(.headline)
-                    .foregroundStyle(.black.opacity(0.82))
+                    .foregroundStyle(.primary)
                 Text(session.formattedDate)
                     .font(.caption)
-                    .foregroundStyle(.black.opacity(0.58))
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()
 
             Text("\(session.rows.count)")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.black.opacity(0.55))
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(.white.opacity(0.58))
+                        .fill(.thinMaterial)
                 )
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isActive ? .white.opacity(0.68) : .white.opacity(0.50))
+                .fill(isActive ? .regularMaterial : .thinMaterial)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(.white.opacity(0.60), lineWidth: 0.8)
+                .stroke(.primary.opacity(0.12), lineWidth: 0.8)
         )
+    }
+
+    private var inactiveIconBackgroundColor: Color {
+#if os(macOS)
+        Color.white.opacity(0.55)
+#else
+        Color(uiColor: .secondarySystemBackground)
+#endif
     }
 }

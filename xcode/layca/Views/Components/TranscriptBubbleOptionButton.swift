@@ -169,26 +169,24 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
         NavigationStack {
             ZStack {
                 sheetBackground
-                LiquidBackdrop()
-                    .ignoresSafeArea()
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Manual edit for this chunk transcript.")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.80))
+                        .foregroundStyle(.secondary)
 
                     TextEditor(text: $transcriptEditDraft)
                         .font(.body)
-                        .foregroundStyle(.white.opacity(0.96))
+                        .foregroundStyle(.primary)
                         .scrollContentBackground(.hidden)
                         .padding(10)
                         .background(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color(red: 0.08, green: 0.11, blue: 0.17).opacity(0.86))
+                                .fill(.regularMaterial)
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(Color.cyan.opacity(0.32), lineWidth: 1)
+                                .stroke(.primary.opacity(0.12), lineWidth: 1)
                         )
                         .frame(minHeight: 220)
                         .focused($isTranscriptEditorFocused)
@@ -199,9 +197,8 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
             }
             .navigationTitle("Edit Transcript")
             .laycaApplyNavigationBarChrome(
-                backgroundColor: Color(red: 0.08, green: 0.11, blue: 0.17)
+                backgroundColor: sheetNavigationBarColor
             )
-            .tint(.white)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -228,27 +225,25 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
         NavigationStack {
             ZStack {
                 sheetBackground
-                LiquidBackdrop()
-                    .ignoresSafeArea()
 
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Rename this speaker for every matching bubble in this chat.")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.80))
+                        .foregroundStyle(.secondary)
 
                     TextField("Speaker name", text: $speakerNameDraft)
                         .textFieldStyle(.plain)
                         .font(.headline)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 12)
-                        .foregroundStyle(.white.opacity(0.96))
+                        .foregroundStyle(.primary)
                         .background(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color(red: 0.08, green: 0.11, blue: 0.17).opacity(0.86))
+                                .fill(.regularMaterial)
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(Color.cyan.opacity(0.32), lineWidth: 1)
+                                .stroke(.primary.opacity(0.12), lineWidth: 1)
                         )
                         .focused($isSpeakerNameFieldFocused)
 
@@ -258,9 +253,8 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
             }
             .navigationTitle("Edit Speaker Name")
             .laycaApplyNavigationBarChrome(
-                backgroundColor: Color(red: 0.08, green: 0.11, blue: 0.17)
+                backgroundColor: sheetNavigationBarColor
             )
-            .tint(.white)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -283,7 +277,9 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
         }
     }
 
+    @ViewBuilder
     private var sheetBackground: some View {
+#if os(macOS)
         LinearGradient(
             colors: [
                 Color(red: 0.10, green: 0.15, blue: 0.23),
@@ -294,6 +290,18 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
             endPoint: .bottomTrailing
         )
         .ignoresSafeArea()
+#else
+        Color(uiColor: .systemBackground)
+            .ignoresSafeArea()
+#endif
+    }
+
+    private var sheetNavigationBarColor: Color {
+#if os(macOS)
+        Color.clear
+#else
+        Color(uiColor: .systemBackground)
+#endif
     }
 }
 

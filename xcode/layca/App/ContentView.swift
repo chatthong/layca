@@ -59,7 +59,7 @@ private extension ContentView {
                 }
             }
         }
-        .tint(.black.opacity(0.88))
+        .tint(.accentColor)
         .laycaApplyTabBarBackgroundStyle()
         .onChange(of: selectedTab) { _, newTab in
             if newTab == .newChat {
@@ -260,41 +260,18 @@ private extension ContentView {
     }
 
     var exportScreen: some View {
-        let gradientColors: [Color]
-#if os(macOS)
-        gradientColors = [
-            Color(red: 0.91, green: 0.94, blue: 0.98),
-            Color(red: 0.95, green: 0.96, blue: 0.99),
-            Color(red: 0.90, green: 0.94, blue: 0.96)
-        ]
-#else
-        gradientColors = [
-            Color(red: 0.88, green: 0.95, blue: 1.0),
-            Color(red: 0.95, green: 0.98, blue: 1.0),
-            Color(red: 0.90, green: 0.96, blue: 0.95)
-        ]
-#endif
-
         return NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: gradientColors,
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-
-                LiquidBackdrop()
-                    .ignoresSafeArea()
+                exportBackground
 
                 VStack(spacing: 14) {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Export")
                             .font(.system(size: 30, weight: .bold, design: .rounded))
-                            .foregroundStyle(.black.opacity(0.9))
+                            .foregroundStyle(.primary)
                         Text("Use Notepad style during export only")
                             .font(.subheadline)
-                            .foregroundStyle(.black.opacity(0.6))
+                            .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -305,11 +282,36 @@ private extension ContentView {
                     }
                 }
                 .padding(18)
-                .liquidCard()
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(.regularMaterial)
+                )
                 .padding(.horizontal, 18)
             }
             .laycaHideNavigationBar()
         }
+    }
+
+    @ViewBuilder
+    var exportBackground: some View {
+#if os(macOS)
+        LinearGradient(
+            colors: [
+                Color(red: 0.91, green: 0.94, blue: 0.98),
+                Color(red: 0.95, green: 0.96, blue: 0.99),
+                Color(red: 0.90, green: 0.94, blue: 0.96)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+
+        LiquidBackdrop()
+            .ignoresSafeArea()
+#else
+        Color(uiColor: .systemBackground)
+            .ignoresSafeArea()
+#endif
     }
 
     var selectedLanguageCodesBinding: Binding<Set<String>> {
@@ -464,21 +466,21 @@ private struct ExportRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.headline)
-                    .foregroundStyle(.black.opacity(0.82))
+                    .foregroundStyle(.primary)
                 Text(subtitle)
                     .font(.caption)
-                    .foregroundStyle(.black.opacity(0.6))
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.black.opacity(0.45))
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.white.opacity(0.52))
+                .fill(.regularMaterial)
         )
     }
 }
