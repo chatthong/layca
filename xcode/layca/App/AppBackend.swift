@@ -638,6 +638,10 @@ actor LiveSessionPipeline {
             activeChunkFrames.append(audioFrame)
             silenceSeconds = 0
         } else if !activeChunkFrames.isEmpty {
+            // Keep non-speech frames once a message has started so queued
+            // auto-transcription receives natural timing instead of
+            // speech-only samples stitched together.
+            activeChunkFrames.append(audioFrame)
             silenceSeconds += frame.duration
         }
 
@@ -2030,7 +2034,8 @@ final class AppBackend: ObservableObject {
                 return
             }
 
-            guard queuedTranscriptionTask == nil,
+            guard !isRecording,
+                  queuedTranscriptionTask == nil,
                   queuedChunkTranscriptions.isEmpty,
                   transcribingRowIDs.isEmpty
             else {
@@ -2275,6 +2280,7 @@ final class AppBackend: ObservableObject {
         }
 
         do {
+            let rowOffsets = await transcriptOffsets(for: rowID, sessionID: sessionID)
             let initialPrompt = preflightService.buildPrompt(
                 languageCodes: selectedLanguageCodes.map { $0.lowercased() }.sorted(),
                 keywords: focusContextKeywords
@@ -2290,6 +2296,14 @@ final class AppBackend: ObservableObject {
             guard !trimmed.isEmpty else {
                 await dropTranscriptRowWithoutSpeech(sessionID: sessionID, rowID: rowID)
                 return
+            }
+
+            if isSuspiciousAutoTranscription(
+                text: trimmed,
+                startOffset: rowOffsets?.startOffset,
+                endOffset: rowOffsets?.endOffset
+            ) {
+                queueAutomaticQualityRetranscription(rowID: rowID, sessionID: sessionID)
             }
 
             await sessionStore.updateTranscriptRow(
@@ -2388,6 +2402,58 @@ final class AppBackend: ObservableObject {
             !transcribingRowIDs.isEmpty ||
             !queuedChunkTranscriptions.isEmpty ||
             !queuedManualRetranscriptions.isEmpty
+    }
+
+    private func queueAutomaticQualityRetranscription(rowID: UUID, sessionID: UUID) {
+        guard !queuedManualRetranscriptionRowIDs.contains(rowID) else {
+            return
+        }
+
+        queuedManualRetranscriptionRowIDs.insert(rowID)
+        queuedManualRetranscriptions.append(
+            QueuedManualRetranscription(rowID: rowID, sessionID: sessionID)
+        )
+        updateTranscriptionBusyState()
+        startManualRetranscriptionWorkerIfNeeded()
+    }
+
+    private func transcriptOffsets(
+        for rowID: UUID,
+        sessionID: UUID
+    ) async -> (startOffset: Double?, endOffset: Double?)? {
+        guard let row = await findTranscriptRow(rowID: rowID, sessionID: sessionID) else {
+            return nil
+        }
+        return (row.startOffset, row.endOffset)
+    }
+
+    private func isSuspiciousAutoTranscription(
+        text: String,
+        startOffset: Double?,
+        endOffset: Double?
+    ) -> Bool {
+        guard let startOffset,
+              let endOffset,
+              endOffset > startOffset
+        else {
+            return false
+        }
+
+        let duration = endOffset - startOffset
+        guard duration >= 5 else {
+            return false
+        }
+
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.isEmpty {
+            return true
+        }
+
+        let wordCount = normalized
+            .split { $0.isWhitespace || $0.isNewline }
+            .count
+
+        return wordCount <= 2
     }
 
     private func findTranscriptRow(rowID: UUID, sessionID: UUID) async -> TranscriptRow? {
