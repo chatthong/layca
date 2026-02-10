@@ -7,6 +7,7 @@
 - Settings now provides:
   - Language Focus (multi-select)
   - Context keywords (free text), used in Whisper `initial_prompt`
+- On macOS, the same model-related settings are shown in the native settings workspace form.
 
 ## Current Runtime Assets
 - Bundled VAD directory: app bundle `silero-vad-unified-256ms-v6.0.0.mlmodelc` (CoreML Silero, offline-first)

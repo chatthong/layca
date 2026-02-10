@@ -36,7 +36,7 @@ struct SettingTabView: View {
                     .padding(.bottom, 30)
                 }
             }
-            .navigationBarHidden(true)
+            .laycaHideNavigationBar()
         }
     }
 
@@ -45,12 +45,23 @@ struct SettingTabView: View {
     }
 
     private var backgroundGradient: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.88, green: 0.95, blue: 1.0),
-                Color(red: 0.95, green: 0.98, blue: 1.0),
-                Color(red: 0.90, green: 0.96, blue: 0.95)
-            ],
+        let colors: [Color]
+#if os(macOS)
+        colors = [
+            Color(red: 0.91, green: 0.94, blue: 0.98),
+            Color(red: 0.95, green: 0.96, blue: 0.99),
+            Color(red: 0.90, green: 0.94, blue: 0.96)
+        ]
+#else
+        colors = [
+            Color(red: 0.88, green: 0.95, blue: 1.0),
+            Color(red: 0.95, green: 0.98, blue: 1.0),
+            Color(red: 0.90, green: 0.96, blue: 0.95)
+        ]
+#endif
+
+        return LinearGradient(
+            colors: colors,
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -120,8 +131,7 @@ struct SettingTabView: View {
             }
 
             TextField("Search name / code (en, eng)", text: $languageSearchText)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
+                .laycaApplyTextInputAutocorrectionPolicy()
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
                 .background(
@@ -130,8 +140,7 @@ struct SettingTabView: View {
                 )
 
             TextField("Context keywords (product names, people, jargon)", text: $focusContextKeywords)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
+                .laycaApplyTextInputAutocorrectionPolicy()
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
                 .background(

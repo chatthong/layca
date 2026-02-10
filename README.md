@@ -4,7 +4,7 @@
 
 **Project Codename:** `Layca-Core`  
 **Version:** 0.5.2 (Live Audio + CoreML VAD + CoreML Speaker Diarization + Automatic Queued Whisper Chunk Transcription)  
-**Platforms:** iOS, iPadOS, tvOS, visionOS  
+**Platforms:** iOS, iPadOS, macOS, tvOS, visionOS  
 **Core Philosophy:** Offline-first after model setup, privacy-first, chat-first UX
 
 ---
@@ -60,11 +60,12 @@ Documents/
 
 ## 3. UI/UX Strategy: Chat-First 💬
 
-- **Chat tab:** Recorder card + live transcript bubbles.
-- **Header:** Active chat title supports inline rename.
-- **Setting tab:** Hours credit, language focus, context keywords, iCloud toggle, and purchase restore.
-- **Library tab:** Session switcher.
-- **New Chat tab role:** Action tab to create a fresh session and return to Chat.
+- **iOS/iPadOS/visionOS/tvOS shell:** `TabView` with `Chat`, `Library`, `Setting`, plus a dedicated `New Chat` action tab.
+- **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Chat`, `Library`, `Setting`) and a top toolbar segmented picker + action `ControlGroup`.
+- **Chat workspace:** Recorder card + live transcript bubbles.
+- **Header/session actions:** Active chat rename + export actions.
+- **Settings workspace:** Hours credit, language focus, context keywords, iCloud toggle, purchase restore, and macOS microphone access controls.
+- **Library workspace:** Session switcher.
 - **Export:** Separate sheet; Notepad-style formatting is export-only.
 
 ---
@@ -130,11 +131,14 @@ Documents/
 - Credit deduction per chunk and iCloud-sync hook point are included.
 
 #### App Orchestration + UI Wiring
-- `AppBackend.swift`, `ContentView.swift`, `ChatTabView.swift`
+- `AppBackend.swift`, `ContentView.swift`, `ChatTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and language settings.
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Chat bubble tap plays that chunk from `session_full.m4a`.
+- macOS uses dedicated workspace views (sidebar/detail) rather than iOS-style tabs.
+- macOS settings includes live microphone permission status and actions (`Allow Microphone Access` / `Open System Settings`).
+- macOS recorder error state provides direct deep-link action to System Settings when microphone permission is denied.
 - Chat bubble long-press opens actions for:
   - manual text edit
   - speaker rename (syncs all rows with same `speakerID`)
@@ -152,6 +156,13 @@ Documents/
   - prompt building from selected languages
   - model fallback behavior
   - speaker profile stability across chunks
+
+#### macOS Permission + Signing Notes
+- `NSMicrophoneUsageDescription` is required for runtime microphone prompts.
+- macOS target uses sandboxed signing with explicit audio-input entitlement (`com.apple.security.device.audio-input`).
+- If permission was previously denied or missing in System Settings list, reset and re-request:
+  - `tccutil reset Microphone cropbinary.layca`
+  - relaunch app and press record once.
 
 ### Next
 

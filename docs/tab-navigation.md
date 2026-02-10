@@ -1,10 +1,10 @@
-# Tab Navigation
+# Navigation Model
 
 ## Objective
-- Use native Apple tab-bar patterns for top-level navigation.
+- Use native Apple navigation patterns per platform.
 - Keep core app experience chat-first and simple.
 
-## Current Native Layout
+## iOS-family Layout (iOS, iPadOS, visionOS, tvOS)
 - Group 1 tabs:
   - `Chat`
   - `Setting`
@@ -16,7 +16,7 @@
 - Header action:
   - `Export` icon (top-right on Chat, next to active chat badge)
 
-## Implementation Detail
+## iOS-family Implementation Detail
 - SwiftUI `TabView` with `TabSection` groups.
 - `New Chat` uses a special tab role to stay in a separate group.
 - Tabs are split into dedicated files:
@@ -25,9 +25,25 @@
   - `LibraryTabView.swift`
 - `ContentView.swift` keeps shared state and dispatches actions across tab components.
 
-## UX Notes
+## macOS Layout
+- App shell uses `NavigationSplitView` instead of bottom tabs.
+- Sidebar has workspace sections:
+  - `Chat`
+  - `Library`
+  - `Setting`
+- Sidebar also contains:
+  - recent chats list
+  - `New Chat` action button
+- Toolbar uses:
+  - segmented workspace picker (`Chat`, `Library`, `Setting`)
+  - action `ControlGroup` (`Rename`, `Export`, `New Chat`)
+- Chat detail view is split:
+  - left pane: session summary + recorder controls
+  - right pane: transcript list
+
+## Cross-platform UX Notes
 - `New Chat` acts like an action tab:
-  - Tapping creates a new chat/session.
+  - Triggering it creates a new chat/session.
   - App returns focus to `Chat`.
 - `Library` acts as session switcher:
   - Shows available chat sessions.
@@ -37,10 +53,14 @@
   - Language focus
   - Context keywords (for Whisper prompt context)
   - iCloud sync + restore purchases
+- macOS `Setting` additionally includes:
+  - microphone permission status
+  - request permission action
+  - System Settings deep-link action
 - Active chat badge supports inline rename:
   - Tap chat title in the Chat header to edit.
   - Saved title appears in both Chat and Library.
-- `Export` opens from the Chat header icon instead of a tab.
+- `Export` opens from a header/toolbar action instead of a tab.
 - On some compact layouts, iOS may prioritize icon rendering for special-role grouped tabs even if text is provided.
 - Transcript bubbles are tappable for per-chunk playback only when recording is stopped.
 - Long-press on a transcript bubble opens actions for:
@@ -52,6 +72,7 @@
 - Chunk transcription runs automatically in queue order and keeps original spoken language (auto-detect + no translation).
 
 ## Why This Design
-- Native behavior and consistency with Apple navigation guidance.
-- Keeps frequent actions (`Chat`, `Setting`, `Library`) stable.
+- Preserves native behavior and consistency with Apple navigation guidance on each platform.
+- Keeps frequent actions (`Chat`, `Setting`, `Library`) stable across device families.
+- Gives macOS a desktop-native workspace model instead of an iOS-style tab chrome.
 - Keeps `New Chat` visually distinct as a quick action.

@@ -4,10 +4,11 @@
 - Offline-first meeting assistant with local-first processing.
 - Dynamic configuration from Settings (language focus + context keywords + sync toggle).
 - Reactive chat UI driven by backend state.
+- Native platform-adapted shell: tab-driven on iOS-family and split-view workspace on macOS.
 
 ## High-Level Modules
 1. App Shell + State Coordinator (`ContentView`)
-2. Tab Components (`ChatTabView`, `SettingTabView`, `LibraryTabView`)
+2. Platform UI Components (`ChatTabView`, `SettingTabView`, `LibraryTabView`, `Views/Mac/MacProWorkspaceView`)
 3. Backend Orchestrator (`AppBackend`)
 4. Preflight Layer (`PreflightService`)
 5. Live Pipeline (`LiveSessionPipeline`)
@@ -33,6 +34,9 @@
 ## Current Implementation Note
 - Pipeline internals are production-style backend services.
 - Audio capture uses real `AVAudioEngine`.
+- App shell is platform-aware:
+  - iOS-family uses `TabView`/`TabSection`.
+  - macOS uses `NavigationSplitView` with sidebar workspace sections and dedicated detail views.
 - VAD uses native CoreML Silero (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) with bundled offline model.
 - Speaker branch uses native CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) with bundled offline model.
 - Whisper transcription runs automatically through a serial queue (`whisper.cpp`) as chunks are produced.
@@ -43,6 +47,8 @@
 - CoreML encoder is opt-in via `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`; default startup path uses non-CoreML encoder flow for reliability.
 - Chunk slicing defaults are tuned longer to reduce over-splitting: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
 - Chunk playback is gated off while recording to avoid audio-session conflicts.
+- macOS recording permission uses `AVAudioApplication.requestRecordPermission`.
+- macOS target is sandboxed and requires audio-input entitlement to appear in Privacy > Microphone settings.
 
 ## Folder Layout (Current)
 ```text
@@ -51,6 +57,10 @@ xcode/layca/
 ├── ChatTabView.swift
 ├── SettingTabView.swift
 ├── LibraryTabView.swift
+├── View+PlatformCompatibility.swift
+├── Views/
+│   └── Mac/
+│       └── MacProWorkspaceView.swift
 ├── AppBackend.swift
 ├── Libraries/
 │   ├── SileroVADCoreMLService.swift

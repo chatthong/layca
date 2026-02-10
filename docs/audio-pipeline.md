@@ -4,6 +4,8 @@
 - Recorder is represented by a live stream track in backend.
 - Waveform values are emitted every ~`0.05s` for UI visualizer updates.
 - Session audio file path is reserved as `Documents/Sessions/{UUID}/session_full.m4a`.
+- Recording start is gated by runtime microphone permission.
+- On macOS, app signing must include sandbox audio-input entitlement for TCC registration.
 
 ## Live Processing Pipeline
 

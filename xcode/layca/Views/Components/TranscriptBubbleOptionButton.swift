@@ -197,13 +197,9 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
                 .padding(16)
             }
             .navigationTitle("Edit Transcript")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbarBackground(
-                Color(red: 0.08, green: 0.11, blue: 0.17),
-                for: .navigationBar
+            .laycaApplyNavigationBarChrome(
+                backgroundColor: Color(red: 0.08, green: 0.11, blue: 0.17)
             )
-            .toolbarBackground(.visible, for: .navigationBar)
             .tint(.white)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -260,13 +256,9 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
                 .padding(16)
             }
             .navigationTitle("Edit Speaker Name")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbarBackground(
-                Color(red: 0.08, green: 0.11, blue: 0.17),
-                for: .navigationBar
+            .laycaApplyNavigationBarChrome(
+                backgroundColor: Color(red: 0.08, green: 0.11, blue: 0.17)
             )
-            .toolbarBackground(.visible, for: .navigationBar)
             .tint(.white)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

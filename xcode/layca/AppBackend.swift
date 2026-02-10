@@ -102,9 +102,7 @@ final class MasterAudioRecorder: NSObject, AVAudioRecorderDelegate {
             throw MasterRecorderError.microphonePermissionDenied
         }
 
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
-        try session.setActive(true, options: .notifyOthersOnDeactivation)
+        try activateAudioSessionForRecordingIfSupported()
 
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
@@ -139,12 +137,20 @@ final class MasterAudioRecorder: NSObject, AVAudioRecorderDelegate {
         recorder?.stop()
         recorder = nil
 
-        let session = AVAudioSession.sharedInstance()
-        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+        deactivateAudioSessionIfSupported()
     }
 
     private func requestPermission() async -> Bool {
         await withCheckedContinuation { continuation in
+#if os(macOS)
+            if #available(macOS 14.0, *) {
+                AVAudioApplication.requestRecordPermission { granted in
+                    continuation.resume(returning: granted)
+                }
+            } else {
+                continuation.resume(returning: true)
+            }
+#else
             if #available(iOS 17.0, tvOS 17.0, visionOS 1.0, macCatalyst 17.0, *) {
                 AVAudioApplication.requestRecordPermission { granted in
                     continuation.resume(returning: granted)
@@ -154,7 +160,23 @@ final class MasterAudioRecorder: NSObject, AVAudioRecorderDelegate {
                     continuation.resume(returning: granted)
                 }
             }
+#endif
         }
+    }
+
+    private func activateAudioSessionForRecordingIfSupported() throws {
+#if !os(macOS)
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
+        try session.setActive(true, options: .notifyOthersOnDeactivation)
+#endif
+    }
+
+    private func deactivateAudioSessionIfSupported() {
+#if !os(macOS)
+        let session = AVAudioSession.sharedInstance()
+        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+#endif
     }
 }
 
@@ -1378,9 +1400,7 @@ final class AppBackend: ObservableObject {
         stopChunkPlayback()
 
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [.duckOthers])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            try configureAudioSessionForChunkPlaybackIfSupported()
 
             let player = try AVAudioPlayer(contentsOf: audioURL)
             let start = max(0, min(startOffset, player.duration))
@@ -1599,7 +1619,21 @@ final class AppBackend: ObservableObject {
         chunkStopTask = nil
         chunkPlayer?.stop()
         chunkPlayer = nil
+        deactivateChunkPlaybackAudioSessionIfSupported()
+    }
+
+    private func configureAudioSessionForChunkPlaybackIfSupported() throws {
+#if !os(macOS)
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playback, mode: .default, options: [.duckOthers])
+        try session.setActive(true, options: .notifyOthersOnDeactivation)
+#endif
+    }
+
+    private func deactivateChunkPlaybackAudioSessionIfSupported() {
+#if !os(macOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+#endif
     }
 
     private func consume(stream: AsyncStream<PipelineEvent>, sessionID: UUID) -> Task<Void, Never> {

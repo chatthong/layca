@@ -67,13 +67,20 @@
 - Removed Settings model change/download card and model-select callbacks.
 - Added context-keywords input for Whisper `initial_prompt`.
 
+### macOS Native Workspace + Permission Hardening
+- `ContentView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `layca.xcodeproj/project.pbxproj`
+- Added dedicated macOS workspace shell using `NavigationSplitView`, sidebar sections, and toolbar control group actions.
+- Added desktop-optimized chat/library/settings views for macOS (instead of reusing iOS tab layout).
+- Added microphone permission status and actions in macOS settings plus deep-link action from recorder denial state.
+- Added macOS codesigning entitlement wiring for sandbox audio input so app appears in Privacy > Microphone after permission request.
+
 ### Tests Added
 - `AppBackendTests.swift`
 - Covered:
   - prompt building from selected languages
   - credit exhaustion guard behavior
   - speaker profile stability across chunks
-- Build validated on iOS simulator.
+- Build validated on iOS simulator and macOS destination.
 
 ## Next Priority
 1. Add playback/transcription UX polish (playing-state indicator, active-bubble highlight, transcription-progress state).

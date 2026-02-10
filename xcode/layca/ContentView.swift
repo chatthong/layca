@@ -12,60 +12,49 @@ struct ContentView: View {
     @State private var isExportPresented = false
 
     @State private var selectedTab: AppTab = .chat
+    @State private var isMacRenameSheetPresented = false
+    @State private var macRenameDraft = ""
 
     var body: some View {
+        rootLayout
+        .sheet(isPresented: $isExportPresented) {
+            exportScreen
+        }
+#if os(macOS)
+        .sheet(isPresented: $isMacRenameSheetPresented) {
+            macRenameSheet
+        }
+#endif
+    }
+}
+
+#Preview {
+    ContentView()
+}
+
+private extension ContentView {
+    @ViewBuilder
+    var rootLayout: some View {
+#if os(macOS)
+        macDesktopLayout
+#else
+        mobileTabLayout
+#endif
+    }
+
+    var mobileTabLayout: some View {
         TabView(selection: $selectedTab) {
             TabSection {
                 Tab("Chat", systemImage: "bubble.left.and.bubble.right.fill", value: AppTab.chat) {
-                    ChatTabView(
-                        isRecording: backend.isRecording,
-                        recordingTimeText: backend.recordingTimeText,
-                        waveformBars: backend.waveformBars,
-                        activeSessionTitle: backend.activeSessionTitle,
-                        activeSessionDateText: backend.activeSessionDateText,
-                        liveChatItems: backend.activeTranscriptRows,
-                        transcribingRowIDs: backend.transcribingRowIDs,
-                        isTranscriptionBusy: backend.isTranscriptionBusy,
-                        preflightMessage: backend.preflightStatusMessage,
-                        canPlayTranscriptChunks: !backend.isRecording,
-                        onRecordTap: backend.toggleRecording,
-                        onTranscriptTap: backend.playTranscriptChunk,
-                        onManualEditTranscript: backend.editTranscriptRow,
-                        onEditSpeakerName: backend.editSpeakerName,
-                        onChangeSpeaker: backend.changeSpeaker,
-                        onRetranscribeTranscript: backend.retranscribeTranscriptRow,
-                        onExportTap: { isExportPresented = true },
-                        onRenameSessionTitle: backend.renameActiveSessionTitle
-                    )
+                    chatScreen(showsTopToolbar: true)
                 }
 
                 Tab("Library", systemImage: "books.vertical.fill", value: AppTab.library) {
-                    LibraryTabView(
-                        sessions: backend.sessions,
-                        activeSessionID: backend.activeSessionID,
-                        onSelectSession: { session in
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
-                                backend.activateSession(session)
-                                selectedTab = .chat
-                            }
-                        }
-                    )
+                    libraryScreen
                 }
 
                 Tab("Setting", systemImage: "square.stack.3d.up", value: AppTab.setting) {
-                    SettingTabView(
-                        totalHours: backend.totalHours,
-                        usedHours: backend.usedHours,
-                        selectedLanguageCodes: selectedLanguageCodesBinding,
-                        languageSearchText: languageSearchTextBinding,
-                        focusContextKeywords: focusContextKeywordsBinding,
-                        filteredFocusLanguages: filteredFocusLanguages,
-                        isICloudSyncEnabled: iCloudSyncBinding,
-                        isRestoringPurchases: backend.isRestoringPurchases,
-                        restoreStatusMessage: backend.restoreStatusMessage,
-                        onToggleLanguage: backend.toggleLanguageFocus,
-                        onRestorePurchases: backend.restorePurchases
-                    )
+                    settingScreen
                 }
             }
 
@@ -78,34 +67,285 @@ struct ContentView: View {
             }
         }
         .tint(.black.opacity(0.88))
-        .toolbarBackground(.visible, for: .tabBar)
-        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+        .laycaApplyTabBarBackgroundStyle()
         .onChange(of: selectedTab) { _, newTab in
             if newTab == .newChat {
-                backend.startNewChat()
+                startNewChatAndReturnToChat()
+            }
+        }
+    }
+
+#if os(macOS)
+    var macDesktopLayout: some View {
+        NavigationSplitView {
+            MacWorkspaceSidebarView(
+                selectedSection: macSectionBinding,
+                sessions: backend.sessions,
+                activeSessionID: backend.activeSessionID,
+                onSelectSession: { session in
+                    backend.activateSession(session)
+                    selectedTab = .chat
+                },
+                onCreateSession: startNewChatAndReturnToChat
+            )
+            .navigationSplitViewColumnWidth(min: 230, ideal: 280, max: 360)
+        } detail: {
+            macDetailScreen
+        }
+        .navigationSplitViewStyle(.balanced)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Workspace", selection: macSectionBinding) {
+                    Text("Chat").tag(MacWorkspaceSection.chat)
+                    Text("Library").tag(MacWorkspaceSection.library)
+                    Text("Setting").tag(MacWorkspaceSection.setting)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 290)
+            }
+
+            ToolbarItemGroup(placement: .primaryAction) {
+                ControlGroup {
+                    Button {
+                        beginMacRename()
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+
+                    Button {
+                        isExportPresented = true
+                    } label: {
+                        Label("Export", systemImage: "square.and.arrow.up")
+                    }
+
+                    Button {
+                        startNewChatAndReturnToChat()
+                    } label: {
+                        Label("New Chat", systemImage: "plus.bubble")
+                    }
+                }
+                .controlSize(.regular)
+            }
+        }
+        .onAppear {
+            if selectedTab == .newChat {
                 selectedTab = .chat
             }
         }
-        .sheet(isPresented: $isExportPresented) {
-            exportScreen
+    }
+
+    @ViewBuilder
+    var macDetailScreen: some View {
+        switch macSection {
+        case .chat:
+            macChatScreen
+        case .library:
+            macLibraryScreen
+        case .setting:
+            macSettingScreen
         }
     }
-}
 
-#Preview {
-    ContentView()
-}
+    var macSection: MacWorkspaceSection {
+        switch selectedTab {
+        case .chat:
+            return .chat
+        case .library:
+            return .library
+        case .setting:
+            return .setting
+        case .newChat:
+            return .chat
+        }
+    }
 
-private extension ContentView {
+    var macSectionBinding: Binding<MacWorkspaceSection> {
+        Binding(
+            get: { macSection },
+            set: { section in
+                switch section {
+                case .chat:
+                    selectedTab = .chat
+                case .library:
+                    selectedTab = .library
+                case .setting:
+                    selectedTab = .setting
+                }
+            }
+        )
+    }
+
+    var macChatScreen: some View {
+        MacChatWorkspaceView(
+            isRecording: backend.isRecording,
+            recordingTimeText: backend.recordingTimeText,
+            waveformBars: backend.waveformBars,
+            activeSessionTitle: backend.activeSessionTitle,
+            activeSessionDateText: backend.activeSessionDateText,
+            liveChatItems: backend.activeTranscriptRows,
+            transcribingRowIDs: backend.transcribingRowIDs,
+            isTranscriptionBusy: backend.isTranscriptionBusy,
+            preflightMessage: backend.preflightStatusMessage,
+            canPlayTranscriptChunks: !backend.isRecording,
+            onRecordTap: backend.toggleRecording,
+            onTranscriptTap: backend.playTranscriptChunk,
+            onManualEditTranscript: backend.editTranscriptRow,
+            onEditSpeakerName: backend.editSpeakerName,
+            onChangeSpeaker: backend.changeSpeaker,
+            onRetranscribeTranscript: backend.retranscribeTranscriptRow,
+            onExportTap: { isExportPresented = true },
+            onRenameSessionTitle: beginMacRename
+        )
+    }
+
+    var macLibraryScreen: some View {
+        MacLibraryWorkspaceView(
+            sessions: backend.sessions,
+            activeSessionID: backend.activeSessionID,
+            onSelectSession: { session in
+                backend.activateSession(session)
+                selectedTab = .chat
+            }
+        )
+    }
+
+    var macSettingScreen: some View {
+        MacSettingsWorkspaceView(
+            totalHours: backend.totalHours,
+            usedHours: backend.usedHours,
+            selectedLanguageCodes: selectedLanguageCodesBinding,
+            languageSearchText: languageSearchTextBinding,
+            focusContextKeywords: focusContextKeywordsBinding,
+            filteredFocusLanguages: filteredFocusLanguages,
+            isICloudSyncEnabled: iCloudSyncBinding,
+            isRestoringPurchases: backend.isRestoringPurchases,
+            restoreStatusMessage: backend.restoreStatusMessage,
+            onToggleLanguage: backend.toggleLanguageFocus,
+            onRestorePurchases: backend.restorePurchases
+        )
+    }
+
+    var macRenameSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Rename Active Chat")
+                .font(.title3.weight(.semibold))
+            TextField("Chat name", text: $macRenameDraft)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    commitMacRename()
+                }
+
+            HStack {
+                Spacer()
+                Button("Cancel") {
+                    isMacRenameSheetPresented = false
+                }
+                Button("Save") {
+                    commitMacRename()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(macRenameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+#endif
+
+    func chatScreen(showsTopToolbar: Bool) -> some View {
+        ChatTabView(
+            isRecording: backend.isRecording,
+            recordingTimeText: backend.recordingTimeText,
+            waveformBars: backend.waveformBars,
+            activeSessionTitle: backend.activeSessionTitle,
+            activeSessionDateText: backend.activeSessionDateText,
+            liveChatItems: backend.activeTranscriptRows,
+            transcribingRowIDs: backend.transcribingRowIDs,
+            isTranscriptionBusy: backend.isTranscriptionBusy,
+            preflightMessage: backend.preflightStatusMessage,
+            canPlayTranscriptChunks: !backend.isRecording,
+            onRecordTap: backend.toggleRecording,
+            onTranscriptTap: backend.playTranscriptChunk,
+            onManualEditTranscript: backend.editTranscriptRow,
+            onEditSpeakerName: backend.editSpeakerName,
+            onChangeSpeaker: backend.changeSpeaker,
+            onRetranscribeTranscript: backend.retranscribeTranscriptRow,
+            onExportTap: { isExportPresented = true },
+            onRenameSessionTitle: backend.renameActiveSessionTitle,
+            showsTopToolbar: showsTopToolbar
+        )
+    }
+
+    var libraryScreen: some View {
+        LibraryTabView(
+            sessions: backend.sessions,
+            activeSessionID: backend.activeSessionID,
+            onSelectSession: { session in
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                    backend.activateSession(session)
+                    selectedTab = .chat
+                }
+            }
+        )
+    }
+
+    var settingScreen: some View {
+        SettingTabView(
+            totalHours: backend.totalHours,
+            usedHours: backend.usedHours,
+            selectedLanguageCodes: selectedLanguageCodesBinding,
+            languageSearchText: languageSearchTextBinding,
+            focusContextKeywords: focusContextKeywordsBinding,
+            filteredFocusLanguages: filteredFocusLanguages,
+            isICloudSyncEnabled: iCloudSyncBinding,
+            isRestoringPurchases: backend.isRestoringPurchases,
+            restoreStatusMessage: backend.restoreStatusMessage,
+            onToggleLanguage: backend.toggleLanguageFocus,
+            onRestorePurchases: backend.restorePurchases
+        )
+    }
+
+    func startNewChatAndReturnToChat() {
+        backend.startNewChat()
+        selectedTab = .chat
+    }
+
+#if os(macOS)
+    func beginMacRename() {
+        macRenameDraft = backend.activeSessionTitle
+        isMacRenameSheetPresented = true
+    }
+
+    func commitMacRename() {
+        let trimmed = macRenameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+        backend.renameActiveSessionTitle(trimmed)
+        isMacRenameSheetPresented = false
+    }
+#endif
+
     var exportScreen: some View {
-        NavigationStack {
+        let gradientColors: [Color]
+#if os(macOS)
+        gradientColors = [
+            Color(red: 0.91, green: 0.94, blue: 0.98),
+            Color(red: 0.95, green: 0.96, blue: 0.99),
+            Color(red: 0.90, green: 0.94, blue: 0.96)
+        ]
+#else
+        gradientColors = [
+            Color(red: 0.88, green: 0.95, blue: 1.0),
+            Color(red: 0.95, green: 0.98, blue: 1.0),
+            Color(red: 0.90, green: 0.96, blue: 0.95)
+        ]
+#endif
+
+        return NavigationStack {
             ZStack {
                 LinearGradient(
-                    colors: [
-                        Color(red: 0.88, green: 0.95, blue: 1.0),
-                        Color(red: 0.95, green: 0.98, blue: 1.0),
-                        Color(red: 0.90, green: 0.96, blue: 0.95)
-                    ],
+                    colors: gradientColors,
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -135,7 +375,7 @@ private extension ContentView {
                 .liquidCard()
                 .padding(.horizontal, 18)
             }
-            .navigationBarHidden(true)
+            .laycaHideNavigationBar()
         }
     }
 
@@ -322,23 +562,40 @@ struct LiquidBackdrop: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(Color.cyan.opacity(0.35))
-                .frame(width: 260, height: 260)
-                .blur(radius: 36)
+                .fill(Color.cyan.opacity(laycaDesktopOptimized ? 0.18 : 0.35))
+                .frame(
+                    width: laycaDesktopOptimized ? 340 : 260,
+                    height: laycaDesktopOptimized ? 340 : 260
+                )
+                .blur(radius: laycaDesktopOptimized ? 54 : 36)
                 .offset(x: -110, y: -250)
 
             Circle()
-                .fill(Color.blue.opacity(0.25))
-                .frame(width: 220, height: 220)
-                .blur(radius: 40)
+                .fill(Color.blue.opacity(laycaDesktopOptimized ? 0.16 : 0.25))
+                .frame(
+                    width: laycaDesktopOptimized ? 280 : 220,
+                    height: laycaDesktopOptimized ? 280 : 220
+                )
+                .blur(radius: laycaDesktopOptimized ? 56 : 40)
                 .offset(x: 130, y: -160)
 
             Circle()
-                .fill(Color.mint.opacity(0.28))
-                .frame(width: 280, height: 280)
-                .blur(radius: 55)
+                .fill(Color.mint.opacity(laycaDesktopOptimized ? 0.16 : 0.28))
+                .frame(
+                    width: laycaDesktopOptimized ? 360 : 280,
+                    height: laycaDesktopOptimized ? 360 : 280
+                )
+                .blur(radius: laycaDesktopOptimized ? 68 : 55)
                 .offset(x: 120, y: 380)
         }
+    }
+
+    private var laycaDesktopOptimized: Bool {
+#if os(macOS)
+        true
+#else
+        false
+#endif
     }
 }
 
@@ -474,6 +731,31 @@ struct TranscriptRow: Identifiable {
 
 extension View {
     func liquidCard() -> some View {
+#if os(macOS)
+        self
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.regularMaterial)
+                    .allowsHitTesting(false)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(.white.opacity(0.36), lineWidth: 0.7)
+                    .allowsHitTesting(false)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.16), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .allowsHitTesting(false)
+            )
+            .shadow(color: .black.opacity(0.10), radius: 10, x: 0, y: 6)
+#else
         self
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -497,9 +779,20 @@ extension View {
                     .allowsHitTesting(false)
             )
             .shadow(color: .black.opacity(0.08), radius: 20, x: 0, y: 14)
+#endif
     }
 
     func glassCapsuleStyle() -> some View {
+#if os(macOS)
+        self
+            .background(.regularMaterial, in: Capsule(style: .continuous))
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(.white.opacity(0.36), lineWidth: 0.75)
+                    .allowsHitTesting(false)
+            )
+            .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 3)
+#else
         self
             .background(.ultraThinMaterial, in: Capsule(style: .continuous))
             .overlay(
@@ -508,5 +801,6 @@ extension View {
                     .allowsHitTesting(false)
             )
             .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 6)
+#endif
     }
 }

@@ -7,6 +7,7 @@
 ## Scope
 - Applies only to transcript export output.
 - Does not add an in-app Notepad tab or editor mode.
+- Available from chat header/toolbar export action on both iOS-family and macOS layouts.
 
 ## Style Presets
 1. `notepadMinutes`

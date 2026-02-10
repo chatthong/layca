@@ -5,6 +5,7 @@
 ### `toggleRecording() -> Void`
 - Starts or stops recording flow.
 - On start, runs pre-flight before pipeline starts.
+- Surfaces microphone permission denial as user-visible preflight message.
 
 ### `startNewChat() -> Void`
 - Creates a new session and switches active session.
@@ -65,6 +66,17 @@
 
 ### `stop() -> Void`
 - Stops pipeline and ends stream.
+
+## Platform Permission Behavior
+
+### macOS
+- Recording permission is requested through `AVAudioApplication.requestRecordPermission`.
+- If denied, backend throws `MasterRecorderError.microphonePermissionDenied`.
+- UI is expected to offer a deep-link action to Privacy & Security > Microphone.
+
+### iOS-family
+- Uses `AVAudioApplication.requestRecordPermission` on modern runtimes.
+- Falls back to `AVAudioSession.requestRecordPermission` on older runtimes.
 
 ## SileroVADCoreMLService
 

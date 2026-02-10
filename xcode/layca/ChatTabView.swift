@@ -20,34 +20,68 @@ struct ChatTabView: View {
     let onRetranscribeTranscript: (TranscriptRow) -> Void
     let onExportTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
+    let showsTopToolbar: Bool
 
     @State private var titleDraft = ""
     @State private var isEditingTitle = false
     @FocusState private var isTitleFieldFocused: Bool
 
+    init(
+        isRecording: Bool,
+        recordingTimeText: String,
+        waveformBars: [Double],
+        activeSessionTitle: String,
+        activeSessionDateText: String,
+        liveChatItems: [TranscriptRow],
+        transcribingRowIDs: Set<UUID>,
+        isTranscriptionBusy: Bool,
+        preflightMessage: String?,
+        canPlayTranscriptChunks: Bool,
+        onRecordTap: @escaping () -> Void,
+        onTranscriptTap: @escaping (TranscriptRow) -> Void,
+        onManualEditTranscript: @escaping (TranscriptRow, String) -> Void,
+        onEditSpeakerName: @escaping (TranscriptRow, String) -> Void,
+        onChangeSpeaker: @escaping (TranscriptRow, String) -> Void,
+        onRetranscribeTranscript: @escaping (TranscriptRow) -> Void,
+        onExportTap: @escaping () -> Void,
+        onRenameSessionTitle: @escaping (String) -> Void,
+        showsTopToolbar: Bool = true
+    ) {
+        self.isRecording = isRecording
+        self.recordingTimeText = recordingTimeText
+        self.waveformBars = waveformBars
+        self.activeSessionTitle = activeSessionTitle
+        self.activeSessionDateText = activeSessionDateText
+        self.liveChatItems = liveChatItems
+        self.transcribingRowIDs = transcribingRowIDs
+        self.isTranscriptionBusy = isTranscriptionBusy
+        self.preflightMessage = preflightMessage
+        self.canPlayTranscriptChunks = canPlayTranscriptChunks
+        self.onRecordTap = onRecordTap
+        self.onTranscriptTap = onTranscriptTap
+        self.onManualEditTranscript = onManualEditTranscript
+        self.onEditSpeakerName = onEditSpeakerName
+        self.onChangeSpeaker = onChangeSpeaker
+        self.onRetranscribeTranscript = onRetranscribeTranscript
+        self.onExportTap = onExportTap
+        self.onRenameSessionTitle = onRenameSessionTitle
+        self.showsTopToolbar = showsTopToolbar
+    }
+
     var body: some View {
         NavigationStack {
-            ZStack {
-                backgroundGradient
-                LiquidBackdrop()
-                    .ignoresSafeArea()
-
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 18) {
-                        recorderCard
-                        liveSegmentsCard
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 10)
-                    .padding(.bottom, 30)
+            Group {
+                if showsTopToolbar {
+                    chatContent
+                        .safeAreaInset(edge: .top, spacing: 0) {
+                            topToolbar
+                                .padding(.horizontal, 18)
+                                .padding(.top, 6)
+                                .padding(.bottom, 10)
+                        }
+                } else {
+                    chatContent
                 }
-            }
-            .navigationBarHidden(true)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                topToolbar
-                    .padding(.horizontal, 18)
-                    .padding(.top, 6)
-                    .padding(.bottom, 10)
             }
         }
         .onAppear {
@@ -60,13 +94,43 @@ struct ChatTabView: View {
         }
     }
 
+    private var chatContent: some View {
+        ZStack {
+            backgroundGradient
+            LiquidBackdrop()
+                .ignoresSafeArea()
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 18) {
+                    recorderCard
+                    liveSegmentsCard
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
+                .padding(.bottom, 30)
+            }
+        }
+        .laycaHideNavigationBar()
+    }
+
     private var backgroundGradient: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.88, green: 0.95, blue: 1.0),
-                Color(red: 0.95, green: 0.98, blue: 1.0),
-                Color(red: 0.90, green: 0.96, blue: 0.95)
-            ],
+        let colors: [Color]
+#if os(macOS)
+        colors = [
+            Color(red: 0.91, green: 0.94, blue: 0.98),
+            Color(red: 0.95, green: 0.96, blue: 0.99),
+            Color(red: 0.90, green: 0.94, blue: 0.96)
+        ]
+#else
+        colors = [
+            Color(red: 0.88, green: 0.95, blue: 1.0),
+            Color(red: 0.95, green: 0.98, blue: 1.0),
+            Color(red: 0.90, green: 0.96, blue: 0.95)
+        ]
+#endif
+
+        return LinearGradient(
+            colors: colors,
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -242,6 +306,18 @@ struct ChatTabView: View {
     }
 
     private var recorderActionControl: some View {
+#if os(macOS)
+        Button {
+            onRecordTap()
+        } label: {
+            Label(isRecording ? "Pause" : "Record", systemImage: isRecording ? "pause.fill" : "record.circle.fill")
+                .font(.headline.weight(.semibold))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(isRecording ? Color.red.opacity(0.86) : Color.blue.opacity(0.80))
+        .controlSize(.large)
+#else
         Button {
             onRecordTap()
         } label: {
@@ -273,6 +349,7 @@ struct ChatTabView: View {
         }
         .buttonStyle(.plain)
         .contentShape(Capsule(style: .continuous))
+#endif
     }
 
     private var liveSegmentsCard: some View {

@@ -3,6 +3,7 @@
 ## Current Runtime Persistence
 - **Primary runtime store:** in-memory actor store (`SessionStore`) for session/transcript state.
 - **Primary durable store:** filesystem (`Documents/Sessions`).
+- **Platform note:** same session layout is used on iOS-family and macOS within each platform's app sandbox container.
 - **Bundled runtime asset:** CoreML VAD model directory in app bundle (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) for offline startup.
 - **Bundled runtime asset:** CoreML speaker model directory in app bundle (`wespeaker_v2.mlmodelc`) for offline startup.
 - **Bundled runtime asset:** Whisper decoder model file in app bundle (`ggml-large-v3-turbo.bin`) for offline startup.
