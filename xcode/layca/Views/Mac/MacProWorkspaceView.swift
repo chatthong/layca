@@ -40,7 +40,14 @@ struct MacWorkspaceSidebarView: View {
     let sessions: [ChatSession]
     let activeSessionID: UUID?
     let onSelectSession: (ChatSession) -> Void
+    let onRenameSession: (ChatSession, String) -> Void
+    let onDeleteSession: (ChatSession) -> Void
+    let shareTextForSession: (ChatSession) -> String
     let onCreateSession: () -> Void
+
+    @State private var sessionPendingRename: ChatSession?
+    @State private var renameDraft = ""
+    @State private var sessionPendingDelete: ChatSession?
 
     var body: some View {
         List {
@@ -50,6 +57,43 @@ struct MacWorkspaceSidebarView: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("Layca")
+        .alert("Rename Chat", isPresented: renameAlertBinding, actions: {
+            TextField("Chat name", text: $renameDraft)
+            Button("Cancel", role: .cancel) {
+                sessionPendingRename = nil
+                renameDraft = ""
+            }
+            Button("Save") {
+                if let session = sessionPendingRename {
+                    onRenameSession(session, renameDraft)
+                }
+                sessionPendingRename = nil
+                renameDraft = ""
+            }
+        }, message: {
+            Text("Enter a new name for this chat.")
+        })
+        .confirmationDialog(
+            "Delete this chat?",
+            isPresented: deleteDialogBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Chat", role: .destructive) {
+                if let session = sessionPendingDelete {
+                    onDeleteSession(session)
+                }
+                sessionPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                sessionPendingDelete = nil
+            }
+        } message: {
+            if let sessionPendingDelete {
+                Text("This will permanently remove \"\(sessionPendingDelete.title)\" and its recording.")
+            } else {
+                Text("This will permanently remove this chat and its recording.")
+            }
+        }
     }
 
     private var workspaceSection: some View {
@@ -104,6 +148,30 @@ struct MacWorkspaceSidebarView: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.vertical, 3)
+                    .contextMenu {
+                        Section("Chat Actions") {
+                            Button {
+                                sessionPendingRename = session
+                                renameDraft = session.title
+                            } label: {
+                                Label("Rename", systemImage: "pencil")
+                            }
+
+                            ShareLink(
+                                item: shareTextForSession(session),
+                                subject: Text(session.title),
+                                message: Text("Shared from Layca")
+                            ) {
+                                Label("Share this chat", systemImage: "square.and.arrow.up")
+                            }
+
+                            Button(role: .destructive) {
+                                sessionPendingDelete = session
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -118,6 +186,29 @@ struct MacWorkspaceSidebarView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
         }
+    }
+
+    private var renameAlertBinding: Binding<Bool> {
+        Binding(
+            get: { sessionPendingRename != nil },
+            set: { isPresented in
+                if !isPresented {
+                    sessionPendingRename = nil
+                    renameDraft = ""
+                }
+            }
+        )
+    }
+
+    private var deleteDialogBinding: Binding<Bool> {
+        Binding(
+            get: { sessionPendingDelete != nil },
+            set: { isPresented in
+                if !isPresented {
+                    sessionPendingDelete = nil
+                }
+            }
+        )
     }
 }
 
@@ -386,6 +477,13 @@ struct MacLibraryWorkspaceView: View {
     let sessions: [ChatSession]
     let activeSessionID: UUID?
     let onSelectSession: (ChatSession) -> Void
+    let onRenameSession: (ChatSession, String) -> Void
+    let onDeleteSession: (ChatSession) -> Void
+    let shareTextForSession: (ChatSession) -> String
+
+    @State private var sessionPendingRename: ChatSession?
+    @State private var renameDraft = ""
+    @State private var sessionPendingDelete: ChatSession?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -442,6 +540,30 @@ struct MacLibraryWorkspaceView: View {
                         }
                         .buttonStyle(.plain)
                         .padding(.vertical, 2)
+                        .contextMenu {
+                            Section("Chat Actions") {
+                                Button {
+                                    sessionPendingRename = session
+                                    renameDraft = session.title
+                                } label: {
+                                    Label("Rename", systemImage: "pencil")
+                                }
+
+                                ShareLink(
+                                    item: shareTextForSession(session),
+                                    subject: Text(session.title),
+                                    message: Text("Shared from Layca")
+                                ) {
+                                    Label("Share this chat", systemImage: "square.and.arrow.up")
+                                }
+
+                                Button(role: .destructive) {
+                                    sessionPendingDelete = session
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
                     }
                 }
                 .listStyle(.inset)
@@ -457,6 +579,66 @@ struct MacLibraryWorkspaceView: View {
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
+        )
+        .alert("Rename Chat", isPresented: renameAlertBinding, actions: {
+            TextField("Chat name", text: $renameDraft)
+            Button("Cancel", role: .cancel) {
+                sessionPendingRename = nil
+                renameDraft = ""
+            }
+            Button("Save") {
+                if let session = sessionPendingRename {
+                    onRenameSession(session, renameDraft)
+                }
+                sessionPendingRename = nil
+                renameDraft = ""
+            }
+        }, message: {
+            Text("Enter a new name for this chat.")
+        })
+        .confirmationDialog(
+            "Delete this chat?",
+            isPresented: deleteDialogBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Chat", role: .destructive) {
+                if let session = sessionPendingDelete {
+                    onDeleteSession(session)
+                }
+                sessionPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                sessionPendingDelete = nil
+            }
+        } message: {
+            if let sessionPendingDelete {
+                Text("This will permanently remove \"\(sessionPendingDelete.title)\" and its recording.")
+            } else {
+                Text("This will permanently remove this chat and its recording.")
+            }
+        }
+    }
+
+    private var renameAlertBinding: Binding<Bool> {
+        Binding(
+            get: { sessionPendingRename != nil },
+            set: { isPresented in
+                if !isPresented {
+                    sessionPendingRename = nil
+                    renameDraft = ""
+                }
+            }
+        )
+    }
+
+    private var deleteDialogBinding: Binding<Bool> {
+        Binding(
+            get: { sessionPendingDelete != nil },
+            set: { isPresented in
+                if !isPresented {
+                    sessionPendingDelete = nil
+                }
+            }
         )
     }
 }

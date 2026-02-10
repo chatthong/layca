@@ -185,4 +185,92 @@ struct AppBackendTests {
         #expect(updatedFirst.speaker == targetRow.speaker)
         #expect(updatedFirst.avatarSymbol == targetRow.avatarSymbol)
     }
+
+    @Test func sessionStoreReloadsPersistedSessionDataFromDisk() async throws {
+        let fileManager = FileManager.default
+        let tempSessionsURL = fileManager.temporaryDirectory
+            .appendingPathComponent("layca-tests-sessions-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: tempSessionsURL) }
+
+        let rowID = UUID()
+        let createdSessionID: UUID
+
+        do {
+            let writerStore = SessionStore(fileManager: fileManager, sessionsDirectory: tempSessionsURL)
+            createdSessionID = try await writerStore.createSession(title: "Chat 99", languageHints: ["en", "th"])
+
+            let event = PipelineTranscriptEvent(
+                id: rowID,
+                sessionID: createdSessionID,
+                speakerID: "speaker-main",
+                languageID: "EN",
+                text: "Persisted transcript line",
+                startOffset: 12.5,
+                endOffset: 14.0,
+                samples: [0.1, 0.2],
+                sampleRate: 16_000
+            )
+            await writerStore.appendTranscript(sessionID: createdSessionID, event: event)
+            await writerStore.renameSession(sessionID: createdSessionID, title: "Weekly Sync")
+        }
+
+        let readerStore = SessionStore(fileManager: fileManager, sessionsDirectory: tempSessionsURL)
+        let snapshots = await readerStore.snapshotSessions()
+        let restored = try #require(snapshots.first(where: { $0.id == createdSessionID }))
+        let rows = await readerStore.transcriptRows(for: createdSessionID)
+        let firstRow = try #require(rows.first)
+
+        #expect(restored.title == "Weekly Sync")
+        #expect(rows.count == 1)
+        #expect(firstRow.id == rowID)
+        #expect(firstRow.text == "Persisted transcript line")
+        #expect(firstRow.speaker == "speaker-main")
+        #expect(firstRow.startOffset == 12.5)
+        #expect(firstRow.endOffset == 14.0)
+    }
+
+    @Test func appSettingsStorePersistsRoundTrip() async throws {
+        let suiteName = "layca-tests-settings-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = AppSettingsStore(userDefaults: defaults, storageKey: "layca.tests.settings")
+        let expected = PersistedAppSettings(
+            schemaVersion: 1,
+            selectedLanguageCodes: ["en", "th"],
+            languageSearchText: "thai",
+            focusContextKeywords: "project atlas",
+            totalHours: 40,
+            usedHours: 7.5,
+            isICloudSyncEnabled: true,
+            activeSessionID: UUID(),
+            chatCounter: 12
+        )
+
+        store.save(expected)
+        let loaded = try #require(store.load())
+
+        #expect(loaded == expected)
+    }
+
+    @Test func deletingSessionRemovesItFromStoreAndDisk() async throws {
+        let fileManager = FileManager.default
+        let tempSessionsURL = fileManager.temporaryDirectory
+            .appendingPathComponent("layca-tests-sessions-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: tempSessionsURL) }
+
+        let store = SessionStore(fileManager: fileManager, sessionsDirectory: tempSessionsURL)
+        let sessionID = try await store.createSession(title: "Chat Delete", languageHints: ["en"])
+        let sessionDirectory = tempSessionsURL.appendingPathComponent(sessionID.uuidString, isDirectory: true)
+
+        #expect(fileManager.fileExists(atPath: sessionDirectory.path))
+
+        await store.deleteSession(sessionID: sessionID)
+        let snapshots = await store.snapshotSessions()
+
+        #expect(snapshots.isEmpty)
+        #expect(fileManager.fileExists(atPath: sessionDirectory.path) == false)
+    }
 }

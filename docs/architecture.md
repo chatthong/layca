@@ -4,6 +4,7 @@
 - Offline-first meeting assistant with local-first processing.
 - Dynamic configuration from Settings (language focus + context keywords + sync toggle).
 - Reactive chat UI driven by backend state.
+- Persist chats/settings across app relaunch on iOS-family and macOS.
 - Native platform-adapted shell: tab-driven on iOS-family and split-view workspace on macOS.
 
 ## High-Level Modules
@@ -13,23 +14,25 @@
 4. Preflight Layer (`PreflightService`)
 5. Live Pipeline (`LiveSessionPipeline`)
 6. Storage Layer (`SessionStore` + filesystem)
-7. Playback + Export layer (implemented/partial)
+7. Settings Persistence (`AppSettingsStore` + `UserDefaults`)
+8. Playback + Export layer (implemented/partial)
 
 ## Runtime Flow
-1. User taps record.
-2. Pre-flight checks credit and prepares language prompt.
-3. Live pipeline runs concurrent tracks:
+1. App boots and reloads persisted settings + session snapshots.
+2. User taps record.
+3. Pre-flight checks credit and prepares language prompt.
+4. Live pipeline runs concurrent tracks:
    - waveform/input stream
    - CoreML Silero VAD chunk slicing
    - CoreML speaker diarization branch
    - merge branch
-4. Transcript item is appended to store.
-5. Chat list updates reactively.
-6. Chunk duration deducts credit.
-7. Transcript rows persist chunk `startOffset`/`endOffset`.
-8. Optional sync hook runs.
-9. Backend queues chunk transcription automatically (one-by-one) and updates bubbles reactively.
-10. User can tap a transcript bubble to play that chunk when recording is stopped.
+5. Transcript item is appended to store.
+6. Chat list updates reactively.
+7. Chunk duration deducts credit.
+8. Transcript rows persist chunk `startOffset`/`endOffset`.
+9. Optional sync hook runs.
+10. Backend queues chunk transcription automatically (one-by-one) and updates bubbles reactively.
+11. User can tap a transcript bubble to play that chunk when recording is stopped.
 
 ## Current Implementation Note
 - Pipeline internals are production-style backend services.
@@ -48,6 +51,10 @@
 - CoreML encoder is opt-in via `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`; default startup path uses non-CoreML encoder flow for reliability.
 - Chunk slicing defaults are tuned longer to reduce over-splitting: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
 - Chunk playback is gated off while recording to avoid audio-session conflicts.
+- `SessionStore` persists both `session.json` (session metadata) and `segments.json` (row snapshots) and reloads from disk at startup.
+- `AppSettingsStore` persists user setting values and active-chat selection through relaunch.
+- Library session rows (iOS-family + macOS library workspace) support `Rename`, `Share this chat`, `Delete` via context menu.
+- macOS sidebar `Recent Chats` rows support the same context menu action group.
 - macOS recording permission uses `AVAudioApplication.requestRecordPermission`.
 - macOS target is sandboxed and requires audio-input entitlement to appear in Privacy > Microphone settings.
 

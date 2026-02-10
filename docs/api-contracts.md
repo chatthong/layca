@@ -16,6 +16,17 @@
 ### `renameActiveSessionTitle(_ newTitle: String) -> Void`
 - Renames active session title (used by Chat header inline rename).
 
+### `renameSession(_ session: ChatSession, to newTitle: String) -> Void`
+- Renames a specific session (used by Library/sidebar context-menu rename actions).
+
+### `deleteSession(_ session: ChatSession) -> Void`
+- Deletes a specific session from runtime store and filesystem storage.
+- If deleted session is active, backend clears active selection and reloads next available session.
+
+### `shareText(for session: ChatSession) -> String`
+- Returns share-ready plain text for a session (title/date + transcript rows).
+- Used by Library/sidebar `Share this chat` action.
+
 ### `toggleLanguageFocus(_ code: String) -> Void`
 - Adds/removes language code used to build pre-flight prompt.
 
@@ -123,10 +134,10 @@
 ## SessionStore
 
 ### `createSession(title:languageHints:) throws -> UUID`
-- Creates session files and runtime row.
+- Creates session files (`session_full.m4a`, `segments.json`, `session.json`) and runtime row.
 
 ### `appendTranscript(sessionID:event:) -> Void`
-- Appends transcript row, updates duration, persists `segments.json` snapshot.
+- Appends transcript row, updates duration, persists `segments.json` + `session.json` snapshots.
 - Persists `startOffset`/`endOffset` on each row for chunk playback.
 - Stores deferred placeholder text until queued automatic transcription updates row text.
 
@@ -139,8 +150,20 @@
 ### `changeTranscriptRowSpeaker(sessionID:rowID:targetSpeakerID:) -> Void`
 - Rebinds a row to another existing speaker profile in the same session.
 
+### `deleteSession(sessionID:) -> Void`
+- Deletes session from in-memory store and removes `Documents/Sessions/{UUID}` directory.
+
 ### `snapshotSessions() -> [ChatSession]`
-- Returns session list for Library UI.
+- Returns session list for Library/sidebar UI.
+- Ensures store is hydrated from disk before snapshotting.
 
 ### `transcriptRows(for:) -> [TranscriptRow]`
 - Returns rows for active chat timeline.
+
+## AppSettingsStore
+
+### `load() -> PersistedAppSettings?`
+- Loads persisted app/UI setting snapshot from `UserDefaults`.
+
+### `save(_ settings: PersistedAppSettings) -> Void`
+- Persists app/UI setting snapshot to `UserDefaults`.

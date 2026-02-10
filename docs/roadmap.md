@@ -20,10 +20,26 @@
 
 ### Storage, Update, and Sync Hooks
 - `App/AppBackend.swift`
-- `SessionStore` creates `session_full.m4a` + `segments.json`.
+- `SessionStore` creates `session_full.m4a` + `segments.json` + `session.json`.
 - Appends transcript rows, persists segment snapshots, and keeps stable speaker profile (color/avatar) per session.
 - Credit deduction per chunk and iCloud-sync hook point are included.
 - Added row-level transcript text update path for automatic queued Whisper inference results.
+
+### Durable Session + Settings Persistence Across Relaunch
+- `App/AppBackend.swift`
+- Extended `SessionStore` persistence:
+  - adds per-session metadata file `session.json`
+  - persists row snapshots with stable row IDs and bubble metadata
+  - reloads all sessions from `Documents/Sessions/{UUID}` on app startup
+  - supports session delete by removing in-memory row + filesystem folder
+- Added `AppSettingsStore` (`UserDefaults`) for persisted:
+  - language focus
+  - language search text
+  - context keywords
+  - credit counters
+  - iCloud toggle
+  - active session ID
+  - chat counter
 
 ### App Orchestration + UI Wiring
 - `App/AppBackend.swift`, `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`
@@ -74,12 +90,24 @@
 - Added microphone permission status and actions in macOS settings plus deep-link action from recorder denial state.
 - Added macOS codesigning entitlement wiring for sandbox audio input so app appears in Privacy > Microphone after permission request.
 
+### Library + Sidebar Chat Actions
+- `Features/Library/LibraryTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `App/ContentView.swift`, `App/AppBackend.swift`
+- Added long-press/right-click action group on Library chat rows:
+  - `Rename`
+  - `Share this chat`
+  - `Delete`
+- Added same action group on macOS `Recent Chats` sidebar rows.
+- Rename/delete actions are wired to persisted `SessionStore` state; share action exports plain-text transcript payload.
+
 ### Tests Added
 - `AppBackendTests.swift`
 - Covered:
   - prompt building from selected languages
   - credit exhaustion guard behavior
   - speaker profile stability across chunks
+  - persisted session reload from disk
+  - app settings store round-trip
+  - session delete removes store row + session folder
 - Build validated on iOS simulator and macOS destination.
 
 ### Project Structure Cleanup

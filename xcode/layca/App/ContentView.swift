@@ -86,6 +86,9 @@ private extension ContentView {
                     backend.activateSession(session)
                     selectedTab = .chat
                 },
+                onRenameSession: backend.renameSession,
+                onDeleteSession: backend.deleteSession,
+                shareTextForSession: backend.shareText,
                 onCreateSession: startNewChatAndReturnToChat
             )
             .navigationSplitViewColumnWidth(min: 230, ideal: 280, max: 360)
@@ -205,7 +208,10 @@ private extension ContentView {
             onSelectSession: { session in
                 backend.activateSession(session)
                 selectedTab = .chat
-            }
+            },
+            onRenameSession: backend.renameSession,
+            onDeleteSession: backend.deleteSession,
+            shareTextForSession: backend.shareText
         )
     }
 
@@ -285,7 +291,10 @@ private extension ContentView {
                     backend.activateSession(session)
                     selectedTab = .chat
                 }
-            }
+            },
+            onRenameSession: backend.renameSession,
+            onDeleteSession: backend.deleteSession,
+            shareTextForSession: backend.shareText
         )
     }
 

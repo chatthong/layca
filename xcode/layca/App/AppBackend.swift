@@ -791,21 +791,62 @@ actor SessionStore {
         var languageHints: [String]
         var audioFilePath: String
         var segmentsFilePath: String
+        var metadataFilePath: String
         var durationSeconds: Double
         var status: SessionStatus
     }
 
-    private struct SpeakerProfile {
+    private struct SpeakerProfile: Codable {
         let label: String
         let colorHex: String
         let avatarSymbol: String
     }
 
+    private struct SessionMetadataSnapshot: Codable {
+        let schemaVersion: Int
+        let id: UUID
+        let title: String
+        let createdAt: Date
+        let languageHints: [String]
+        let audioFileName: String
+        let segmentsFileName: String
+        let durationSeconds: Double
+        let status: String
+        let speakers: [String: SpeakerProfile]
+    }
+
+    private struct SegmentSnapshot: Codable {
+        let id: UUID?
+        let speakerID: String
+        let speaker: String
+        let text: String
+        let time: String?
+        let language: String
+        let avatarSymbol: String?
+        let avatarColorHex: String?
+        let startOffset: Double?
+        let endOffset: Double?
+    }
+
+    private struct LegacySegmentSnapshot: Codable {
+        let speakerID: String
+        let speaker: String
+        let text: String
+        let time: String
+        let language: String
+        let startOffset: Double?
+        let endOffset: Double?
+    }
+
     private let fileManager: FileManager
     private let sessionsDirectory: URL
+    private let metadataFileName = "session.json"
+    private let audioFileName = "session_full.m4a"
+    private let segmentsFileName = "segments.json"
 
     private var sessions: [UUID: StoredSession] = [:]
     private var sessionOrder: [UUID] = []
+    private var hasLoadedFromDisk = false
 
     init(fileManager: FileManager = .default, sessionsDirectory: URL? = nil) {
         self.fileManager = fileManager
@@ -820,18 +861,24 @@ actor SessionStore {
     }
 
     func createSession(title: String, languageHints: [String]) throws -> UUID {
+        prepareIfNeeded()
         let id = UUID()
         let sessionDirectory = sessionsDirectory.appendingPathComponent(id.uuidString, isDirectory: true)
         try fileManager.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
 
-        let audioFileURL = sessionDirectory.appendingPathComponent("session_full.m4a")
+        let audioFileURL = sessionDirectory.appendingPathComponent(audioFileName)
         if !fileManager.fileExists(atPath: audioFileURL.path) {
             fileManager.createFile(atPath: audioFileURL.path, contents: Data())
         }
 
-        let segmentsURL = sessionDirectory.appendingPathComponent("segments.json")
+        let segmentsURL = sessionDirectory.appendingPathComponent(segmentsFileName)
         if !fileManager.fileExists(atPath: segmentsURL.path) {
             fileManager.createFile(atPath: segmentsURL.path, contents: Data("[]".utf8))
+        }
+
+        let metadataURL = sessionDirectory.appendingPathComponent(metadataFileName)
+        if !fileManager.fileExists(atPath: metadataURL.path) {
+            fileManager.createFile(atPath: metadataURL.path, contents: Data())
         }
 
         let session = StoredSession(
@@ -843,45 +890,70 @@ actor SessionStore {
             languageHints: languageHints,
             audioFilePath: audioFileURL.path,
             segmentsFilePath: segmentsURL.path,
+            metadataFilePath: metadataURL.path,
             durationSeconds: 0,
             status: .ready
         )
 
         sessions[id] = session
         sessionOrder.insert(id, at: 0)
+        persistSessionMetadata(for: session)
+        persistSegmentsSnapshot(for: session)
 
         return id
     }
 
     func setSessionStatus(_ status: SessionStatus, for sessionID: UUID) {
+        prepareIfNeeded()
         guard var session = sessions[sessionID] else {
             return
         }
 
         session.status = status
         sessions[sessionID] = session
+        persistSessionMetadata(for: session)
     }
 
     func updateSessionConfig(sessionID: UUID, languageHints: [String]) {
+        prepareIfNeeded()
         guard var session = sessions[sessionID] else {
             return
         }
 
         session.languageHints = languageHints
         sessions[sessionID] = session
+        persistSessionMetadata(for: session)
     }
 
     func renameSession(sessionID: UUID, title: String) {
+        prepareIfNeeded()
         guard var session = sessions[sessionID] else {
             return
         }
 
         session.title = title
         sessions[sessionID] = session
+        persistSessionMetadata(for: session)
+    }
+
+    func deleteSession(sessionID: UUID) {
+        prepareIfNeeded()
+        guard let session = sessions[sessionID] else {
+            return
+        }
+
+        sessions.removeValue(forKey: sessionID)
+        sessionOrder.removeAll { $0 == sessionID }
+
+        let sessionDirectory = URL(fileURLWithPath: session.audioFilePath).deletingLastPathComponent()
+        if fileManager.fileExists(atPath: sessionDirectory.path) {
+            try? fileManager.removeItem(at: sessionDirectory)
+        }
     }
 
     func snapshotSessions() -> [ChatSession] {
-        sessionOrder.compactMap { id in
+        prepareIfNeeded()
+        return sessionOrder.compactMap { id in
             guard let session = sessions[id] else {
                 return nil
             }
@@ -896,10 +968,12 @@ actor SessionStore {
     }
 
     func transcriptRows(for sessionID: UUID) -> [TranscriptRow] {
-        sessions[sessionID]?.rows ?? []
+        prepareIfNeeded()
+        return sessions[sessionID]?.rows ?? []
     }
 
     func audioFileURL(for sessionID: UUID) -> URL? {
+        prepareIfNeeded()
         guard let path = sessions[sessionID]?.audioFilePath else {
             return nil
         }
@@ -907,6 +981,7 @@ actor SessionStore {
     }
 
     func appendTranscript(sessionID: UUID, event: PipelineTranscriptEvent) {
+        prepareIfNeeded()
         guard var session = sessions[sessionID] else {
             return
         }
@@ -930,6 +1005,7 @@ actor SessionStore {
         session.rows.append(row)
         session.durationSeconds = max(session.durationSeconds, event.endOffset)
         persistSegmentsSnapshot(for: session)
+        persistSessionMetadata(for: session)
         sessions[sessionID] = session
     }
 
@@ -939,6 +1015,7 @@ actor SessionStore {
         text: String,
         language: String
     ) {
+        prepareIfNeeded()
         guard var session = sessions[sessionID] else {
             return
         }
@@ -970,6 +1047,7 @@ actor SessionStore {
         speakerID: String,
         newName: String
     ) {
+        prepareIfNeeded()
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, var session = sessions[sessionID] else {
             return
@@ -1002,6 +1080,7 @@ actor SessionStore {
         }
 
         persistSegmentsSnapshot(for: session)
+        persistSessionMetadata(for: session)
         sessions[sessionID] = session
     }
 
@@ -1010,6 +1089,7 @@ actor SessionStore {
         rowID: UUID,
         targetSpeakerID: String
     ) {
+        prepareIfNeeded()
         guard var session = sessions[sessionID] else {
             return
         }
@@ -1040,27 +1120,31 @@ actor SessionStore {
         )
 
         persistSegmentsSnapshot(for: session)
+        persistSessionMetadata(for: session)
         sessions[sessionID] = session
     }
 
-    private func speakerProfile(for speakerID: String, in table: inout [String: SpeakerProfile]) -> SpeakerProfile {
+    private func speakerProfile(
+        for speakerID: String,
+        in table: inout [String: SpeakerProfile],
+        preferredName: String? = nil,
+        preferredColorHex: String? = nil,
+        preferredAvatarSymbol: String? = nil
+    ) -> SpeakerProfile {
         if let profile = table[speakerID] {
             return profile
         }
 
-        let colors = ["#F97316", "#0EA5E9", "#10B981", "#EF4444", "#6366F1", "#D97706", "#14B8A6"]
-        let symbols = [
-            "person.fill",
-            "person.2.fill",
-            "person.crop.circle.fill.badge.checkmark",
-            "person.crop.circle.badge.clock",
-            "person.crop.circle.badge.questionmark"
-        ]
+        let resolvedName: String = {
+            let trimmed = preferredName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? speakerID : trimmed
+        }()
+        let colorHex = Self.normalizeHexColor(preferredColorHex)
+            ?? Self.speakerColorPalette[Self.stableIndex(for: speakerID, modulo: Self.speakerColorPalette.count)]
+        let symbol = preferredAvatarSymbol
+            ?? Self.speakerAvatarSymbols[Self.stableIndex(for: speakerID, modulo: Self.speakerAvatarSymbols.count)]
 
-        let colorHex = colors.randomElement() ?? "#0EA5E9"
-        let symbol = symbols.randomElement() ?? "person.fill"
-
-        let profile = SpeakerProfile(label: speakerID, colorHex: colorHex, avatarSymbol: symbol)
+        let profile = SpeakerProfile(label: resolvedName, colorHex: colorHex, avatarSymbol: symbol)
         table[speakerID] = profile
         return profile
     }
@@ -1073,35 +1157,335 @@ actor SessionStore {
         return String(format: "%02d:%02d:%02d", hours, minutes, secs)
     }
 
-    private func persistSegmentsSnapshot(for session: StoredSession) {
-        struct SegmentSnapshot: Codable {
-            let speakerID: String
-            let speaker: String
-            let text: String
-            let time: String
-            let language: String
-            let startOffset: Double?
-            let endOffset: Double?
+    private func prepareIfNeeded() {
+        guard !hasLoadedFromDisk else {
+            return
+        }
+        loadSessionsFromDisk()
+        hasLoadedFromDisk = true
+    }
+
+    private func loadSessionsFromDisk() {
+        sessions.removeAll()
+        sessionOrder.removeAll()
+
+        guard let directoryURLs = try? fileManager.contentsOfDirectory(
+            at: sessionsDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
         }
 
+        for directoryURL in directoryURLs {
+            guard let values = try? directoryURL.resourceValues(forKeys: [.isDirectoryKey]),
+                  values.isDirectory == true,
+                  let sessionID = UUID(uuidString: directoryURL.lastPathComponent)
+            else {
+                continue
+            }
+
+            guard let session = loadSession(at: directoryURL, sessionID: sessionID) else {
+                continue
+            }
+
+            sessions[sessionID] = session
+            sessionOrder.append(sessionID)
+        }
+
+        sessionOrder.sort { lhs, rhs in
+            guard let left = sessions[lhs], let right = sessions[rhs] else {
+                return false
+            }
+            return left.createdAt > right.createdAt
+        }
+    }
+
+    private func loadSession(at sessionDirectory: URL, sessionID: UUID) -> StoredSession? {
+        let audioURL = sessionDirectory.appendingPathComponent(audioFileName)
+        if !fileManager.fileExists(atPath: audioURL.path) {
+            fileManager.createFile(atPath: audioURL.path, contents: Data())
+        }
+
+        let segmentsURL = sessionDirectory.appendingPathComponent(segmentsFileName)
+        if !fileManager.fileExists(atPath: segmentsURL.path) {
+            fileManager.createFile(atPath: segmentsURL.path, contents: Data("[]".utf8))
+        }
+
+        let metadataURL = sessionDirectory.appendingPathComponent(metadataFileName)
+        let metadata = loadSessionMetadata(at: metadataURL)
+
+        var speakers = metadata?.speakers ?? [:]
+        let rows = loadSegments(at: segmentsURL, speakers: &speakers)
+
+        if speakers.isEmpty {
+            for row in rows {
+                _ = speakerProfile(
+                    for: row.speakerID,
+                    in: &speakers,
+                    preferredName: row.speaker,
+                    preferredAvatarSymbol: row.avatarSymbol
+                )
+            }
+        }
+
+        let fallbackCreatedAt = (try? sessionDirectory.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date()
+        let session = StoredSession(
+            id: sessionID,
+            title: metadata?.title ?? "Chat",
+            createdAt: metadata?.createdAt ?? fallbackCreatedAt,
+            rows: rows,
+            speakers: speakers,
+            languageHints: metadata?.languageHints ?? [],
+            audioFilePath: audioURL.path,
+            segmentsFilePath: segmentsURL.path,
+            metadataFilePath: metadataURL.path,
+            durationSeconds: metadata?.durationSeconds ?? rows.compactMap(\.endOffset).max() ?? 0,
+            status: metadata?.status ?? .ready
+        )
+
+        // Keep old files forward-compatible by rewriting with current schema.
+        persistSessionMetadata(for: session)
+        persistSegmentsSnapshot(for: session)
+
+        return session
+    }
+
+    private func loadSessionMetadata(at url: URL) -> (
+        title: String,
+        createdAt: Date,
+        languageHints: [String],
+        durationSeconds: Double,
+        status: SessionStatus,
+        speakers: [String: SpeakerProfile]
+    )? {
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else {
+            return nil
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let snapshot = try? decoder.decode(SessionMetadataSnapshot.self, from: data) else {
+            return nil
+        }
+
+        return (
+            title: snapshot.title,
+            createdAt: snapshot.createdAt,
+            languageHints: snapshot.languageHints,
+            durationSeconds: snapshot.durationSeconds,
+            status: SessionStatus(rawValue: snapshot.status) ?? .ready,
+            speakers: snapshot.speakers
+        )
+    }
+
+    private func loadSegments(at url: URL, speakers: inout [String: SpeakerProfile]) -> [TranscriptRow] {
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else {
+            return []
+        }
+
+        let decoder = JSONDecoder()
+
+        if let snapshots = try? decoder.decode([SegmentSnapshot].self, from: data) {
+            return snapshots.map { snapshot in
+                let resolvedSpeakerID = snapshot.speakerID.isEmpty ? snapshot.speaker : snapshot.speakerID
+                let profile = speakerProfile(
+                    for: resolvedSpeakerID,
+                    in: &speakers,
+                    preferredName: snapshot.speaker,
+                    preferredColorHex: snapshot.avatarColorHex,
+                    preferredAvatarSymbol: snapshot.avatarSymbol
+                )
+                let timestamp = Self.resolvedTimestamp(
+                    snapshot.time,
+                    startOffset: snapshot.startOffset
+                )
+
+                return TranscriptRow(
+                    id: snapshot.id ?? UUID(),
+                    speakerID: resolvedSpeakerID,
+                    speaker: profile.label,
+                    text: snapshot.text,
+                    time: timestamp,
+                    language: snapshot.language.isEmpty ? "AUTO" : snapshot.language,
+                    avatarSymbol: profile.avatarSymbol,
+                    avatarPalette: [Color(hex: profile.colorHex), .white.opacity(0.72)],
+                    startOffset: snapshot.startOffset,
+                    endOffset: snapshot.endOffset
+                )
+            }
+        }
+
+        if let snapshots = try? decoder.decode([LegacySegmentSnapshot].self, from: data) {
+            return snapshots.map { snapshot in
+                let resolvedSpeakerID = snapshot.speakerID.isEmpty ? snapshot.speaker : snapshot.speakerID
+                let profile = speakerProfile(
+                    for: resolvedSpeakerID,
+                    in: &speakers,
+                    preferredName: snapshot.speaker
+                )
+
+                return TranscriptRow(
+                    id: UUID(),
+                    speakerID: resolvedSpeakerID,
+                    speaker: profile.label,
+                    text: snapshot.text,
+                    time: Self.resolvedTimestamp(snapshot.time, startOffset: snapshot.startOffset),
+                    language: snapshot.language.isEmpty ? "AUTO" : snapshot.language,
+                    avatarSymbol: profile.avatarSymbol,
+                    avatarPalette: [Color(hex: profile.colorHex), .white.opacity(0.72)],
+                    startOffset: snapshot.startOffset,
+                    endOffset: snapshot.endOffset
+                )
+            }
+        }
+
+        return []
+    }
+
+    private static func resolvedTimestamp(_ candidate: String?, startOffset: Double?) -> String {
+        let trimmed = candidate?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        return formatTimestamp(seconds: startOffset ?? 0)
+    }
+
+    private static let speakerColorPalette = [
+        "#F97316", "#0EA5E9", "#10B981", "#EF4444", "#6366F1", "#D97706", "#14B8A6"
+    ]
+    private static let speakerAvatarSymbols = [
+        "person.fill",
+        "person.2.fill",
+        "person.crop.circle.fill.badge.checkmark",
+        "person.crop.circle.badge.clock",
+        "person.crop.circle.badge.questionmark"
+    ]
+
+    private static func stableIndex(for value: String, modulo: Int) -> Int {
+        guard modulo > 0 else {
+            return 0
+        }
+
+        var hash: UInt64 = 1_469_598_103_934_665_603
+        for scalar in value.unicodeScalars {
+            hash ^= UInt64(scalar.value)
+            hash &*= 1_099_511_628_211
+        }
+        return Int(hash % UInt64(modulo))
+    }
+
+    private static func normalizeHexColor(_ candidate: String?) -> String? {
+        guard let candidate else {
+            return nil
+        }
+
+        let normalized = candidate
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "#", with: "")
+            .uppercased()
+
+        let allowedScalars = CharacterSet(charactersIn: "0123456789ABCDEF")
+        guard normalized.count == 6,
+              normalized.unicodeScalars.allSatisfy({ allowedScalars.contains($0) })
+        else {
+            return nil
+        }
+
+        return "#\(normalized)"
+    }
+
+    private func persistSessionMetadata(for session: StoredSession) {
+        let metadata = SessionMetadataSnapshot(
+            schemaVersion: 1,
+            id: session.id,
+            title: session.title,
+            createdAt: session.createdAt,
+            languageHints: session.languageHints,
+            audioFileName: URL(fileURLWithPath: session.audioFilePath).lastPathComponent,
+            segmentsFileName: URL(fileURLWithPath: session.segmentsFilePath).lastPathComponent,
+            durationSeconds: session.durationSeconds,
+            status: session.status.rawValue,
+            speakers: session.speakers
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(metadata) else {
+            return
+        }
+
+        let url = URL(fileURLWithPath: session.metadataFilePath)
+        try? data.write(to: url, options: .atomic)
+    }
+
+    private func persistSegmentsSnapshot(for session: StoredSession) {
         let snapshots = session.rows.map { row in
             SegmentSnapshot(
+                id: row.id,
                 speakerID: row.speakerID,
                 speaker: row.speaker,
                 text: row.text,
                 time: row.time,
                 language: row.language,
+                avatarSymbol: row.avatarSymbol,
+                avatarColorHex: session.speakers[row.speakerID]?.colorHex,
                 startOffset: row.startOffset,
                 endOffset: row.endOffset
             )
         }
 
-        guard let data = try? JSONEncoder().encode(snapshots) else {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(snapshots) else {
             return
         }
 
         let url = URL(fileURLWithPath: session.segmentsFilePath)
         try? data.write(to: url, options: .atomic)
+    }
+}
+
+struct PersistedAppSettings: Codable, Equatable {
+    var schemaVersion: Int
+    var selectedLanguageCodes: [String]
+    var languageSearchText: String
+    var focusContextKeywords: String
+    var totalHours: Double
+    var usedHours: Double
+    var isICloudSyncEnabled: Bool
+    var activeSessionID: UUID?
+    var chatCounter: Int
+}
+
+struct AppSettingsStore {
+    private let userDefaults: UserDefaults
+    private let storageKey: String
+
+    init(
+        userDefaults: UserDefaults = .standard,
+        storageKey: String = "layca.app-settings.v1"
+    ) {
+        self.userDefaults = userDefaults
+        self.storageKey = storageKey
+    }
+
+    func load() -> PersistedAppSettings? {
+        guard let data = userDefaults.data(forKey: storageKey) else {
+            return nil
+        }
+
+        let decoder = JSONDecoder()
+        return try? decoder.decode(PersistedAppSettings.self, from: data)
+    }
+
+    func save(_ settings: PersistedAppSettings) {
+        let encoder = JSONEncoder()
+        guard let data = try? encoder.encode(settings) else {
+            return
+        }
+        userDefaults.set(data, forKey: storageKey)
     }
 }
 
@@ -1118,19 +1502,33 @@ final class AppBackend: ObservableObject {
     @Published var recordingSeconds: Double = 0
     @Published var waveformBars: [Double] = Array(repeating: 0.03, count: 9)
 
-    @Published var selectedLanguageCodes: Set<String> = ["en", "th"]
-    @Published var languageSearchText = ""
-    @Published var focusContextKeywords = ""
+    @Published var selectedLanguageCodes: Set<String> = ["en", "th"] {
+        didSet { persistSettingsIfNeeded() }
+    }
+    @Published var languageSearchText = "" {
+        didSet { persistSettingsIfNeeded() }
+    }
+    @Published var focusContextKeywords = "" {
+        didSet { persistSettingsIfNeeded() }
+    }
 
-    @Published var totalHours: Double = 40
-    @Published var usedHours: Double = 12.6
+    @Published var totalHours: Double = 40 {
+        didSet { persistSettingsIfNeeded() }
+    }
+    @Published var usedHours: Double = 12.6 {
+        didSet { persistSettingsIfNeeded() }
+    }
 
-    @Published var isICloudSyncEnabled = true
+    @Published var isICloudSyncEnabled = true {
+        didSet { persistSettingsIfNeeded() }
+    }
     @Published var isRestoringPurchases = false
     @Published var restoreStatusMessage: String?
 
     @Published var sessions: [ChatSession] = []
-    @Published var activeSessionID: UUID?
+    @Published var activeSessionID: UUID? {
+        didSet { persistSettingsIfNeeded() }
+    }
     @Published var activeTranscriptRows: [TranscriptRow] = []
     @Published var transcribingRowIDs: Set<UUID> = []
     @Published var isTranscriptionBusy = false
@@ -1140,6 +1538,7 @@ final class AppBackend: ObservableObject {
     private let preflightService = PreflightService()
     private let pipeline = LiveSessionPipeline()
     private let sessionStore = SessionStore()
+    private let settingsStore: AppSettingsStore
     private let masterRecorder = MasterAudioRecorder()
     private let whisperTranscriber = WhisperGGMLCoreMLService()
 
@@ -1151,8 +1550,17 @@ final class AppBackend: ObservableObject {
     private var queuedChunkTranscriptions: [QueuedChunkTranscription] = []
     private var queuedTranscriptionTask: Task<Void, Never>?
     private var chatCounter = 0
+    private var isHydratingPersistedState = false
 
     init() {
+        self.settingsStore = AppSettingsStore()
+        Task {
+            await bootstrap()
+        }
+    }
+
+    init(settingsStore: AppSettingsStore) {
+        self.settingsStore = settingsStore
         Task {
             await bootstrap()
         }
@@ -1175,7 +1583,17 @@ final class AppBackend: ObservableObject {
     }
 
     func bootstrap() async {
-        await createNewSessionIfNeeded()
+        loadPersistedSettings()
+        await refreshSessionsFromStore()
+
+        let inferredCounter = inferChatCounter(from: sessions)
+        chatCounter = max(chatCounter, inferredCounter, sessions.count)
+
+        if sessions.isEmpty {
+            await createSessionAndActivate()
+        }
+
+        persistSettingsIfNeeded()
     }
 
     func toggleLanguageFocus(_ code: String) {
@@ -1225,6 +1643,54 @@ final class AppBackend: ObservableObject {
             await sessionStore.renameSession(sessionID: activeSessionID, title: trimmed)
             await refreshSessionsFromStore()
         }
+    }
+
+    func renameSession(_ session: ChatSession, to newTitle: String) {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+
+        Task {
+            await sessionStore.renameSession(sessionID: session.id, title: trimmed)
+            await refreshSessionsFromStore()
+        }
+    }
+
+    func deleteSession(_ session: ChatSession) {
+        Task {
+            if isRecording, activeSessionID == session.id {
+                await stopRecording()
+            }
+
+            await sessionStore.deleteSession(sessionID: session.id)
+            if activeSessionID == session.id {
+                activeSessionID = nil
+            }
+            await refreshSessionsFromStore()
+        }
+    }
+
+    func shareText(for session: ChatSession) -> String {
+        let header = [
+            session.title,
+            "Created: \(session.formattedDate)",
+            ""
+        ]
+        .joined(separator: "\n")
+
+        let transcriptBody: String
+        if session.rows.isEmpty {
+            transcriptBody = "No transcript rows in this chat yet."
+        } else {
+            transcriptBody = session.rows
+                .map { row in
+                    "[\(row.time)] \(row.speaker) (\(row.language))\n\(row.text)"
+                }
+                .joined(separator: "\n\n")
+        }
+
+        return "\(header)\(transcriptBody)"
     }
 
     func toggleRecording() {
@@ -1687,14 +2153,9 @@ final class AppBackend: ObservableObject {
         }
     }
 
-    private func createNewSessionIfNeeded() async {
-        if sessions.isEmpty {
-            await createSessionAndActivate()
-        }
-    }
-
     private func createSessionAndActivate() async {
         chatCounter += 1
+        persistSettingsIfNeeded()
 
         if let id = try? await sessionStore.createSession(
             title: "Chat \(chatCounter)",
@@ -1709,7 +2170,11 @@ final class AppBackend: ObservableObject {
         let snapshots = await sessionStore.snapshotSessions()
         sessions = snapshots
 
-        if activeSessionID == nil {
+        let hasActiveSession = activeSessionID.map { currentID in
+            snapshots.contains(where: { $0.id == currentID })
+        } ?? false
+
+        if !hasActiveSession {
             activeSessionID = snapshots.first?.id
         }
 
@@ -1718,6 +2183,60 @@ final class AppBackend: ObservableObject {
         } else {
             activeTranscriptRows = []
         }
+    }
+
+    private func loadPersistedSettings() {
+        guard let persisted = settingsStore.load() else {
+            return
+        }
+
+        isHydratingPersistedState = true
+        selectedLanguageCodes = Set(persisted.selectedLanguageCodes.map { $0.lowercased() })
+        languageSearchText = persisted.languageSearchText
+        focusContextKeywords = persisted.focusContextKeywords
+
+        if persisted.totalHours > 0 {
+            totalHours = persisted.totalHours
+        }
+        usedHours = min(max(persisted.usedHours, 0), totalHours)
+        isICloudSyncEnabled = persisted.isICloudSyncEnabled
+        activeSessionID = persisted.activeSessionID
+        chatCounter = max(persisted.chatCounter, 0)
+        isHydratingPersistedState = false
+    }
+
+    private func persistSettingsIfNeeded() {
+        guard !isHydratingPersistedState else {
+            return
+        }
+
+        let snapshot = PersistedAppSettings(
+            schemaVersion: 1,
+            selectedLanguageCodes: selectedLanguageCodes.map { $0.lowercased() }.sorted(),
+            languageSearchText: languageSearchText,
+            focusContextKeywords: focusContextKeywords,
+            totalHours: totalHours,
+            usedHours: usedHours,
+            isICloudSyncEnabled: isICloudSyncEnabled,
+            activeSessionID: activeSessionID,
+            chatCounter: max(chatCounter, 0)
+        )
+        settingsStore.save(snapshot)
+    }
+
+    private func inferChatCounter(from sessions: [ChatSession]) -> Int {
+        let inferredFromTitles = sessions.compactMap { session -> Int? in
+            let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.lowercased().hasPrefix("chat ") else {
+                return nil
+            }
+
+            let numberText = trimmed.dropFirst(5).trimmingCharacters(in: .whitespacesAndNewlines)
+            return Int(numberText)
+        }
+        .max() ?? 0
+
+        return max(inferredFromTitles, sessions.count)
     }
 
     private static func compactWaveform(from source: [Double], bars: Int) -> [Double] {

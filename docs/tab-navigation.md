@@ -34,6 +34,10 @@
 - Sidebar also contains:
   - recent chats list
   - `New Chat` action button
+- Sidebar recent-chat rows support context menu actions:
+  - `Rename`
+  - `Share this chat`
+  - `Delete`
 - Toolbar uses:
   - segmented workspace picker (`Chat`, `Library`, `Setting`)
   - action `ControlGroup` (`Rename`, `Export`, `New Chat`)
@@ -48,6 +52,10 @@
 - `Library` acts as session switcher:
   - Shows available chat sessions.
   - Tapping a session loads it and switches to `Chat`.
+  - Long-press/right-click on a session row opens:
+    - `Rename`
+    - `Share this chat`
+    - `Delete`
 - `Setting` currently contains:
   - Hours credit
   - Language focus
@@ -60,6 +68,7 @@
 - Active chat badge supports inline rename:
   - Tap chat title in the Chat header to edit.
   - Saved title appears in both Chat and Library.
+- Renaming from Library/sidebar context menu updates the same persisted session title used by Chat header.
 - `Export` opens from a header/toolbar action instead of a tab.
 - On some compact layouts, iOS may prioritize icon rendering for special-role grouped tabs even if text is provided.
 - Transcript bubbles are tappable for per-chunk playback only when recording is stopped.

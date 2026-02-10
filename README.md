@@ -46,7 +46,8 @@
 
 ### C. Data Layer
 
-- **Current runtime persistence:** actor-based `SessionStore` + filesystem.
+- **Current runtime persistence:** actor-based `SessionStore` + filesystem snapshots (`session.json`, `segments.json`) with startup reload.
+- **Current settings persistence:** `UserDefaults`-backed app settings snapshot (language focus, credits, iCloud toggle, active chat, chat counter).
 - **Planned long-term persistence:** `SwiftData`.
 
 ```text
@@ -54,6 +55,7 @@ Documents/
 └── Sessions/
     └── {UUID}/
         ├── session_full.m4a
+        ├── session.json
         └── segments.json
 ```
 
@@ -66,7 +68,8 @@ Documents/
 - **Chat workspace:** Recorder card + live transcript bubbles.
 - **Header/session actions:** Active chat rename + export actions.
 - **Settings workspace:** Hours credit, language focus, context keywords, iCloud toggle, purchase restore, and macOS microphone access controls.
-- **Library workspace:** Session switcher.
+- **Library workspace:** Session switcher with long-press/right-click action group (`Rename`, `Share this chat`, `Delete`) on session rows.
+- **macOS recent chats sidebar:** Same long-press/right-click action group (`Rename`, `Share this chat`, `Delete`).
 - **Export:** Separate sheet; Notepad-style formatting is export-only.
 
 ---
@@ -127,8 +130,11 @@ Documents/
 
 #### Storage, Update, and Sync Hooks
 - `App/AppBackend.swift`
-- `SessionStore` creates `session_full.m4a` + `segments.json`.
+- `SessionStore` creates `session_full.m4a` + `segments.json` + `session.json`.
 - Appends transcript rows, persists segment snapshots, and keeps stable speaker profile (color/avatar) per session.
+- Session metadata (title/status/language hints/duration/speakers) is persisted in `session.json` and reloaded on app launch.
+- User settings/state are persisted in `UserDefaults` and restored on app launch.
+- Session deletion removes runtime state and filesystem assets (`Documents/Sessions/{UUID}`).
 - Credit deduction per chunk and iCloud-sync hook point are included.
 
 #### App Orchestration + UI Wiring
@@ -138,6 +144,8 @@ Documents/
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Chat bubble tap plays that chunk from `session_full.m4a`.
 - macOS uses dedicated workspace views (sidebar/detail) rather than iOS-style tabs.
+- Library rows now support long-press action menu: `Rename`, `Share this chat`, `Delete`.
+- macOS sidebar `Recent Chats` rows now support the same action menu: `Rename`, `Share this chat`, `Delete`.
 - macOS settings includes live microphone permission status and actions (`Allow Microphone Access` / `Open System Settings`).
 - macOS recorder error state provides direct deep-link action to System Settings when microphone permission is denied.
 - Chat bubble long-press opens actions for:
@@ -155,8 +163,11 @@ Documents/
 - `AppBackendTests.swift`
 - Covered:
   - prompt building from selected languages
-  - model fallback behavior
+  - credit exhaustion guard behavior
   - speaker profile stability across chunks
+  - persisted session reload from disk
+  - app settings persistence round-trip
+  - session delete removes store row + filesystem directory
 
 #### Project Structure Cleanup
 - App orchestration moved to `App/` (`laycaApp.swift`, `ContentView.swift`, `AppBackend.swift`).
