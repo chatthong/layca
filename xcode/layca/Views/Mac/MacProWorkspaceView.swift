@@ -237,14 +237,12 @@ struct MacChatWorkspaceView: View {
     @FocusState private var isTitleFieldFocused: Bool
 
     var body: some View {
-        HSplitView {
-            leftPane
-                .frame(minWidth: 300, idealWidth: 340, maxWidth: 420)
-
-            transcriptPane
-                .frame(minWidth: 520)
+        transcriptPane
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            recorderBottomBar
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
         }
-        .padding(16)
         .navigationTitle("")
         .toolbar {
             ToolbarItem(placement: .navigation) {
@@ -358,112 +356,90 @@ struct MacChatWorkspaceView: View {
         .frame(width: 292, alignment: .leading)
     }
 
-    private var leftPane: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sessionSummaryCard
-            recorderCard
-            Spacer(minLength: 0)
-        }
-    }
+    private var recorderBottomBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let preflightMessage {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(preflightMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
 
-    private var sessionSummaryCard: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(activeSessionTitle)
-                    .font(.title3.weight(.semibold))
-                    .lineLimit(1)
-
-                LabeledContent("Rows", value: "\(liveChatItems.count)")
-                    .font(.subheadline)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } label: {
-            HStack {
-                Label("Session", systemImage: "bubble.left.and.bubble.right")
-                Spacer()
-                HStack(spacing: 8) {
-                    Button(action: beginTitleRename) {
-                        Image(systemName: "pencil")
-                    }
-                    .help("Rename")
-                    .buttonStyle(.borderless)
-
-                    Button(action: onExportTap) {
-                        Image(systemName: "square.and.arrow.up")
-                    }
-                    .help("Export")
-                    .buttonStyle(.borderless)
-                }
-            }
-        }
-    }
-
-    private var recorderCard: some View {
-        GroupBox("Recorder") {
-            VStack(alignment: .leading, spacing: 12) {
-                waveformView
-
-                Text(recordingTimeText)
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-
-                Text(activeSessionDateText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                Button {
-                    onRecordTap()
-                } label: {
-                    Label(
-                        isRecording ? "Stop Recording" : "Start Recording",
-                        systemImage: isRecording ? "stop.circle.fill" : "record.circle.fill"
-                    )
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(isRecording ? .red : .accentColor)
-                .controlSize(.large)
-
-                if let preflightMessage {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(preflightMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-
-                        if isMicrophonePermissionMessage(preflightMessage) {
-                            Button("Open System Settings") {
-                                _ = MacMicrophonePermissionSupport.openMicrophoneSettings()
-                            }
-                            .buttonStyle(.link)
-                            .font(.caption.weight(.semibold))
+                    if isMicrophonePermissionMessage(preflightMessage) {
+                        Button("Open System Settings") {
+                            _ = MacMicrophonePermissionSupport.openMicrophoneSettings()
                         }
+                        .buttonStyle(.link)
+                        .font(.caption.weight(.semibold))
                     }
                 }
+                .padding(.horizontal, 2)
             }
+
+            HStack(spacing: 14) {
+                recorderBarWaveform
+                    .frame(width: 146)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(recordingTimeText)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.9)
+
+                    Text(activeSessionDateText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Button(action: onRecordTap) {
+                    HStack(spacing: 7) {
+                        Image(systemName: isRecording ? "stop.circle.fill" : "record.circle.fill")
+                        Text(isRecording ? "Stop" : "Record")
+                    }
+                    .font(.headline.weight(.semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(isRecording ? Color.red.opacity(0.90) : Color.accentColor)
+                .glassCapsuleStyle()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.regularMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(.white.opacity(0.30), lineWidth: 0.8)
+            )
+            .shadow(color: .black.opacity(0.10), radius: 10, x: 0, y: 6)
         }
     }
 
-    private var waveformView: some View {
+    private var recorderBarWaveform: some View {
         HStack(alignment: .center, spacing: 3) {
             ForEach(Array(waveformBars.enumerated()), id: \.offset) { _, level in
                 Capsule(style: .continuous)
                     .fill(isRecording ? Color.red.opacity(0.82) : Color.accentColor.opacity(0.68))
-                    .frame(width: 4, height: max(CGFloat(level) * 58, 8))
+                    .frame(width: 4, height: max(CGFloat(level) * 26, 6))
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 86, maxHeight: 86)
-        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            Capsule(style: .continuous)
                 .fill(.quaternary.opacity(0.58))
         )
     }
 
     private var transcriptPane: some View {
-        GroupBox {
+        Group {
             if liveChatItems.isEmpty {
                 ContentUnavailableView(
                     "No Transcript Yet",
@@ -504,17 +480,8 @@ struct MacChatWorkspaceView: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
             }
-        } label: {
-            HStack {
-                Label("Transcript", systemImage: "text.bubble")
-                Spacer()
-                if isRecording {
-                    Label("Live", systemImage: "dot.radiowaves.left.and.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func transcriptRow(for item: TranscriptRow, isTranscribing: Bool, isQueued: Bool) -> some View {
