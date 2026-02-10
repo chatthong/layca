@@ -400,24 +400,32 @@ struct MacChatWorkspaceView: View {
                         Text(isRecording ? "Stop" : "Record")
                     }
                     .font(.headline.weight(.semibold))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(isRecording ? Color.red.opacity(0.90) : Color.accentColor)
-                .glassCapsuleStyle()
+                .glassEffect(.clear, in: Capsule(style: .continuous))
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(.black.opacity(0.32))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(.white.opacity(0.14), lineWidth: 0.7)
+                )
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .glassEffect(.clear, in: Capsule(style: .continuous))
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(.regularMaterial)
+                Capsule(style: .continuous)
+                    .fill(.black.opacity(0.28))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(.white.opacity(0.30), lineWidth: 0.8)
+                Capsule(style: .continuous)
+                    .stroke(.white.opacity(0.16), lineWidth: 0.7)
             )
-            .shadow(color: .black.opacity(0.10), radius: 10, x: 0, y: 6)
         }
     }
 
