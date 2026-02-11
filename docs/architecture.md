@@ -57,7 +57,10 @@
 - Whisper acceleration toggles are environment-driven:
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
   - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
-- Current runtime defaults are ON for both toggles; if ggml GPU decode init fails, runtime falls back to CPU decode and logs reason.
+- Current runtime defaults are ON for both toggles on macOS.
+- On physical iOS devices, CoreML encoder now uses an auto profile: enabled on high-memory/high-core devices for maximum performance, safety-disabled on lower-tier devices to avoid startup stalls.
+- Set `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON` to force-enable on any iPhone.
+- If ggml GPU decode init fails, runtime falls back to CPU decode and logs reason.
 - Chunk slicing defaults are tuned longer to reduce over-splitting: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
 - Chunk playback is gated off while recording to avoid audio-session conflicts.
 - "Transcribe Again" is currently gated during active recording and runs after recording stops.

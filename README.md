@@ -30,6 +30,7 @@
 - **Model source layout in project:** `xcode/layca/Models/RuntimeAssets/` (copied into app resources at build time).
 - **Whisper startup mode:** no automatic prewarm on app launch; transcription engine initializes lazily on first queued message.
 - **Acceleration toggles:** `LAYCA_ENABLE_WHISPER_COREML_ENCODER` and `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE` (both default ON in current runtime).
+- **iOS auto profile:** on physical iOS devices, CoreML encoder is enabled automatically on high-memory/high-core devices for maximum performance, and disabled on lower-tier devices for startup reliability; set `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON` to force-enable.
 - **Acceleration fallback:** if ggml GPU context init fails, runtime falls back to CPU decode and logs status.
 - **Pre-flight behavior:** credits and language prompt are validated before recording.
 
@@ -134,6 +135,8 @@ Documents/
 - Acceleration uses environment toggles:
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
   - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
+- iOS override for CoreML encoder safety fallback:
+  - `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS`
 - Runtime prints one-line acceleration status:
   - `[Whisper] CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`
 

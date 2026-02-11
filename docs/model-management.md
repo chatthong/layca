@@ -37,7 +37,12 @@
 - Runtime acceleration toggles:
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
   - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
-- Current defaults are ON for both toggles.
+- Current defaults are ON for both toggles on macOS.
+- On physical iOS devices, CoreML encoder uses an auto profile:
+  - ON for higher-tier devices (more RAM/cores) to maximize performance
+  - OFF for lower-tier devices to avoid startup stalls with `large-v3-turbo`
+- iOS override flag:
+  - `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON`
 - Runtime logs resolved mode:
   - `[Whisper] CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`
 - If ggml GPU context initialization fails, runtime falls back to CPU decode and logs fallback reason.

@@ -45,6 +45,11 @@ actor WhisperGGMLCoreMLService {
         static let minimumModelSizeBytes: Int64 = 1_000_000_000
         static let coreMLEncoderEnvKey = "LAYCA_ENABLE_WHISPER_COREML_ENCODER"
         static let coreMLEncoderEnabledByDefault = true
+        static let forceCoreMLEncoderOnIOSEnvKey = "LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS"
+        // Use a practical threshold (about 7.5 GB) so 8 GB-class devices
+        // like iPhone 15 Pro/Pro Max are classified correctly.
+        static let minimumIOSEncoderMemoryBytes: UInt64 = 7_500_000_000
+        static let minimumIOSEncoderCoreCount = 6
         static let ggmlGPUDecodeEnvKey = "LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE"
         static let ggmlGPUDecodeEnabledByDefault = true
     }
@@ -364,7 +369,8 @@ actor WhisperGGMLCoreMLService {
 
     private func ensureContext() async throws -> OpaquePointer {
         let modelURL = try await ensureModelFile()
-        let coreMLEncoderEnabled = isCoreMLEncoderEnabled()
+        let coreMLEncoderConfig = resolvedCoreMLEncoderConfiguration()
+        let coreMLEncoderEnabled = coreMLEncoderConfig.enabled
         let shouldUseGPUPath = isGGMLGPUDecodeEnabled()
 
         if let context, activeModelPath == modelURL.path {
@@ -385,7 +391,7 @@ actor WhisperGGMLCoreMLService {
             logAccelerationStatus(
                 coreMLEncoderEnabled: coreMLEncoderEnabled,
                 ggmlGPUDecodeEnabled: true,
-                reason: nil
+                reason: coreMLEncoderConfig.reason
             )
             return created
         }
@@ -395,13 +401,16 @@ actor WhisperGGMLCoreMLService {
         }
 
         let wasForcedCPUContext = shouldForceCPUContext
-        let fallbackReason: String
+        var fallbackReason: String
         if !shouldUseGPUPath {
             fallbackReason = "\(Constants.ggmlGPUDecodeEnvKey)=OFF, ggml GPU decode not requested."
         } else if wasForcedCPUContext {
             fallbackReason = "ggml GPU context previously failed in this app run, forced CPU fallback."
         } else {
             fallbackReason = "ggml GPU context init failed on this runtime/device; using CPU fallback."
+        }
+        if let encoderReason = coreMLEncoderConfig.reason {
+            fallbackReason += " \(encoderReason)"
         }
 
         shouldForceCPUContext = true
@@ -423,13 +432,18 @@ actor WhisperGGMLCoreMLService {
         params.flash_attn = false
 #else
         params.use_gpu = useGPU
+#if os(iOS)
+        // Flash attention has been unstable on iOS hardware for this model size.
+        params.flash_attn = false
+#else
         params.flash_attn = useGPU
+#endif
 #endif
         return whisper_init_from_file_with_params(modelURL.path, params)
     }
 
     private func ensureModelFile() async throws -> URL {
-        let coreMLEncoderEnabled = isCoreMLEncoderEnabled()
+        let coreMLEncoderEnabled = resolvedCoreMLEncoderConfiguration().enabled
         if coreMLEncoderEnabled,
            let bundled = bundledModelFileURL(),
            isValidModelFile(at: bundled) {
@@ -478,11 +492,55 @@ actor WhisperGGMLCoreMLService {
         return cachedModelURL
     }
 
-    private func isCoreMLEncoderEnabled() -> Bool {
-        parseBooleanEnv(
+    private func resolvedCoreMLEncoderConfiguration() -> (enabled: Bool, reason: String?) {
+        let requested = parseBooleanEnv(
             key: Constants.coreMLEncoderEnvKey,
             defaultValue: Constants.coreMLEncoderEnabledByDefault
         )
+
+#if os(iOS) && !targetEnvironment(simulator)
+        guard requested else {
+            return (false, nil)
+        }
+
+        let forceEnableOnIOS = parseBooleanEnv(
+            key: Constants.forceCoreMLEncoderOnIOSEnvKey,
+            defaultValue: false
+        )
+        if forceEnableOnIOS {
+            return (true, "iOS CoreML encoder forced ON via \(Constants.forceCoreMLEncoderOnIOSEnvKey).")
+        }
+
+        let physicalMemoryBytes = ProcessInfo.processInfo.physicalMemory
+        let cpuCoreCount = ProcessInfo.processInfo.processorCount
+        let memoryGB = Double(physicalMemoryBytes) / 1_073_741_824
+        let supportsPerformanceProfile =
+            physicalMemoryBytes >= Constants.minimumIOSEncoderMemoryBytes &&
+            cpuCoreCount >= Constants.minimumIOSEncoderCoreCount
+
+        if supportsPerformanceProfile {
+            return (
+                true,
+                String(
+                    format: "iOS auto-performance profile enabled CoreML encoder (%.1fGB RAM, %d cores).",
+                    memoryGB,
+                    cpuCoreCount
+                )
+            )
+        }
+
+        return (
+            false,
+            String(
+                format: "iOS auto-safety profile disabled CoreML encoder (%.1fGB RAM, %d cores). Set %@=ON to force.",
+                memoryGB,
+                cpuCoreCount,
+                Constants.forceCoreMLEncoderOnIOSEnvKey
+            )
+        )
+#else
+        return (requested, nil)
+#endif
     }
 
     private func isGGMLGPUDecodeEnabled() -> Bool {

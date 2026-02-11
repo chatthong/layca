@@ -56,6 +56,10 @@
 - Acceleration flags:
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
   - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
+- iOS auto profile:
+  - CoreML encoder is auto-enabled on higher-tier iPhones for maximum speed
+  - lower-tier iPhones auto-fallback to encoder OFF for startup reliability
+  - set `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON` to force-enable
 - Runtime prints acceleration status (`CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`) and falls back to CPU decode if ggml GPU context init fails.
 - If output is empty or appears to echo prompt instructions, backend applies fallback reruns (without prompt and detected-language retry).
 - Transcription quality guardrails classify outputs and handle unusable values (`-`, `foreign`, empty-like text) by retrying or deleting placeholder rows with no usable speech.
