@@ -3,17 +3,24 @@
 ## Status
 - Whisper runtime is integrated via `whisper.cpp` (`whisper.xcframework`).
 - Transcription is currently queued automatically per message chunk (serial one-by-one mode).
-- Settings has no model selection or download controls.
-- Settings now provides:
+- Settings provides:
   - Language Focus (multi-select)
   - Context keywords (free text), used in Whisper `initial_prompt`
+  - Advanced Zone:
+    - Whisper ggml GPU Decode (toggle)
+    - Whisper CoreML Encoder (toggle)
+    - Model Switch (`Fast`, `Normal`, `Pro`)
 - On macOS, the same model-related settings are shown in the native settings workspace form.
 - macOS settings view is reachable from sidebar `Setting` and Chat toolbar `Info`.
+- Initial Advanced Zone values are auto-detected by device and persisted; users can override anytime.
 
 ## Current Runtime Assets
 - Bundled VAD directory: app bundle `silero-vad-unified-256ms-v6.0.0.mlmodelc` (CoreML Silero, offline-first)
 - Bundled speaker directory: app bundle `wespeaker_v2.mlmodelc` (CoreML WeSpeaker, offline-first)
-- Bundled Whisper decoder file: app bundle `ggml-large-v3-turbo.bin` (offline-first)
+- Bundled Whisper decoder profiles:
+  - `Fast` -> `ggml-large-v3-turbo-q5_0.bin`
+  - `Normal` -> `ggml-large-v3-turbo-q8_0.bin`
+  - `Pro` -> `ggml-large-v3-turbo.bin`
 - Bundled Whisper encoder directory: app bundle `ggml-large-v3-turbo-encoder.mlmodelc` (optional CoreML encoder acceleration)
 - Whisper runtime framework: `Frameworks/whisper.xcframework` (static XCFramework)
 - Project source directory for bundled model assets: `xcode/layca/Models/RuntimeAssets/`
@@ -32,20 +39,26 @@
   - Unusable placeholder/no-speech outputs are removed instead of keeping placeholder text.
 
 ## Whisper Startup / Backend Selection
-- App does not prewarm Whisper automatically on launch.
-- Whisper context initializes lazily when first queued message transcription is requested.
-- Runtime acceleration toggles:
+- App applies runtime preferences during bootstrap and triggers background Whisper prepare/warmup to reduce first-use latency.
+- Runtime preference sources:
+  1. App settings (`Advanced Zone`) via `setRuntimePreferences(...)` (highest priority in app flow)
+  2. Environment fallback at service level
+- Runtime acceleration env toggles:
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
   - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
-- Current defaults are ON for both toggles on macOS.
 - On physical iOS devices, CoreML encoder uses an auto profile:
   - ON for higher-tier devices (more RAM/cores) to maximize performance
   - OFF for lower-tier devices to avoid startup stalls with `large-v3-turbo`
 - iOS override flag:
   - `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON`
+- Model profile auto defaults:
+  - simulator: `Fast`
+  - higher-tier iOS-family: `Normal` or `Pro` by RAM/cores
+  - macOS: `Pro`
 - Runtime logs resolved mode:
-  - `[Whisper] CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`
+  - `[Whisper] Model: Fast/Normal/Pro, CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`
 - If ggml GPU context initialization fails, runtime falls back to CPU decode and logs fallback reason.
+- On some iPhones, CoreML may print ANE recompile/plan-build warnings on first run; this can be slow but is typically recoverable.
 
 ## Pre-flight Behavior
 1. User taps record.
@@ -56,8 +69,8 @@
 ## Notes
 - App runtime does not apply a profanity/sensitive-term post-filter on transcript text.
 - Bundle model lookup supports both `Models/RuntimeAssets/` and legacy root-resource fallback paths.
-- Model resolution order for Whisper decoder:
-  1. cached `Library/Caches/WhisperGGML/ggml-large-v3-turbo.bin`
-  2. bundled `ggml-large-v3-turbo.bin` (copied into cache when needed)
-  3. runtime download fallback (if not available locally)
+- Model resolution order for selected Whisper decoder profile:
+  1. profile-specific cached file under `Library/Caches/WhisperGGML/`
+  2. bundled profile file from app resources (copied to cache when needed)
+  3. runtime download fallback (currently configured for `Pro` model file)
 - CoreML encoder cache (`Library/Caches/WhisperGGML/ggml-large-v3-turbo-encoder.mlmodelc`) is only materialized when CoreML encoder mode is enabled.

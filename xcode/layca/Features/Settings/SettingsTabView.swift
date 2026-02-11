@@ -11,6 +11,12 @@ struct SettingsTabView: View {
     let filteredFocusLanguages: [FocusLanguage]
 
     @Binding var isICloudSyncEnabled: Bool
+    @Binding var whisperCoreMLEncoderEnabled: Bool
+    @Binding var whisperGGMLGPUDecodeEnabled: Bool
+    @Binding var whisperModelProfile: WhisperModelProfile
+    let whisperCoreMLEncoderRecommendationText: String
+    let whisperGGMLGPUDecodeRecommendationText: String
+    let whisperModelRecommendationText: String
     let isRestoringPurchases: Bool
     let restoreStatusMessage: String?
 
@@ -27,6 +33,7 @@ struct SettingsTabView: View {
                         settingsHeader
                         hoursCreditCard
                         languageFocusCard
+                        advancedZoneCard
                         iCloudAndPurchaseCard
                     }
                     .padding(.horizontal, 18)
@@ -216,6 +223,59 @@ struct SettingsTabView: View {
 
             if let restoreStatusMessage {
                 Text(restoreStatusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.regularMaterial)
+        )
+    }
+
+    private var advancedZoneCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Advanced Zone")
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Text("Initial values are auto-detected for this device. You can override them anytime.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("Whisper ggml GPU Decode", isOn: $whisperGGMLGPUDecodeEnabled)
+                    .tint(.accentColor)
+                Text(whisperGGMLGPUDecodeRecommendationText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("Whisper CoreML Encoder", isOn: $whisperCoreMLEncoderEnabled)
+                    .tint(.accentColor)
+                Text(whisperCoreMLEncoderRecommendationText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Model Switch")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Picker("Model Switch", selection: $whisperModelProfile) {
+                    ForEach(WhisperModelProfile.allCases, id: \.self) { profile in
+                        Text(profile.title).tag(profile)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(whisperModelRecommendationText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(whisperModelProfile.detailText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -188,6 +188,12 @@ private extension ContentView {
             focusContextKeywords: focusContextKeywordsBinding,
             filteredFocusLanguages: filteredFocusLanguages,
             isICloudSyncEnabled: iCloudSyncBinding,
+            whisperCoreMLEncoderEnabled: whisperCoreMLEncoderBinding,
+            whisperGGMLGPUDecodeEnabled: whisperGGMLGPUDecodeBinding,
+            whisperModelProfile: whisperModelProfileBinding,
+            whisperCoreMLEncoderRecommendationText: backend.whisperCoreMLEncoderRecommendationText,
+            whisperGGMLGPUDecodeRecommendationText: backend.whisperGGMLGPUDecodeRecommendationText,
+            whisperModelRecommendationText: backend.whisperModelRecommendationText,
             isRestoringPurchases: backend.isRestoringPurchases,
             restoreStatusMessage: backend.restoreStatusMessage,
             onToggleLanguage: backend.toggleLanguageFocus,
@@ -247,6 +253,12 @@ private extension ContentView {
             focusContextKeywords: focusContextKeywordsBinding,
             filteredFocusLanguages: filteredFocusLanguages,
             isICloudSyncEnabled: iCloudSyncBinding,
+            whisperCoreMLEncoderEnabled: whisperCoreMLEncoderBinding,
+            whisperGGMLGPUDecodeEnabled: whisperGGMLGPUDecodeBinding,
+            whisperModelProfile: whisperModelProfileBinding,
+            whisperCoreMLEncoderRecommendationText: backend.whisperCoreMLEncoderRecommendationText,
+            whisperGGMLGPUDecodeRecommendationText: backend.whisperGGMLGPUDecodeRecommendationText,
+            whisperModelRecommendationText: backend.whisperModelRecommendationText,
             isRestoringPurchases: backend.isRestoringPurchases,
             restoreStatusMessage: backend.restoreStatusMessage,
             onToggleLanguage: backend.toggleLanguageFocus,
@@ -339,6 +351,27 @@ private extension ContentView {
         Binding(
             get: { backend.isICloudSyncEnabled },
             set: { backend.isICloudSyncEnabled = $0 }
+        )
+    }
+
+    var whisperCoreMLEncoderBinding: Binding<Bool> {
+        Binding(
+            get: { backend.whisperCoreMLEncoderEnabled },
+            set: { backend.whisperCoreMLEncoderEnabled = $0 }
+        )
+    }
+
+    var whisperGGMLGPUDecodeBinding: Binding<Bool> {
+        Binding(
+            get: { backend.whisperGGMLGPUDecodeEnabled },
+            set: { backend.whisperGGMLGPUDecodeEnabled = $0 }
+        )
+    }
+
+    var whisperModelProfileBinding: Binding<WhisperModelProfile> {
+        Binding(
+            get: { backend.whisperModelProfile },
+            set: { backend.whisperModelProfile = $0 }
         )
     }
 

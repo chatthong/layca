@@ -129,14 +129,23 @@
 ### `prepareIfNeeded() async throws -> Void`
 - Initializes Whisper context and runs a one-time warmup inference.
 - Bundle lookup for decoder/encoder supports `Models/RuntimeAssets/` and root-resource fallback locations.
-- Available for explicit warmup flows, but is not called automatically on app launch.
+- Called by app backend in a background prewarm task after runtime preferences are applied.
+
+### `setRuntimePreferences(coreMLEncoderEnabled:ggmlGPUDecodeEnabled:modelProfile:) -> Void`
+- Applies runtime backend/model preference overrides.
+- `modelProfile` maps to:
+  - `quick` (`Fast`) -> `ggml-large-v3-turbo-q5_0.bin`
+  - `normal` -> `ggml-large-v3-turbo-q8_0.bin`
+  - `pro` -> `ggml-large-v3-turbo.bin`
+- Forces context reset so next prepare/transcribe uses the selected combination.
 
 ### `transcribe(audioURL:startOffset:endOffset:preferredLanguageCode:initialPrompt:) async throws -> WhisperTranscriptionResult`
 - Loads chunk audio, resamples to 16kHz, and runs `whisper.cpp`.
-- Runtime acceleration is controlled by environment variables:
+- Runtime acceleration can be controlled by environment variables:
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
   - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
-- Runtime logs resolved mode and falls back to CPU decode when ggml GPU decode init fails.
+- App-managed runtime settings override env defaults in normal app flow.
+- Runtime logs resolved mode (`Model`, `CoreML`, `ggml GPU`) and falls back to CPU decode when ggml GPU decode init fails.
 
 ### `transcribe(samples:sourceSampleRate:preferredLanguageCode:initialPrompt:) async throws -> WhisperTranscriptionResult`
 - Transcribes in-memory chunk PCM and resamples to 16kHz internally.
@@ -176,6 +185,7 @@
 
 ### `load() -> PersistedAppSettings?`
 - Loads persisted app/UI setting snapshot from `UserDefaults`.
+- Snapshot includes Whisper runtime preferences (`whisperCoreMLEncoderEnabled`, `whisperGGMLGPUDecodeEnabled`, `whisperModelProfileRawValue`).
 
 ### `save(_ settings: PersistedAppSettings) -> Void`
 - Persists app/UI setting snapshot to `UserDefaults`.

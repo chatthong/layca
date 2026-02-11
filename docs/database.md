@@ -8,7 +8,10 @@
 - **macOS style note:** sidebar-first `NavigationSplitView` and native toolbar controls do not change persistence schema or file layout.
 - **Bundled runtime asset:** CoreML VAD model directory in app bundle (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) for offline startup.
 - **Bundled runtime asset:** CoreML speaker model directory in app bundle (`wespeaker_v2.mlmodelc`) for offline startup.
-- **Bundled runtime asset:** Whisper decoder model file in app bundle (`ggml-large-v3-turbo.bin`) for offline startup.
+- **Bundled runtime asset:** Whisper decoder model files in app bundle:
+  - `ggml-large-v3-turbo-q5_0.bin` (`Fast`)
+  - `ggml-large-v3-turbo-q8_0.bin` (`Normal`)
+  - `ggml-large-v3-turbo.bin` (`Pro`)
 - **Bundled runtime asset:** Whisper CoreML encoder directory in app bundle (`ggml-large-v3-turbo-encoder.mlmodelc`) for optional encoder acceleration.
 - **Project source location for bundled model assets:** `xcode/layca/Models/RuntimeAssets/` (copied into app resources during build).
 - **Runtime cache workspace:** `Library/Caches/WhisperGGML` for cached Whisper decoder and optional CoreML encoder assets.
@@ -54,6 +57,9 @@
 - `totalHours: Double`
 - `usedHours: Double`
 - `isICloudSyncEnabled: Bool`
+- `whisperCoreMLEncoderEnabled: Bool`
+- `whisperGGMLGPUDecodeEnabled: Bool`
+- `whisperModelProfileRawValue: String` (`quick` / `normal` / `pro`)
 - `activeSessionID: UUID?`
 - `chatCounter: Int`
 

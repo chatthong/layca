@@ -73,20 +73,29 @@
 - Added queue dedup guards to avoid duplicate transcription jobs per row.
 - Updated placeholder/transcribing UI copy to reflect automatic queue processing (`Message queued for automatic transcription...`).
 
-### Whisper Startup Reliability Hardening
+### Whisper Startup + Runtime Performance Controls
 - `App/AppBackend.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
-- Removed automatic Whisper prewarm on app bootstrap and recording start.
-- Whisper context now initializes lazily on first chunk transcription request.
-- Added independent acceleration toggles:
+- Added independent acceleration toggles and model profile controls:
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
   - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
-- Runtime now logs resolved acceleration mode (`CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`).
+- Added iOS safety override flag:
+  - `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS`
+- Added runtime model profiles:
+  - `Fast` -> `ggml-large-v3-turbo-q5_0.bin`
+  - `Normal` -> `ggml-large-v3-turbo-q8_0.bin`
+  - `Pro` -> `ggml-large-v3-turbo.bin`
+- Runtime now logs resolved acceleration mode (`Model: Fast/Normal/Pro, CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`).
 - Added ggml GPU decode fallback path to CPU decode when GPU context init fails.
+- Added background Whisper prewarm after runtime preference apply to reduce first-transcription cold-start delay.
 
-### Settings Cleanup (Model UI Removed)
+### Settings Advanced Zone (Model + Acceleration Controls)
 - `Features/Settings/SettingsTabView.swift`, `App/ContentView.swift`, `App/AppBackend.swift`
-- Removed Settings model change/download card and model-select callbacks.
-- Added context-keywords input for Whisper `initial_prompt`.
+- Added Advanced Zone controls on iOS-family and macOS settings:
+  - `Whisper ggml GPU Decode` toggle
+  - `Whisper CoreML Encoder` toggle
+  - `Model Switch` (`Fast` / `Normal` / `Pro`)
+- Added auto-detected first-launch defaults per device with persisted user overrides.
+- Added settings persistence fields for CoreML toggle, GPU toggle, and model profile.
 
 ### macOS Native Workspace + Permission Hardening
 - `App/ContentView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `layca.xcodeproj/project.pbxproj`

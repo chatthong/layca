@@ -63,6 +63,10 @@
   - Hours credit
   - Language focus
   - Context keywords (for Whisper prompt context)
+  - Advanced Zone:
+    - Whisper ggml GPU Decode toggle
+    - Whisper CoreML Encoder toggle
+    - Model Switch (`Fast` / `Normal` / `Pro`)
   - iCloud sync + restore purchases
 - macOS `Setting` additionally includes:
   - microphone permission status

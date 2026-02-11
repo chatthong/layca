@@ -26,12 +26,14 @@
 ### A. Core Engine Strategy
 
 - **Inference target:** `whisper.cpp` with automatic queued message transcription plus configurable CoreML encoder and ggml GPU decode acceleration.
-- **Decoder model:** `ggml-large-v3-turbo.bin` bundled in app resources (with cache/download fallback).
+- **Decoder model profiles:** `Fast` (`ggml-large-v3-turbo-q5_0.bin`), `Normal` (`ggml-large-v3-turbo-q8_0.bin`), `Pro` (`ggml-large-v3-turbo.bin`).
 - **Model source layout in project:** `xcode/layca/Models/RuntimeAssets/` (copied into app resources at build time).
-- **Whisper startup mode:** no automatic prewarm on app launch; transcription engine initializes lazily on first queued message.
-- **Acceleration toggles:** `LAYCA_ENABLE_WHISPER_COREML_ENCODER` and `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE` (both default ON in current runtime).
-- **iOS auto profile:** on physical iOS devices, CoreML encoder is enabled automatically on high-memory/high-core devices for maximum performance, and disabled on lower-tier devices for startup reliability; set `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON` to force-enable.
+- **Whisper startup mode:** app applies runtime preferences and triggers background prewarm so first manual transcription avoids most cold-start delay.
+- **Advanced Zone runtime controls:** GPU Decode (ON/OFF), CoreML Encoder (ON/OFF), Model Switch (`Fast`/`Normal`/`Pro`) on both iOS-family and macOS settings.
+- **iOS defaults:** values are auto-detected by device capability at first launch, then persisted as user-overridable settings.
+- **Environment toggles:** `LAYCA_ENABLE_WHISPER_COREML_ENCODER`, `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`, and `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS` remain available at runtime level (primarily useful outside app-managed settings flow).
 - **Acceleration fallback:** if ggml GPU context init fails, runtime falls back to CPU decode and logs status.
+- **iOS CoreML note:** first run may log ANE/CoreML plan rebuild warnings before succeeding; this is a known cold-start behavior on some devices.
 - **Pre-flight behavior:** credits and language prompt are validated before recording.
 
 ### B. Audio Stack
@@ -70,7 +72,7 @@ Documents/
 - **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Chat`, `Library`, `Setting`) and no top segmented workspace picker.
 - **Chat workspace:** Recorder card + live transcript bubbles.
 - **Header/session actions:** macOS chat detail toolbar uses native SwiftUI `ToolbarItem`/`ToolbarItemGroup` actions: `Share`, grouped `Rename` + `New Chat`, and `Info` (opens `Setting`).
-- **Settings workspace:** Hours credit, language focus, context keywords, iCloud toggle, purchase restore, and macOS microphone access controls.
+- **Settings workspace:** Hours credit, language focus, context keywords, Advanced Zone (GPU/CoreML/model profile), iCloud toggle, purchase restore, and macOS microphone access controls.
 - **Library workspace:** Session switcher with long-press/right-click action group (`Rename`, `Share this chat`, `Delete`) on session rows.
 - **macOS recent chats sidebar:** Same long-press/right-click action group (`Rename`, `Share this chat`, `Delete`).
 - **Export:** Separate sheet; Notepad-style formatting is export-only.
@@ -131,14 +133,14 @@ Documents/
 - Whisper prompt-leak fallback is implemented: if output echoes the instruction prompt, inference reruns without prompt.
 - Transcription quality guardrails classify outputs as `acceptable` / `weak` / `unusable`; weak/unusable outputs trigger queued retry or row removal.
 - Rows with unusable/no-speech placeholder output are removed instead of showing "No speech detected in this chunk."
-- Whisper context initialization is lazy (first queued message may be slower once).
+- Whisper context is background-prewarmed after runtime preference apply to reduce first-transcription latency.
 - Acceleration uses environment toggles:
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
   - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
 - iOS override for CoreML encoder safety fallback:
   - `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS`
 - Runtime prints one-line acceleration status:
-  - `[Whisper] CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`
+  - `[Whisper] Model: Fast/Normal/Pro, CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`
 
 #### Storage, Update, and Sync Hooks
 - `App/AppBackend.swift`
@@ -146,6 +148,7 @@ Documents/
 - Appends transcript rows, persists segment snapshots, and keeps stable speaker profile (color/avatar) per session.
 - Session metadata (title/status/language hints/duration/speakers) is persisted in `session.json` and reloaded on app launch.
 - User settings/state are persisted in `UserDefaults` and restored on app launch.
+- Persisted settings include Whisper acceleration/model preferences (CoreML toggle, GPU toggle, model profile).
 - Session deletion removes runtime state and filesystem assets (`Documents/Sessions/{UUID}`).
 - Credit deduction per message and iCloud-sync hook point are included.
 

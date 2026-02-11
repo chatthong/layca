@@ -877,6 +877,12 @@ struct MacSettingsWorkspaceView: View {
     @Binding var focusContextKeywords: String
     let filteredFocusLanguages: [FocusLanguage]
     @Binding var isICloudSyncEnabled: Bool
+    @Binding var whisperCoreMLEncoderEnabled: Bool
+    @Binding var whisperGGMLGPUDecodeEnabled: Bool
+    @Binding var whisperModelProfile: WhisperModelProfile
+    let whisperCoreMLEncoderRecommendationText: String
+    let whisperGGMLGPUDecodeRecommendationText: String
+    let whisperModelRecommendationText: String
     let isRestoringPurchases: Bool
     let restoreStatusMessage: String?
     let onToggleLanguage: (String) -> Void
@@ -975,6 +981,34 @@ struct MacSettingsWorkspaceView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            Section("Advanced Zone") {
+                Text("Initial values are auto-detected for this device. You can override them anytime.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Whisper ggml GPU Decode", isOn: $whisperGGMLGPUDecodeEnabled)
+                Text(whisperGGMLGPUDecodeRecommendationText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Whisper CoreML Encoder", isOn: $whisperCoreMLEncoderEnabled)
+                Text(whisperCoreMLEncoderRecommendationText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Model Switch", selection: $whisperModelProfile) {
+                    ForEach(WhisperModelProfile.allCases, id: \.self) { profile in
+                        Text(profile.title).tag(profile)
+                    }
+                }
+                Text(whisperModelRecommendationText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(whisperModelProfile.detailText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

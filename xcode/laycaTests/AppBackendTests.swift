@@ -245,6 +245,9 @@ struct AppBackendTests {
             totalHours: 40,
             usedHours: 7.5,
             isICloudSyncEnabled: true,
+            whisperCoreMLEncoderEnabled: false,
+            whisperGGMLGPUDecodeEnabled: true,
+            whisperModelProfileRawValue: WhisperModelProfile.quick.rawValue,
             activeSessionID: UUID(),
             chatCounter: 12
         )

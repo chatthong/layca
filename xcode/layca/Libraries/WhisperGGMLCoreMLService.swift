@@ -33,16 +33,51 @@ enum WhisperGGMLCoreMLError: LocalizedError {
     }
 }
 
+enum WhisperModelProfile: String, CaseIterable, Codable, Sendable {
+    case quick
+    case normal
+    case pro
+
+    nonisolated var title: String {
+        switch self {
+        case .quick:
+            return "Fast"
+        case .normal:
+            return "Normal"
+        case .pro:
+            return "Pro"
+        }
+    }
+
+    nonisolated var detailText: String {
+        switch self {
+        case .quick:
+            return "Fastest speed, lower accuracy (Q5)."
+        case .normal:
+            return "Balanced speed and quality (Q8)."
+        case .pro:
+            return "Best quality, highest load (Turbo)."
+        }
+    }
+}
+
 actor WhisperGGMLCoreMLService {
+    private struct ModelAssetSpec {
+        let profile: WhisperModelProfile
+        let bundledFileNames: [String]
+        let cacheFileName: String
+        let minimumFileSizeBytes: Int64
+        let downloadURL: String?
+    }
+
     private struct Constants {
-        static let modelFileName = "ggml-large-v3-turbo.bin"
-        static let modelName = "ggml-large-v3-turbo"
         static let encoderDirectoryName = "ggml-large-v3-turbo-encoder.mlmodelc"
         static let encoderModelName = "ggml-large-v3-turbo-encoder"
         static let bundledSubdirectories = ["Models/RuntimeAssets", "Models"]
-        static let modelDownloadURL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true"
         static let targetSampleRate: Double = 16_000
-        static let minimumModelSizeBytes: Int64 = 1_000_000_000
+        static let minimumTurboModelSizeBytes: Int64 = 1_000_000_000
+        static let minimumQ8ModelSizeBytes: Int64 = 600_000_000
+        static let minimumQ5ModelSizeBytes: Int64 = 350_000_000
         static let coreMLEncoderEnvKey = "LAYCA_ENABLE_WHISPER_COREML_ENCODER"
         static let coreMLEncoderEnabledByDefault = true
         static let forceCoreMLEncoderOnIOSEnvKey = "LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS"
@@ -60,6 +95,9 @@ actor WhisperGGMLCoreMLService {
     private var activeModelPath: String?
     private var didWarmupInference = false
     private var shouldForceCPUContext = false
+    private var coreMLEncoderOverride: Bool?
+    private var ggmlGPUDecodeOverride: Bool?
+    private var modelProfileOverride: WhisperModelProfile?
 
     init(fileManager: FileManager = .default, rootDirectory: URL? = nil) {
         self.fileManager = fileManager
@@ -81,6 +119,35 @@ actor WhisperGGMLCoreMLService {
     func prepareIfNeeded() async throws {
         let ctx = try await ensureContext()
         try warmupInferenceIfNeeded(context: ctx)
+    }
+
+    func setRuntimePreferences(
+        coreMLEncoderEnabled: Bool,
+        ggmlGPUDecodeEnabled: Bool,
+        modelProfile: WhisperModelProfile
+    ) {
+        let didChange =
+            coreMLEncoderOverride != coreMLEncoderEnabled ||
+            ggmlGPUDecodeOverride != ggmlGPUDecodeEnabled ||
+            modelProfileOverride != modelProfile
+
+        coreMLEncoderOverride = coreMLEncoderEnabled
+        ggmlGPUDecodeOverride = ggmlGPUDecodeEnabled
+        modelProfileOverride = modelProfile
+
+        guard didChange else {
+            return
+        }
+
+        // Settings changed: force a fresh context with the new backend combination.
+        shouldForceCPUContext = false
+        didWarmupInference = false
+        activeModelPath = nil
+
+        if let context {
+            whisper_free(context)
+            self.context = nil
+        }
     }
 
     func transcribe(
@@ -368,7 +435,8 @@ actor WhisperGGMLCoreMLService {
     }
 
     private func ensureContext() async throws -> OpaquePointer {
-        let modelURL = try await ensureModelFile()
+        let modelProfileConfig = resolvedModelProfileConfiguration()
+        let modelURL = try await ensureModelFile(profile: modelProfileConfig.profile)
         let coreMLEncoderConfig = resolvedCoreMLEncoderConfiguration()
         let coreMLEncoderEnabled = coreMLEncoderConfig.enabled
         let shouldUseGPUPath = isGGMLGPUDecodeEnabled()
@@ -391,7 +459,10 @@ actor WhisperGGMLCoreMLService {
             logAccelerationStatus(
                 coreMLEncoderEnabled: coreMLEncoderEnabled,
                 ggmlGPUDecodeEnabled: true,
-                reason: coreMLEncoderConfig.reason
+                modelProfile: modelProfileConfig.profile,
+                reason: [modelProfileConfig.reason, coreMLEncoderConfig.reason]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
             )
             return created
         }
@@ -403,7 +474,11 @@ actor WhisperGGMLCoreMLService {
         let wasForcedCPUContext = shouldForceCPUContext
         var fallbackReason: String
         if !shouldUseGPUPath {
-            fallbackReason = "\(Constants.ggmlGPUDecodeEnvKey)=OFF, ggml GPU decode not requested."
+            if ggmlGPUDecodeOverride != nil {
+                fallbackReason = "ggml GPU decode disabled by user setting."
+            } else {
+                fallbackReason = "\(Constants.ggmlGPUDecodeEnvKey)=OFF, ggml GPU decode not requested."
+            }
         } else if wasForcedCPUContext {
             fallbackReason = "ggml GPU context previously failed in this app run, forced CPU fallback."
         } else {
@@ -411,6 +486,9 @@ actor WhisperGGMLCoreMLService {
         }
         if let encoderReason = coreMLEncoderConfig.reason {
             fallbackReason += " \(encoderReason)"
+        }
+        if let profileReason = modelProfileConfig.reason {
+            fallbackReason += " \(profileReason)"
         }
 
         shouldForceCPUContext = true
@@ -420,6 +498,7 @@ actor WhisperGGMLCoreMLService {
         logAccelerationStatus(
             coreMLEncoderEnabled: coreMLEncoderEnabled,
             ggmlGPUDecodeEnabled: false,
+            modelProfile: modelProfileConfig.profile,
             reason: fallbackReason
         )
         return fallback
@@ -442,26 +521,29 @@ actor WhisperGGMLCoreMLService {
         return whisper_init_from_file_with_params(modelURL.path, params)
     }
 
-    private func ensureModelFile() async throws -> URL {
+    private func ensureModelFile(profile: WhisperModelProfile) async throws -> URL {
+        let modelSpec = modelSpec(for: profile)
         let coreMLEncoderEnabled = resolvedCoreMLEncoderConfiguration().enabled
         if coreMLEncoderEnabled,
-           let bundled = bundledModelFileURL(),
-           isValidModelFile(at: bundled) {
+           let bundled = bundledModelFileURL(modelSpec: modelSpec),
+           isValidModelFile(at: bundled, minimumFileSizeBytes: modelSpec.minimumFileSizeBytes) {
             return bundled
         }
 
         try fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
 
-        let cachedModelURL = rootDirectory.appendingPathComponent(Constants.modelFileName)
+        let cachedModelURL = rootDirectory.appendingPathComponent(modelSpec.cacheFileName)
         if !coreMLEncoderEnabled {
             try removeCachedCoreMLEncoderIfPresent()
         }
 
-        if !isValidModelFile(at: cachedModelURL) {
-            if let bundled = bundledModelFileURL(), isValidModelFile(at: bundled) {
+        if !isValidModelFile(at: cachedModelURL, minimumFileSizeBytes: modelSpec.minimumFileSizeBytes) {
+            if let bundled = bundledModelFileURL(modelSpec: modelSpec),
+               isValidModelFile(at: bundled, minimumFileSizeBytes: modelSpec.minimumFileSizeBytes) {
                 try materializeCachedModel(from: bundled, to: cachedModelURL)
             } else {
-                guard let remoteURL = URL(string: Constants.modelDownloadURL) else {
+                guard let remoteURLString = modelSpec.downloadURL,
+                      let remoteURL = URL(string: remoteURLString) else {
                     throw WhisperGGMLCoreMLError.modelUnavailable
                 }
 
@@ -476,7 +558,7 @@ actor WhisperGGMLCoreMLService {
                 try fileManager.moveItem(at: temporaryURL, to: cachedModelURL)
             }
 
-            guard isValidModelFile(at: cachedModelURL) else {
+            guard isValidModelFile(at: cachedModelURL, minimumFileSizeBytes: modelSpec.minimumFileSizeBytes) else {
                 throw WhisperGGMLCoreMLError.modelUnavailable
             }
         }
@@ -492,7 +574,57 @@ actor WhisperGGMLCoreMLService {
         return cachedModelURL
     }
 
+    private func resolvedModelProfileConfiguration() -> (profile: WhisperModelProfile, reason: String?) {
+        if let modelProfileOverride {
+            return (modelProfileOverride, "Model profile set by user setting (\(modelProfileOverride.title)).")
+        }
+
+        return (.pro, nil)
+    }
+
+    private func modelSpec(for profile: WhisperModelProfile) -> ModelAssetSpec {
+        switch profile {
+        case .quick:
+            return ModelAssetSpec(
+                profile: .quick,
+                bundledFileNames: [
+                    "ggml-large-v3-turbo-q5_0.bin",
+                    "ggml-large-v3-turbo-q5_0"
+                ],
+                cacheFileName: "ggml-large-v3-turbo-q5_0.bin",
+                minimumFileSizeBytes: Constants.minimumQ5ModelSizeBytes,
+                downloadURL: nil
+            )
+        case .normal:
+            return ModelAssetSpec(
+                profile: .normal,
+                bundledFileNames: [
+                    "ggml-large-v3-turbo-q8_0.bin",
+                    "ggml-large-v3-turbo-q8_0"
+                ],
+                cacheFileName: "ggml-large-v3-turbo-q8_0.bin",
+                minimumFileSizeBytes: Constants.minimumQ8ModelSizeBytes,
+                downloadURL: nil
+            )
+        case .pro:
+            return ModelAssetSpec(
+                profile: .pro,
+                bundledFileNames: ["ggml-large-v3-turbo.bin"],
+                cacheFileName: "ggml-large-v3-turbo.bin",
+                minimumFileSizeBytes: Constants.minimumTurboModelSizeBytes,
+                downloadURL: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true"
+            )
+        }
+    }
+
     private func resolvedCoreMLEncoderConfiguration() -> (enabled: Bool, reason: String?) {
+        if let coreMLEncoderOverride {
+            return (
+                coreMLEncoderOverride,
+                "CoreML encoder set by user setting (\(coreMLEncoderOverride ? "ON" : "OFF"))."
+            )
+        }
+
         let requested = parseBooleanEnv(
             key: Constants.coreMLEncoderEnvKey,
             defaultValue: Constants.coreMLEncoderEnabledByDefault
@@ -544,7 +676,11 @@ actor WhisperGGMLCoreMLService {
     }
 
     private func isGGMLGPUDecodeEnabled() -> Bool {
-        parseBooleanEnv(
+        if let ggmlGPUDecodeOverride {
+            return ggmlGPUDecodeOverride
+        }
+
+        return parseBooleanEnv(
             key: Constants.ggmlGPUDecodeEnvKey,
             defaultValue: Constants.ggmlGPUDecodeEnabledByDefault
         )
@@ -571,9 +707,10 @@ actor WhisperGGMLCoreMLService {
     private func logAccelerationStatus(
         coreMLEncoderEnabled: Bool,
         ggmlGPUDecodeEnabled: Bool,
+        modelProfile: WhisperModelProfile,
         reason: String?
     ) {
-        var line = "[Whisper] CoreML encoder: \(coreMLEncoderEnabled ? "ON" : "OFF"), ggml GPU decode: \(ggmlGPUDecodeEnabled ? "ON" : "OFF")"
+        var line = "[Whisper] Model: \(modelProfile.title), CoreML encoder: \(coreMLEncoderEnabled ? "ON" : "OFF"), ggml GPU decode: \(ggmlGPUDecodeEnabled ? "ON" : "OFF")"
         if let reason {
             line += " (\(reason))"
         }
@@ -595,35 +732,27 @@ actor WhisperGGMLCoreMLService {
         try fileManager.copyItem(at: source, to: destination)
     }
 
-    private func bundledModelFileURL() -> URL? {
-        for subdirectory in Constants.bundledSubdirectories {
-            if let direct = Bundle.main.resourceURL?
-                .appendingPathComponent(subdirectory, isDirectory: true)
-                .appendingPathComponent(Constants.modelFileName),
+    private func bundledModelFileURL(modelSpec: ModelAssetSpec) -> URL? {
+        for fileName in modelSpec.bundledFileNames {
+            for subdirectory in Constants.bundledSubdirectories {
+                if let direct = Bundle.main.resourceURL?
+                    .appendingPathComponent(subdirectory, isDirectory: true)
+                    .appendingPathComponent(fileName),
+                   fileManager.fileExists(atPath: direct.path) {
+                    return direct
+                }
+            }
+
+            if let direct = Bundle.main.resourceURL?.appendingPathComponent(fileName),
                fileManager.fileExists(atPath: direct.path) {
                 return direct
             }
         }
 
-        if let direct = Bundle.main.resourceURL?.appendingPathComponent(Constants.modelFileName),
-           fileManager.fileExists(atPath: direct.path) {
-            return direct
-        }
-
-        for subdirectory in Constants.bundledSubdirectories {
-            if let named = Bundle.main.url(
-                forResource: Constants.modelName,
-                withExtension: "bin",
-                subdirectory: subdirectory
-            ), fileManager.fileExists(atPath: named.path) {
-                return named
-            }
-        }
-
-        return Bundle.main.url(forResource: Constants.modelName, withExtension: "bin")
+        return nil
     }
 
-    private func isValidModelFile(at url: URL) -> Bool {
+    private func isValidModelFile(at url: URL, minimumFileSizeBytes: Int64) -> Bool {
         guard fileManager.fileExists(atPath: url.path) else {
             return false
         }
@@ -631,7 +760,7 @@ actor WhisperGGMLCoreMLService {
               let fileSize = values.fileSize else {
             return false
         }
-        return Int64(fileSize) >= Constants.minimumModelSizeBytes
+        return Int64(fileSize) >= minimumFileSizeBytes
     }
 
     private func bundledEncoderDirectoryURL() -> URL? {

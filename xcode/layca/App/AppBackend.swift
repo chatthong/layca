@@ -1678,8 +1678,92 @@ struct PersistedAppSettings: Codable, Equatable {
     var totalHours: Double
     var usedHours: Double
     var isICloudSyncEnabled: Bool
+    var whisperCoreMLEncoderEnabled: Bool
+    var whisperGGMLGPUDecodeEnabled: Bool
+    var whisperModelProfileRawValue: String
     var activeSessionID: UUID?
     var chatCounter: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case selectedLanguageCodes
+        case languageSearchText
+        case focusContextKeywords
+        case totalHours
+        case usedHours
+        case isICloudSyncEnabled
+        case whisperCoreMLEncoderEnabled
+        case whisperGGMLGPUDecodeEnabled
+        case whisperModelProfileRawValue
+        case activeSessionID
+        case chatCounter
+    }
+
+    init(
+        schemaVersion: Int,
+        selectedLanguageCodes: [String],
+        languageSearchText: String,
+        focusContextKeywords: String,
+        totalHours: Double,
+        usedHours: Double,
+        isICloudSyncEnabled: Bool,
+        whisperCoreMLEncoderEnabled: Bool = AppBackend.defaultWhisperCoreMLEncoderEnabledForCurrentDevice(),
+        whisperGGMLGPUDecodeEnabled: Bool = AppBackend.defaultWhisperGPUDecodeEnabledForCurrentDevice(),
+        whisperModelProfileRawValue: String = AppBackend.defaultWhisperModelProfileForCurrentDevice().rawValue,
+        activeSessionID: UUID?,
+        chatCounter: Int
+    ) {
+        self.schemaVersion = schemaVersion
+        self.selectedLanguageCodes = selectedLanguageCodes
+        self.languageSearchText = languageSearchText
+        self.focusContextKeywords = focusContextKeywords
+        self.totalHours = totalHours
+        self.usedHours = usedHours
+        self.isICloudSyncEnabled = isICloudSyncEnabled
+        self.whisperCoreMLEncoderEnabled = whisperCoreMLEncoderEnabled
+        self.whisperGGMLGPUDecodeEnabled = whisperGGMLGPUDecodeEnabled
+        self.whisperModelProfileRawValue = whisperModelProfileRawValue
+        self.activeSessionID = activeSessionID
+        self.chatCounter = chatCounter
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        selectedLanguageCodes = try container.decode([String].self, forKey: .selectedLanguageCodes)
+        languageSearchText = try container.decode(String.self, forKey: .languageSearchText)
+        focusContextKeywords = try container.decode(String.self, forKey: .focusContextKeywords)
+        totalHours = try container.decode(Double.self, forKey: .totalHours)
+        usedHours = try container.decode(Double.self, forKey: .usedHours)
+        isICloudSyncEnabled = try container.decode(Bool.self, forKey: .isICloudSyncEnabled)
+        whisperCoreMLEncoderEnabled =
+            try container.decodeIfPresent(Bool.self, forKey: .whisperCoreMLEncoderEnabled)
+            ?? AppBackend.defaultWhisperCoreMLEncoderEnabledForCurrentDevice()
+        whisperGGMLGPUDecodeEnabled =
+            try container.decodeIfPresent(Bool.self, forKey: .whisperGGMLGPUDecodeEnabled)
+            ?? AppBackend.defaultWhisperGPUDecodeEnabledForCurrentDevice()
+        whisperModelProfileRawValue =
+            try container.decodeIfPresent(String.self, forKey: .whisperModelProfileRawValue)
+            ?? AppBackend.defaultWhisperModelProfileForCurrentDevice().rawValue
+        activeSessionID = try container.decodeIfPresent(UUID.self, forKey: .activeSessionID)
+        chatCounter = try container.decode(Int.self, forKey: .chatCounter)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(selectedLanguageCodes, forKey: .selectedLanguageCodes)
+        try container.encode(languageSearchText, forKey: .languageSearchText)
+        try container.encode(focusContextKeywords, forKey: .focusContextKeywords)
+        try container.encode(totalHours, forKey: .totalHours)
+        try container.encode(usedHours, forKey: .usedHours)
+        try container.encode(isICloudSyncEnabled, forKey: .isICloudSyncEnabled)
+        try container.encode(whisperCoreMLEncoderEnabled, forKey: .whisperCoreMLEncoderEnabled)
+        try container.encode(whisperGGMLGPUDecodeEnabled, forKey: .whisperGGMLGPUDecodeEnabled)
+        try container.encode(whisperModelProfileRawValue, forKey: .whisperModelProfileRawValue)
+        try container.encodeIfPresent(activeSessionID, forKey: .activeSessionID)
+        try container.encode(chatCounter, forKey: .chatCounter)
+    }
 }
 
 struct AppSettingsStore {
@@ -1756,6 +1840,24 @@ final class AppBackend: ObservableObject {
     @Published var isICloudSyncEnabled = true {
         didSet { persistSettingsIfNeeded() }
     }
+    @Published var whisperCoreMLEncoderEnabled = AppBackend.defaultWhisperCoreMLEncoderEnabledForCurrentDevice() {
+        didSet {
+            persistSettingsIfNeeded()
+            applyWhisperAccelerationPreferencesIfNeeded()
+        }
+    }
+    @Published var whisperGGMLGPUDecodeEnabled = AppBackend.defaultWhisperGPUDecodeEnabledForCurrentDevice() {
+        didSet {
+            persistSettingsIfNeeded()
+            applyWhisperAccelerationPreferencesIfNeeded()
+        }
+    }
+    @Published var whisperModelProfile = AppBackend.defaultWhisperModelProfileForCurrentDevice() {
+        didSet {
+            persistSettingsIfNeeded()
+            applyWhisperAccelerationPreferencesIfNeeded()
+        }
+    }
     @Published var isRestoringPurchases = false
     @Published var restoreStatusMessage: String?
 
@@ -1786,6 +1888,7 @@ final class AppBackend: ObservableObject {
     private var queuedTranscriptionTask: Task<Void, Never>?
     private var queuedManualRetranscriptions: [QueuedManualRetranscription] = []
     private var queuedManualRetranscriptionTask: Task<Void, Never>?
+    private var whisperPrepareTask: Task<Void, Never>?
     private var currentRecordingBaseOffset: Double = 0
     private var chatCounter = 0
     private var isHydratingPersistedState = false
@@ -1821,8 +1924,21 @@ final class AppBackend: ObservableObject {
         return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
     }
 
+    var whisperCoreMLEncoderRecommendationText: String {
+        Self.whisperCoreMLEncoderRecommendationTextForCurrentDevice()
+    }
+
+    var whisperGGMLGPUDecodeRecommendationText: String {
+        Self.whisperGPUDecodeRecommendationTextForCurrentDevice()
+    }
+
+    var whisperModelRecommendationText: String {
+        Self.whisperModelRecommendationTextForCurrentDevice()
+    }
+
     func bootstrap() async {
         loadPersistedSettings()
+        applyWhisperAccelerationPreferencesIfNeeded()
         await refreshSessionsFromStore()
 
         let inferredCounter = inferChatCounter(from: sessions)
@@ -2795,6 +2911,10 @@ final class AppBackend: ObservableObject {
         }
         usedHours = min(max(persisted.usedHours, 0), totalHours)
         isICloudSyncEnabled = persisted.isICloudSyncEnabled
+        whisperCoreMLEncoderEnabled = persisted.whisperCoreMLEncoderEnabled
+        whisperGGMLGPUDecodeEnabled = persisted.whisperGGMLGPUDecodeEnabled
+        whisperModelProfile = WhisperModelProfile(rawValue: persisted.whisperModelProfileRawValue)
+            ?? Self.defaultWhisperModelProfileForCurrentDevice()
         activeSessionID = persisted.activeSessionID
         chatCounter = max(persisted.chatCounter, 0)
         isHydratingPersistedState = false
@@ -2813,10 +2933,128 @@ final class AppBackend: ObservableObject {
             totalHours: totalHours,
             usedHours: usedHours,
             isICloudSyncEnabled: isICloudSyncEnabled,
+            whisperCoreMLEncoderEnabled: whisperCoreMLEncoderEnabled,
+            whisperGGMLGPUDecodeEnabled: whisperGGMLGPUDecodeEnabled,
+            whisperModelProfileRawValue: whisperModelProfile.rawValue,
             activeSessionID: activeSessionID,
             chatCounter: max(chatCounter, 0)
         )
         settingsStore.save(snapshot)
+    }
+
+    private func applyWhisperAccelerationPreferencesIfNeeded() {
+        guard !isHydratingPersistedState else {
+            return
+        }
+
+        whisperPrepareTask?.cancel()
+
+        let coreMLEncoderEnabled = whisperCoreMLEncoderEnabled
+        let ggmlGPUDecodeEnabled = whisperGGMLGPUDecodeEnabled
+        let modelProfile = whisperModelProfile
+        whisperPrepareTask = Task(priority: .utility) { [whisperTranscriber] in
+            await whisperTranscriber.setRuntimePreferences(
+                coreMLEncoderEnabled: coreMLEncoderEnabled,
+                ggmlGPUDecodeEnabled: ggmlGPUDecodeEnabled,
+                modelProfile: modelProfile
+            )
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            // Prewarm in background so first user transcription avoids cold-start latency.
+            do {
+                try await whisperTranscriber.prepareIfNeeded()
+            } catch {
+#if DEBUG
+                print("[Whisper] Background prepare failed: \(error.localizedDescription)")
+#endif
+            }
+        }
+    }
+
+    nonisolated static func defaultWhisperCoreMLEncoderEnabledForCurrentDevice() -> Bool {
+#if targetEnvironment(simulator)
+        return false
+#elseif os(iOS) || os(tvOS) || os(visionOS)
+        let minimumMemoryBytes: UInt64 = 7_500_000_000
+        let minimumCoreCount = 6
+        return ProcessInfo.processInfo.physicalMemory >= minimumMemoryBytes
+            && ProcessInfo.processInfo.processorCount >= minimumCoreCount
+#else
+        return true
+#endif
+    }
+
+    nonisolated static func defaultWhisperGPUDecodeEnabledForCurrentDevice() -> Bool {
+#if targetEnvironment(simulator)
+        return false
+#else
+        return true
+#endif
+    }
+
+    nonisolated static func defaultWhisperModelProfileForCurrentDevice() -> WhisperModelProfile {
+#if targetEnvironment(simulator)
+        return .quick
+#elseif os(iOS) || os(tvOS) || os(visionOS)
+        let memoryBytes = ProcessInfo.processInfo.physicalMemory
+        let coreCount = ProcessInfo.processInfo.processorCount
+        if memoryBytes >= 10_500_000_000, coreCount >= 8 {
+            return .pro
+        }
+        if memoryBytes >= 7_500_000_000, coreCount >= 6 {
+            return .normal
+        }
+        return .quick
+#else
+        return .pro
+#endif
+    }
+
+    nonisolated static func whisperCoreMLEncoderRecommendationTextForCurrentDevice() -> String {
+#if targetEnvironment(simulator)
+        return "Recommended OFF on simulator. Use a physical device for CoreML acceleration."
+#elseif os(iOS) || os(tvOS) || os(visionOS)
+        let memoryGB = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
+        let cores = ProcessInfo.processInfo.processorCount
+        if defaultWhisperCoreMLEncoderEnabledForCurrentDevice() {
+            return String(
+                format: "Recommended ON for this device (%.1fGB RAM, %d cores).",
+                memoryGB,
+                cores
+            )
+        }
+        return String(
+            format: "Recommended OFF for startup stability (%.1fGB RAM, %d cores).",
+            memoryGB,
+            cores
+        )
+#else
+        return "Recommended ON for best local performance."
+#endif
+    }
+
+    nonisolated static func whisperGPUDecodeRecommendationTextForCurrentDevice() -> String {
+#if targetEnvironment(simulator)
+        return "Recommended OFF on simulator. Use a physical device for GPU decode."
+#elseif os(iOS) || os(tvOS) || os(visionOS)
+        return "Recommended ON to use Apple GPU decode acceleration."
+#else
+        return "Recommended ON to use Metal GPU decode acceleration."
+#endif
+    }
+
+    nonisolated static func whisperModelRecommendationTextForCurrentDevice() -> String {
+#if targetEnvironment(simulator)
+        return "Recommended Fast on simulator."
+#elseif os(iOS) || os(tvOS) || os(visionOS)
+        let recommended = defaultWhisperModelProfileForCurrentDevice().title
+        return "Recommended \(recommended) for this device."
+#else
+        return "Recommended Pro for best quality."
+#endif
     }
 
     private func inferChatCounter(from sessions: [ChatSession]) -> Int {
