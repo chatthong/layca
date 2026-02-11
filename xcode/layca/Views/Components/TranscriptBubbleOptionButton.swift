@@ -3,6 +3,7 @@ import SwiftUI
 struct TranscriptBubbleOptionButton<Content: View>: View {
     let item: TranscriptRow
     let liveChatItems: [TranscriptRow]
+    let selectedFocusLanguageCodes: Set<String>
     let isRecording: Bool
     let isTranscriptionBusy: Bool
     let isItemTranscribing: Bool
@@ -12,7 +13,7 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
     let onManualEditTranscript: (TranscriptRow, String) -> Void
     let onEditSpeakerName: (TranscriptRow, String) -> Void
     let onChangeSpeaker: (TranscriptRow, String) -> Void
-    let onRetranscribeTranscript: (TranscriptRow) -> Void
+    let onRetranscribeTranscript: (TranscriptRow, String?) -> Void
     @ViewBuilder let content: () -> Content
 
     @State private var editingTranscriptRow: TranscriptRow?
@@ -50,8 +51,8 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
 
                         Divider()
 
-                        Button {
-                            onRetranscribeTranscript(item)
+                        Menu {
+                            retranscribeMenu(for: item)
                         } label: {
                             Label("Transcribe Again", systemImage: "waveform.and.mic")
                         }
@@ -163,6 +164,46 @@ struct TranscriptBubbleOptionButton<Content: View>: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func retranscribeMenu(for item: TranscriptRow) -> some View {
+        Button {
+            onRetranscribeTranscript(item, nil)
+        } label: {
+            Label("Transcribe Auto", systemImage: "wand.and.stars")
+        }
+
+        if !focusLanguageOptions.isEmpty {
+            Divider()
+            ForEach(focusLanguageOptions) { option in
+                Button {
+                    onRetranscribeTranscript(item, option.code)
+                } label: {
+                    Label("Transcribe in \(option.displayName)", systemImage: "globe")
+                }
+            }
+        }
+    }
+
+    private var focusLanguageOptions: [TranscriptRetranscribeLanguageOption] {
+        let normalizedCodes = Set(
+            selectedFocusLanguageCodes
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty && $0 != "auto" }
+        )
+
+        return normalizedCodes
+            .map { code in
+                let displayName = Locale.current.localizedString(forLanguageCode: code) ?? code.uppercased()
+                return TranscriptRetranscribeLanguageOption(
+                    code: code,
+                    displayName: displayName
+                )
+            }
+            .sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
     }
 
     private func transcriptEditorSheet(for row: TranscriptRow) -> some View {
@@ -309,4 +350,11 @@ private struct TranscriptSpeakerMenuOption: Identifiable {
     let id: String
     let label: String
     let avatarSymbol: String
+}
+
+private struct TranscriptRetranscribeLanguageOption: Identifiable {
+    let code: String
+    let displayName: String
+
+    var id: String { code }
 }

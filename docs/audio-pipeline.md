@@ -69,7 +69,12 @@
 - If output is empty or appears to echo prompt instructions, backend applies fallback reruns (without prompt and detected-language retry).
 - Transcription quality guardrails classify outputs and handle unusable values (`-`, `foreign`, empty-like text) by retrying or deleting placeholder rows with no usable speech.
 - Playback is disabled while recording is active.
-- Manual `Transcribe Again` is currently blocked during active recording and shows `Stop recording before running Transcribe Again.`.
+- Manual `Transcribe Again` uses submenu options:
+  - `Transcribe Auto` (auto language detect)
+  - `Transcribe in <Focus Language>` (only user-selected focus languages are shown)
+- Forced `TH` / `EN` manual retries validate output script and retry once without prompt if script mismatches.
+- If forced-language retry still mismatches script, backend keeps existing row text and does not show a low-confidence error banner.
+- Manual `Transcribe Again` remains blocked during active recording and shows `Stop recording before running Transcribe Again.`.
 - If offsets are missing or invalid, bubble remains non-playable.
 
 ## Current vs Planned

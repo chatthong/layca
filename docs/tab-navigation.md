@@ -86,8 +86,11 @@
   - `Edit Text`
   - `Edit Speaker Name` (syncs all rows with same `speakerID`)
   - `Change Speaker` (pick another existing speaker profile)
-  - `Transcribe Again`
+  - `Transcribe Again` submenu:
+    - `Transcribe Auto`
+    - `Transcribe in <Focus Language>` (selected focus languages only)
 - Bubble long-press is disabled while recording and while queued/active transcription is in progress.
+- Forced `TH` / `EN` retries validate script output and retry once without prompt before keeping existing text.
 - `Transcribe Again` execution is currently gated while recording and shows `Stop recording before running Transcribe Again.`.
 - Chunk transcription runs automatically in queue order and keeps original spoken language (auto-detect + no translation).
 

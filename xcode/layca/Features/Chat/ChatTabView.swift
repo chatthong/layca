@@ -8,6 +8,7 @@ struct ChatTabView: View {
     let activeSessionTitle: String
     let activeSessionDateText: String
     let liveChatItems: [TranscriptRow]
+    let selectedFocusLanguageCodes: Set<String>
     let transcribingRowIDs: Set<UUID>
     let queuedRetranscriptionRowIDs: Set<UUID>
     let isTranscriptionBusy: Bool
@@ -18,7 +19,7 @@ struct ChatTabView: View {
     let onManualEditTranscript: (TranscriptRow, String) -> Void
     let onEditSpeakerName: (TranscriptRow, String) -> Void
     let onChangeSpeaker: (TranscriptRow, String) -> Void
-    let onRetranscribeTranscript: (TranscriptRow) -> Void
+    let onRetranscribeTranscript: (TranscriptRow, String?) -> Void
     let onExportTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
     let showsTopToolbar: Bool
@@ -42,6 +43,7 @@ struct ChatTabView: View {
         activeSessionTitle: String,
         activeSessionDateText: String,
         liveChatItems: [TranscriptRow],
+        selectedFocusLanguageCodes: Set<String>,
         transcribingRowIDs: Set<UUID>,
         queuedRetranscriptionRowIDs: Set<UUID>,
         isTranscriptionBusy: Bool,
@@ -52,7 +54,7 @@ struct ChatTabView: View {
         onManualEditTranscript: @escaping (TranscriptRow, String) -> Void,
         onEditSpeakerName: @escaping (TranscriptRow, String) -> Void,
         onChangeSpeaker: @escaping (TranscriptRow, String) -> Void,
-        onRetranscribeTranscript: @escaping (TranscriptRow) -> Void,
+        onRetranscribeTranscript: @escaping (TranscriptRow, String?) -> Void,
         onExportTap: @escaping () -> Void,
         onRenameSessionTitle: @escaping (String) -> Void,
         showsTopToolbar: Bool = true
@@ -63,6 +65,7 @@ struct ChatTabView: View {
         self.activeSessionTitle = activeSessionTitle
         self.activeSessionDateText = activeSessionDateText
         self.liveChatItems = liveChatItems
+        self.selectedFocusLanguageCodes = selectedFocusLanguageCodes
         self.transcribingRowIDs = transcribingRowIDs
         self.queuedRetranscriptionRowIDs = queuedRetranscriptionRowIDs
         self.isTranscriptionBusy = isTranscriptionBusy
@@ -488,6 +491,7 @@ struct ChatTabView: View {
                     TranscriptBubbleOptionButton(
                         item: item,
                         liveChatItems: liveChatItems,
+                        selectedFocusLanguageCodes: selectedFocusLanguageCodes,
                         isRecording: isRecording,
                         isTranscriptionBusy: isTranscriptionBusy,
                         isItemTranscribing: transcribingRowIDs.contains(item.id),

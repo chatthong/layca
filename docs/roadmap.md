@@ -52,7 +52,9 @@
   - manual transcript edit
   - speaker rename (sync all rows by `speakerID`)
   - change row speaker to another existing speaker profile
-  - "Transcribe Again" retry action
+  - "Transcribe Again" submenu:
+    - `Transcribe Auto`
+    - `Transcribe in <Focus Language>` (selected focus languages only)
 - Bubble long-press is disabled while recording and while queued/active transcription work is running.
 - Extracted bubble-option UI logic into dedicated component file:
   - `Views/Components/TranscriptBubbleOptionButton.swift`
@@ -64,6 +66,11 @@
 - Added transcription quality classification (`acceptable` / `weak` / `unusable`) to trigger retry behavior and reduce junk outputs (e.g., `-`, `foreign`).
 - Playback is disabled while recording, and rows without valid offsets are non-playable.
 - Manual `Transcribe Again` is currently gated while recording (`Stop recording before running Transcribe Again.`).
+- Added manual language override path for retranscribe (`preferredLanguageCodeOverride`) with forced-language queue payload.
+- Added forced `TH` / `EN` script validation for manual retranscribe:
+  - retry once without prompt when script mismatches
+  - keep existing text when mismatch persists
+- Removed low-confidence warning banner for manual keep-existing fallback.
 - Recorder button tap issue fixed by disabling hit-testing on decorative overlays.
 
 ### Automatic Message Transcription Queue

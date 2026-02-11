@@ -57,8 +57,15 @@
 
 ### `retranscribeTranscriptRow(_ row: TranscriptRow) -> Void`
 - Queues a manual re-transcribe for the row's audio range.
+- Equivalent to calling language-override variant with `preferredLanguageCodeOverride = nil`.
+
+### `retranscribeTranscriptRow(_ row: TranscriptRow, preferredLanguageCodeOverride: String?) -> Void`
+- Queues a manual re-transcribe for the row's audio range with optional language override.
+- `preferredLanguageCodeOverride = nil` keeps auto language detection behavior.
+- Non-nil override forces decode to that language code for the retry (e.g., `th`, `en`).
 - Current execution guard: while recording, backend shows `Stop recording before running Transcribe Again.` and waits for stopped state.
-- Uses auto language detect with translation disabled and patches row text/language.
+- Uses translation-disabled decode and patches row text/language.
+- Forced `TH` / `EN` retries validate output script, retry once without prompt if mismatched, and keep existing text when mismatch persists.
 
 ## PreflightService
 

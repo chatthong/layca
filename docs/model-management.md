@@ -38,6 +38,16 @@
   - Classifies result as `acceptable`, `weak`, or `unusable`.
   - Unusable placeholder/no-speech outputs are removed instead of keeping placeholder text.
 
+## Manual Re-transcribe Behavior
+- Bubble action `Transcribe Again` provides:
+  - `Transcribe Auto` (auto language detect)
+  - `Transcribe in <Focus Language>` (entries come from selected focus languages only)
+- Manual language override runs with `preferredLanguageCode = <forced code>` and translation disabled.
+- Forced `TH` / `EN` retries validate output script:
+  - first pass uses standard prompt flow
+  - on script mismatch, backend retries once without prompt
+  - if mismatch persists, existing row text is kept (no low-confidence warning banner)
+
 ## Whisper Startup / Backend Selection
 - App applies runtime preferences during bootstrap and triggers background Whisper prepare/warmup to reduce first-use latency.
 - Runtime preference sources:

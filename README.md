@@ -169,9 +169,13 @@ Documents/
   - manual text edit
   - speaker rename (syncs all rows with same `speakerID`)
   - speaker reassignment to another existing speaker profile
-  - "Transcribe Again" retry
+  - "Transcribe Again" submenu:
+    - `Transcribe Auto` (same behavior as previous retry)
+    - `Transcribe in <Focus Language>` (shows selected focus languages only)
 - Bubble long-press is disabled while recording and while queued/active transcription work is running.
 - "Transcribe Again" execution is currently gated while recording (`Stop recording before running Transcribe Again.`).
+- Forced language retry (`TH` / `EN`) now validates output script; on mismatch backend retries once without prompt and keeps existing text if script still mismatches.
+- Manual retry quality failures keep existing text silently (no low-confidence banner).
 - Bubble option UI is extracted into a dedicated component (`Views/Components/TranscriptBubbleOptionButton.swift`).
 - Row transcription status clears reliably; no-speech placeholder rows are deleted automatically.
 - Chunk playback is only enabled when recording is stopped.

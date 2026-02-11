@@ -1808,6 +1808,7 @@ final class AppBackend: ObservableObject {
     private struct QueuedManualRetranscription: Sendable {
         let rowID: UUID
         let sessionID: UUID
+        let preferredLanguageCodeOverride: String?
     }
 
     private enum TranscriptionQuality {
@@ -2126,6 +2127,22 @@ final class AppBackend: ObservableObject {
     }
 
     func retranscribeTranscriptRow(_ row: TranscriptRow) {
+        retranscribeTranscriptRow(row, preferredLanguageCodeOverride: nil)
+    }
+
+    func retranscribeTranscriptRow(
+        _ row: TranscriptRow,
+        preferredLanguageCodeOverride: String?
+    ) {
+        let normalizedLanguageOverride = normalizedPreferredLanguageCodeOverride(
+            preferredLanguageCodeOverride
+        )
+        if let normalizedLanguageOverride {
+            print(
+                "[Retranscribe] User selected manual language override: \(normalizedLanguageOverride.uppercased()) for row \(row.id.uuidString)"
+            )
+        }
+
         guard let sessionID = resolvedSessionID(for: row) else {
             preflightStatusMessage = "Unable to locate this message in an active chat."
             return
@@ -2152,7 +2169,8 @@ final class AppBackend: ObservableObject {
         queuedManualRetranscriptions.append(
             QueuedManualRetranscription(
                 rowID: row.id,
-                sessionID: sessionID
+                sessionID: sessionID,
+                preferredLanguageCodeOverride: normalizedLanguageOverride
             )
         )
         updateTranscriptionBusyState()
@@ -2197,7 +2215,11 @@ final class AppBackend: ObservableObject {
                 continue
             }
 
-            await retranscribeTranscriptRowInternal(row, sessionID: next.sessionID)
+            await retranscribeTranscriptRowInternal(
+                row,
+                sessionID: next.sessionID,
+                preferredLanguageCodeOverride: next.preferredLanguageCodeOverride
+            )
             updateTranscriptionBusyState()
         }
 
@@ -2336,7 +2358,11 @@ final class AppBackend: ObservableObject {
         }
     }
 
-    private func retranscribeTranscriptRowInternal(_ row: TranscriptRow, sessionID: UUID) async {
+    private func retranscribeTranscriptRowInternal(
+        _ row: TranscriptRow,
+        sessionID: UUID,
+        preferredLanguageCodeOverride: String?
+    ) async {
         guard !isRecording else {
             preflightStatusMessage = "Stop recording before running Transcribe Again."
             return
@@ -2373,16 +2399,25 @@ final class AppBackend: ObservableObject {
         }
 
         do {
-            let preferredLanguageCode = await preferredTranscriptionLanguageCode(
-                sessionID: sessionID,
-                rowID: row.id
+            let preferredLanguageCode: String
+            let forcedLanguageCode = normalizedPreferredLanguageCodeOverride(
+                preferredLanguageCodeOverride
             )
+            if let forcedLanguageCode {
+                preferredLanguageCode = forcedLanguageCode
+            } else {
+                preferredLanguageCode = await preferredTranscriptionLanguageCode(
+                    sessionID: sessionID,
+                    rowID: row.id
+                )
+            }
             let focusLanguageCodes = selectedLanguageCodes.map { $0.lowercased() }.sorted()
+            let promptLanguageCodes = forcedLanguageCode.map { [$0] } ?? focusLanguageCodes
             let initialPrompt = preflightService.buildPrompt(
-                languageCodes: focusLanguageCodes,
+                languageCodes: promptLanguageCodes,
                 keywords: focusContextKeywords
             )
-            let result = try await whisperTranscriber.transcribe(
+            var result = try await whisperTranscriber.transcribe(
                 audioURL: audioURL,
                 startOffset: startOffset,
                 endOffset: endOffset,
@@ -2391,10 +2426,34 @@ final class AppBackend: ObservableObject {
                 focusLanguageCodes: focusLanguageCodes
             )
 
-            let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            var trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
                 await dropTranscriptRowWithoutSpeech(sessionID: sessionID, rowID: row.id)
                 return
+            }
+
+            if let forcedLanguageCode,
+               !matchesExpectedScript(text: trimmed, forcedLanguageCode: forcedLanguageCode) {
+                print(
+                    "[Retranscribe] Forced \(forcedLanguageCode.uppercased()) script mismatch; retrying without prompt for row \(row.id.uuidString)"
+                )
+                let retryResult = try await whisperTranscriber.transcribe(
+                    audioURL: audioURL,
+                    startOffset: startOffset,
+                    endOffset: endOffset,
+                    preferredLanguageCode: forcedLanguageCode,
+                    initialPrompt: nil,
+                    focusLanguageCodes: [forcedLanguageCode]
+                )
+                let retryTrimmed = retryResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !retryTrimmed.isEmpty,
+                   matchesExpectedScript(text: retryTrimmed, forcedLanguageCode: forcedLanguageCode) {
+                    result = retryResult
+                    trimmed = retryTrimmed
+                } else {
+                    preflightStatusMessage = "Unable to force \(forcedLanguageCode.uppercased()) output for this message. Existing text was kept."
+                    return
+                }
             }
 
             let quality = transcriptionQuality(
@@ -2408,7 +2467,7 @@ final class AppBackend: ObservableObject {
                 if isAutoTranscriptionPlaceholder(row.text) {
                     await dropTranscriptRowWithoutSpeech(sessionID: sessionID, rowID: row.id)
                 } else {
-                    preflightStatusMessage = "Low-confidence transcription. Existing message was kept."
+                    preflightStatusMessage = nil
                 }
                 return
             }
@@ -2615,7 +2674,11 @@ final class AppBackend: ObservableObject {
 
         queuedManualRetranscriptionRowIDs.insert(rowID)
         queuedManualRetranscriptions.append(
-            QueuedManualRetranscription(rowID: rowID, sessionID: sessionID)
+            QueuedManualRetranscription(
+                rowID: rowID,
+                sessionID: sessionID,
+                preferredLanguageCodeOverride: nil
+            )
         )
         updateTranscriptionBusyState()
         startManualRetranscriptionWorkerIfNeeded()
@@ -2667,6 +2730,44 @@ final class AppBackend: ObservableObject {
         _ = sessionID
         _ = rowID
         return "auto"
+    }
+
+    private func matchesExpectedScript(text: String, forcedLanguageCode: String) -> Bool {
+        let normalizedCode = forcedLanguageCode
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let scalars = text.unicodeScalars
+
+        switch normalizedCode {
+        case "th":
+            return scalars.contains { scalar in
+                let value = scalar.value
+                return value >= 0x0E00 && value <= 0x0E7F
+            }
+        case "en":
+            return scalars.contains { scalar in
+                let value = scalar.value
+                return (value >= 0x41 && value <= 0x5A) || (value >= 0x61 && value <= 0x7A)
+            }
+        default:
+            return true
+        }
+    }
+
+    private func normalizedPreferredLanguageCodeOverride(_ code: String?) -> String? {
+        guard let code else {
+            return nil
+        }
+
+        let normalized = code
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        guard !normalized.isEmpty, normalized != "auto" else {
+            return nil
+        }
+
+        return normalized
     }
 
     private func transcriptionQuality(

@@ -145,6 +145,7 @@ private extension ContentView {
             activeSessionTitle: backend.activeSessionTitle,
             activeSessionDateText: backend.activeSessionDateText,
             liveChatItems: backend.activeTranscriptRows,
+            selectedFocusLanguageCodes: backend.selectedLanguageCodes,
             transcribingRowIDs: backend.transcribingRowIDs,
             queuedRetranscriptionRowIDs: backend.queuedManualRetranscriptionRowIDs,
             isTranscriptionBusy: backend.isTranscriptionBusy,
@@ -155,7 +156,9 @@ private extension ContentView {
             onManualEditTranscript: backend.editTranscriptRow,
             onEditSpeakerName: backend.editSpeakerName,
             onChangeSpeaker: backend.changeSpeaker,
-            onRetranscribeTranscript: backend.retranscribeTranscriptRow,
+            onRetranscribeTranscript: { row, languageCode in
+                backend.retranscribeTranscriptRow(row, preferredLanguageCodeOverride: languageCode)
+            },
             onExportTap: { isExportPresented = true },
             onRenameSessionTitle: backend.renameActiveSessionTitle,
             onNewChatTap: startNewChatAndReturnToChat,
@@ -211,6 +214,7 @@ private extension ContentView {
             activeSessionTitle: backend.activeSessionTitle,
             activeSessionDateText: backend.activeSessionDateText,
             liveChatItems: backend.activeTranscriptRows,
+            selectedFocusLanguageCodes: backend.selectedLanguageCodes,
             transcribingRowIDs: backend.transcribingRowIDs,
             queuedRetranscriptionRowIDs: backend.queuedManualRetranscriptionRowIDs,
             isTranscriptionBusy: backend.isTranscriptionBusy,
@@ -221,7 +225,9 @@ private extension ContentView {
             onManualEditTranscript: backend.editTranscriptRow,
             onEditSpeakerName: backend.editSpeakerName,
             onChangeSpeaker: backend.changeSpeaker,
-            onRetranscribeTranscript: backend.retranscribeTranscriptRow,
+            onRetranscribeTranscript: { row, languageCode in
+                backend.retranscribeTranscriptRow(row, preferredLanguageCodeOverride: languageCode)
+            },
             onExportTap: { isExportPresented = true },
             onRenameSessionTitle: backend.renameActiveSessionTitle,
             showsTopToolbar: showsTopToolbar

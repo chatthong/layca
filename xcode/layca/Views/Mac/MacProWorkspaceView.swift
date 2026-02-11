@@ -216,6 +216,7 @@ struct MacChatWorkspaceView: View {
     let activeSessionTitle: String
     let activeSessionDateText: String
     let liveChatItems: [TranscriptRow]
+    let selectedFocusLanguageCodes: Set<String>
     let transcribingRowIDs: Set<UUID>
     let queuedRetranscriptionRowIDs: Set<UUID>
     let isTranscriptionBusy: Bool
@@ -226,7 +227,7 @@ struct MacChatWorkspaceView: View {
     let onManualEditTranscript: (TranscriptRow, String) -> Void
     let onEditSpeakerName: (TranscriptRow, String) -> Void
     let onChangeSpeaker: (TranscriptRow, String) -> Void
-    let onRetranscribeTranscript: (TranscriptRow) -> Void
+    let onRetranscribeTranscript: (TranscriptRow, String?) -> Void
     let onExportTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
     let onNewChatTap: () -> Void
@@ -458,6 +459,7 @@ struct MacChatWorkspaceView: View {
                                 TranscriptBubbleOptionButton(
                                     item: item,
                                     liveChatItems: liveChatItems,
+                                    selectedFocusLanguageCodes: selectedFocusLanguageCodes,
                                     isRecording: isRecording,
                                     isTranscriptionBusy: isTranscriptionBusy,
                                     isItemTranscribing: transcribingRowIDs.contains(item.id),

@@ -67,7 +67,10 @@
 - If ggml GPU decode init fails, runtime falls back to CPU decode and logs reason.
 - Chunk slicing defaults are tuned longer to reduce over-splitting: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
 - Chunk playback is gated off while recording to avoid audio-session conflicts.
-- "Transcribe Again" is currently gated during active recording and runs after recording stops.
+- "Transcribe Again" is a submenu (`Transcribe Auto`, plus `Transcribe in <Focus Language>` entries for selected focus languages).
+- Manual retranscribe execution is currently gated during active recording and runs after recording stops.
+- Forced `TH` / `EN` manual retries validate script output; backend retries once without prompt on mismatch, then keeps existing text when mismatch persists.
+- Manual low-confidence retries keep existing text silently (no red warning banner).
 - `SessionStore` persists both `session.json` (session metadata) and `segments.json` (row snapshots) and reloads from disk at startup.
 - `AppSettingsStore` persists user setting values and active-chat selection through relaunch.
 - Library session rows (iOS-family + macOS library workspace) support `Rename`, `Share this chat`, `Delete` via context menu.
