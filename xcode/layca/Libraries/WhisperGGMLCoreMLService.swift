@@ -4,6 +4,8 @@ import whisper
 
 struct WhisperTranscriptionResult: Sendable {
     let languageID: String
+    let languageProbability: Float?
+    let languageProbabilities: [String: Float]
     let text: String
 }
 
@@ -87,6 +89,7 @@ actor WhisperGGMLCoreMLService {
         static let minimumIOSEncoderCoreCount = 6
         static let ggmlGPUDecodeEnvKey = "LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE"
         static let ggmlGPUDecodeEnabledByDefault = true
+        static let lowConfidenceLanguageProbabilityThreshold: Float = 0.5
     }
 
     private let fileManager: FileManager
@@ -155,7 +158,8 @@ actor WhisperGGMLCoreMLService {
         startOffset: Double,
         endOffset: Double,
         preferredLanguageCode: String,
-        initialPrompt: String?
+        initialPrompt: String?,
+        focusLanguageCodes: [String] = []
     ) async throws -> WhisperTranscriptionResult {
         guard endOffset > startOffset else {
             throw WhisperGGMLCoreMLError.invalidChunkOffsets
@@ -175,7 +179,8 @@ actor WhisperGGMLCoreMLService {
             samples16k,
             context: ctx,
             preferredLanguageCode: preferredLanguageCode,
-            initialPrompt: initialPrompt
+            initialPrompt: initialPrompt,
+            focusLanguageCodes: focusLanguageCodes
         )
     }
 
@@ -183,7 +188,8 @@ actor WhisperGGMLCoreMLService {
         samples: [Float],
         sourceSampleRate: Double,
         preferredLanguageCode: String,
-        initialPrompt: String?
+        initialPrompt: String?,
+        focusLanguageCodes: [String] = []
     ) async throws -> WhisperTranscriptionResult {
         let ctx = try await ensureContext()
         let samples16k = Self.resampleTo16k(samples: samples, sourceSampleRate: sourceSampleRate)
@@ -195,7 +201,8 @@ actor WhisperGGMLCoreMLService {
             samples16k,
             context: ctx,
             preferredLanguageCode: preferredLanguageCode,
-            initialPrompt: initialPrompt
+            initialPrompt: initialPrompt,
+            focusLanguageCodes: focusLanguageCodes
         )
     }
 
@@ -203,7 +210,8 @@ actor WhisperGGMLCoreMLService {
         _ samples: [Float],
         context: OpaquePointer,
         preferredLanguageCode: String,
-        initialPrompt: String?
+        initialPrompt: String?,
+        focusLanguageCodes: [String]
     ) throws -> WhisperTranscriptionResult {
         let normalizedLanguage = preferredLanguageCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let languageCode: String
@@ -229,6 +237,11 @@ actor WhisperGGMLCoreMLService {
         params.no_timestamps = true
         let prompt = initialPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
         let promptOrNil = (prompt?.isEmpty == false) ? prompt : nil
+        let normalizedFocusLanguageCodes = Set(
+            focusLanguageCodes
+                .map { Self.normalizedLanguageCode($0) }
+                .filter { !$0.isEmpty && whisper_lang_id($0) >= 0 }
+        )
 
         func runWhisper(
             languagePointer: UnsafePointer<CChar>?,
@@ -307,6 +320,31 @@ actor WhisperGGMLCoreMLService {
             return String(cString: cLanguage)
         }
 
+        func collectLanguageProbabilities() -> [String: Float] {
+            let maxLanguageID = Int(whisper_lang_max_id())
+            guard maxLanguageID >= 0 else {
+                return [:]
+            }
+
+            var probabilities = Array(repeating: Float.zero, count: maxLanguageID + 1)
+            let autoDetectResult = probabilities.withUnsafeMutableBufferPointer { bufferPointer in
+                whisper_lang_auto_detect(context, 0, Int32(maxThreads), bufferPointer.baseAddress)
+            }
+            guard autoDetectResult >= 0 else {
+                return [:]
+            }
+
+            var byLanguageCode: [String: Float] = [:]
+            byLanguageCode.reserveCapacity(maxLanguageID + 1)
+            for id in 0...maxLanguageID {
+                guard let cLanguage = whisper_lang_str(Int32(id)) else {
+                    continue
+                }
+                byLanguageCode[String(cString: cLanguage)] = probabilities[id]
+            }
+            return byLanguageCode
+        }
+
         var detectedLanguage = detectedLanguageCode()
         var finalText = collectText()
         let looksLikePromptLeak = promptOrNil.map { Self.isLikelyPromptLeak(text: finalText, prompt: $0) } ?? false
@@ -352,7 +390,78 @@ actor WhisperGGMLCoreMLService {
             }
         }
 
-        return WhisperTranscriptionResult(languageID: detectedLanguage, text: finalText)
+        var languageProbabilities = collectLanguageProbabilities()
+        var detectedLanguageProbability = Self.languageProbability(
+            for: detectedLanguage,
+            in: languageProbabilities
+        )
+        let isLowConfidenceAutoDetect =
+            languageCode == "auto" &&
+            (detectedLanguageProbability ?? 0) < Constants.lowConfidenceLanguageProbabilityThreshold
+        let focusedLanguageCandidate = Self.highestProbabilityLanguage(
+            in: normalizedFocusLanguageCodes,
+            from: languageProbabilities
+        )
+        let focusedLanguageCandidateProbability = focusedLanguageCandidate.flatMap {
+            languageProbabilities[$0]
+        }
+
+        if isLowConfidenceAutoDetect {
+            logLowConfidenceLanguageDetection(
+                detectedLanguage: detectedLanguage,
+                detectedProbability: detectedLanguageProbability,
+                threshold: Constants.lowConfidenceLanguageProbabilityThreshold,
+                focusFallbackLanguage: focusedLanguageCandidate,
+                focusFallbackProbability: focusedLanguageCandidateProbability
+            )
+        }
+
+        // If auto-detect is weak, force decode with the strongest focus language.
+        if isLowConfidenceAutoDetect,
+           let focusedLanguage = focusedLanguageCandidate,
+           focusedLanguage != Self.normalizedLanguageCode(detectedLanguage) {
+            let previousDetectedLanguage = detectedLanguage
+            let previousDetectedLanguageProbability = detectedLanguageProbability
+            let focusFallbackStatus = focusedLanguage.withCString { cLanguage in
+                runWhisper(
+                    languagePointer: cLanguage,
+                    detectLanguage: false,
+                    promptPointer: nil
+                )
+            }
+
+            if focusFallbackStatus == 0 {
+                let focusedText = collectText()
+                if !focusedText.isEmpty {
+                    finalText = focusedText
+                    detectedLanguage = detectedLanguageCode()
+                    let normalizedDetected = Self.normalizedLanguageCode(detectedLanguage)
+                    if normalizedDetected.isEmpty || normalizedDetected == "unknown" {
+                        detectedLanguage = focusedLanguage
+                    }
+                }
+            }
+
+            languageProbabilities = collectLanguageProbabilities()
+            detectedLanguageProbability = Self.languageProbability(
+                for: detectedLanguage,
+                in: languageProbabilities
+            )
+
+            logLowConfidenceFallbackResult(
+                previousLanguage: previousDetectedLanguage,
+                previousProbability: previousDetectedLanguageProbability,
+                newLanguage: detectedLanguage,
+                newProbability: detectedLanguageProbability
+            )
+        }
+
+        return WhisperTranscriptionResult(
+            languageID: detectedLanguage,
+            languageProbability: detectedLanguageProbability,
+            languageProbabilities: languageProbabilities,
+            text: finalText
+        )
     }
 
     private func warmupInferenceIfNeeded(context: OpaquePointer) throws {
@@ -371,14 +480,16 @@ actor WhisperGGMLCoreMLService {
         params.no_context = true
         params.single_segment = true
         params.no_timestamps = true
-        params.detect_language = true
-        params.language = nil
+        params.detect_language = false
         params.initial_prompt = nil
 
         // Prime model backends (CoreML/Metal/decoder graph) before first user tap.
         let warmupSamples = Array(repeating: Float.zero, count: Int(Constants.targetSampleRate))
-        let status = warmupSamples.withUnsafeBufferPointer { bufferPointer in
-            whisper_full(context, params, bufferPointer.baseAddress, Int32(bufferPointer.count))
+        let status = "en".withCString { cLanguage in
+            params.language = cLanguage
+            return warmupSamples.withUnsafeBufferPointer { bufferPointer in
+                whisper_full(context, params, bufferPointer.baseAddress, Int32(bufferPointer.count))
+            }
         }
 
         guard status == 0 else {
@@ -432,6 +543,32 @@ actor WhisperGGMLCoreMLService {
         }
         let ratio = Double(overlap) / Double(textWords.count)
         return ratio >= 0.5
+    }
+
+    private static func normalizedLanguageCode(_ languageCode: String) -> String {
+        languageCode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func languageProbability(
+        for languageCode: String,
+        in languageProbabilities: [String: Float]
+    ) -> Float? {
+        let normalizedLanguage = normalizedLanguageCode(languageCode)
+        guard !normalizedLanguage.isEmpty else {
+            return nil
+        }
+        return languageProbabilities[normalizedLanguage]
+    }
+
+    private static func highestProbabilityLanguage(
+        in languageCodes: Set<String>,
+        from languageProbabilities: [String: Float]
+    ) -> String? {
+        languageCodes.max { lhs, rhs in
+            let lhsProbability = languageProbabilities[lhs] ?? -1
+            let rhsProbability = languageProbabilities[rhs] ?? -1
+            return lhsProbability < rhsProbability
+        }
     }
 
     private func ensureContext() async throws -> OpaquePointer {
@@ -715,6 +852,40 @@ actor WhisperGGMLCoreMLService {
             line += " (\(reason))"
         }
         print(line)
+    }
+
+    private func logLowConfidenceLanguageDetection(
+        detectedLanguage: String,
+        detectedProbability: Float?,
+        threshold: Float,
+        focusFallbackLanguage: String?,
+        focusFallbackProbability: Float?
+    ) {
+        var line = "[Whisper][Lang] Low-confidence auto-detect: \(detectedLanguage) (p = \(Self.formattedProbability(detectedProbability)), threshold = \(Self.formattedProbability(threshold)))."
+        if let focusFallbackLanguage {
+            line += " Focus fallback candidate: \(focusFallbackLanguage) (p = \(Self.formattedProbability(focusFallbackProbability)))."
+        } else {
+            line += " No focus fallback candidate available."
+        }
+        print(line)
+    }
+
+    private func logLowConfidenceFallbackResult(
+        previousLanguage: String,
+        previousProbability: Float?,
+        newLanguage: String,
+        newProbability: Float?
+    ) {
+        print(
+            "[Whisper][Lang] Focus fallback rerun result: \(previousLanguage) (p = \(Self.formattedProbability(previousProbability))) -> \(newLanguage) (p = \(Self.formattedProbability(newProbability)))."
+        )
+    }
+
+    private static func formattedProbability(_ probability: Float?) -> String {
+        guard let probability else {
+            return "n/a"
+        }
+        return String(format: "%.6f", probability)
     }
 
     private func removeCachedCoreMLEncoderIfPresent() throws {

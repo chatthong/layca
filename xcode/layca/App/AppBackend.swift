@@ -1888,11 +1888,11 @@ final class AppBackend: ObservableObject {
     private var queuedTranscriptionTask: Task<Void, Never>?
     private var queuedManualRetranscriptions: [QueuedManualRetranscription] = []
     private var queuedManualRetranscriptionTask: Task<Void, Never>?
-    private var whisperPrepareTask: Task<Void, Never>?
     private var currentRecordingBaseOffset: Double = 0
     private var chatCounter = 0
     private var isHydratingPersistedState = false
     private let autoTranscriptionPlaceholderPrefix = "message queued for automatic transcription"
+    private let lowConfidenceLanguageProbabilityThreshold: Float = 0.5
 
     init() {
         self.settingsStore = AppSettingsStore()
@@ -2377,8 +2377,9 @@ final class AppBackend: ObservableObject {
                 sessionID: sessionID,
                 rowID: row.id
             )
+            let focusLanguageCodes = selectedLanguageCodes.map { $0.lowercased() }.sorted()
             let initialPrompt = preflightService.buildPrompt(
-                languageCodes: selectedLanguageCodes.map { $0.lowercased() }.sorted(),
+                languageCodes: focusLanguageCodes,
                 keywords: focusContextKeywords
             )
             let result = try await whisperTranscriber.transcribe(
@@ -2386,7 +2387,8 @@ final class AppBackend: ObservableObject {
                 startOffset: startOffset,
                 endOffset: endOffset,
                 preferredLanguageCode: preferredLanguageCode,
-                initialPrompt: initialPrompt
+                initialPrompt: initialPrompt,
+                focusLanguageCodes: focusLanguageCodes
             )
 
             let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2413,7 +2415,8 @@ final class AppBackend: ObservableObject {
 
             let resolvedLanguage = resolvedTranscriptLanguage(
                 detectedLanguage: result.languageID,
-                text: trimmed,
+                detectedLanguageProbability: result.languageProbability,
+                languageProbabilities: result.languageProbabilities,
                 preferredLanguageCode: preferredLanguageCode
             )
 
@@ -2457,15 +2460,17 @@ final class AppBackend: ObservableObject {
                 sessionID: sessionID,
                 rowID: rowID
             )
+            let focusLanguageCodes = selectedLanguageCodes.map { $0.lowercased() }.sorted()
             let initialPrompt = preflightService.buildPrompt(
-                languageCodes: selectedLanguageCodes.map { $0.lowercased() }.sorted(),
+                languageCodes: focusLanguageCodes,
                 keywords: focusContextKeywords
             )
             let result = try await whisperTranscriber.transcribe(
                 samples: samples,
                 sourceSampleRate: sampleRate,
                 preferredLanguageCode: preferredLanguageCode,
-                initialPrompt: initialPrompt
+                initialPrompt: initialPrompt,
+                focusLanguageCodes: focusLanguageCodes
             )
 
             let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2500,7 +2505,8 @@ final class AppBackend: ObservableObject {
 
             let resolvedLanguage = resolvedTranscriptLanguage(
                 detectedLanguage: result.languageID,
-                text: trimmed,
+                detectedLanguageProbability: result.languageProbability,
+                languageProbabilities: result.languageProbabilities,
                 preferredLanguageCode: preferredLanguageCode
             )
 
@@ -2719,23 +2725,48 @@ final class AppBackend: ObservableObject {
 
     private func resolvedTranscriptLanguage(
         detectedLanguage: String,
-        text: String,
+        detectedLanguageProbability: Float?,
+        languageProbabilities: [String: Float],
         preferredLanguageCode: String
     ) -> String {
-        _ = text
-
         let normalizedDetected = detectedLanguage
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+
+        if (detectedLanguageProbability ?? 0) < lowConfidenceLanguageProbabilityThreshold,
+           let focusedLanguage = highestProbabilityFocusedLanguage(from: languageProbabilities),
+           focusedLanguage != normalizedDetected {
+            return focusedLanguage.uppercased()
+        }
 
         guard !normalizedDetected.isEmpty, normalizedDetected != "unknown" else {
             if preferredLanguageCode != "auto" {
                 return preferredLanguageCode.uppercased()
             }
+
+            if let focusedLanguage = highestProbabilityFocusedLanguage(from: languageProbabilities) {
+                return focusedLanguage.uppercased()
+            }
+
             return "AUTO"
         }
 
         return normalizedDetected.uppercased()
+    }
+
+    private func highestProbabilityFocusedLanguage(
+        from languageProbabilities: [String: Float]
+    ) -> String? {
+        let normalizedFocusCodes = Set(selectedLanguageCodes.map { $0.lowercased() })
+        guard !normalizedFocusCodes.isEmpty else {
+            return nil
+        }
+
+        return normalizedFocusCodes.max { lhs, rhs in
+            let lhsProbability = languageProbabilities[lhs] ?? -1
+            let rhsProbability = languageProbabilities[rhs] ?? -1
+            return lhsProbability < rhsProbability
+        }
     }
 
     private func isAutoTranscriptionPlaceholder(_ text: String) -> Bool {
@@ -2947,30 +2978,15 @@ final class AppBackend: ObservableObject {
             return
         }
 
-        whisperPrepareTask?.cancel()
-
         let coreMLEncoderEnabled = whisperCoreMLEncoderEnabled
         let ggmlGPUDecodeEnabled = whisperGGMLGPUDecodeEnabled
         let modelProfile = whisperModelProfile
-        whisperPrepareTask = Task(priority: .utility) { [whisperTranscriber] in
+        Task(priority: .utility) { [whisperTranscriber] in
             await whisperTranscriber.setRuntimePreferences(
                 coreMLEncoderEnabled: coreMLEncoderEnabled,
                 ggmlGPUDecodeEnabled: ggmlGPUDecodeEnabled,
                 modelProfile: modelProfile
             )
-
-            guard !Task.isCancelled else {
-                return
-            }
-
-            // Prewarm in background so first user transcription avoids cold-start latency.
-            do {
-                try await whisperTranscriber.prepareIfNeeded()
-            } catch {
-#if DEBUG
-                print("[Whisper] Background prepare failed: \(error.localizedDescription)")
-#endif
-            }
         }
     }
 
