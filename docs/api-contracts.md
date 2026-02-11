@@ -56,7 +56,8 @@
 - Updates speaker label/avatar color metadata on that row to match the target speaker profile.
 
 ### `retranscribeTranscriptRow(_ row: TranscriptRow) -> Void`
-- Re-runs Whisper for the row's chunk range from session audio.
+- Queues a manual re-transcribe for the row's audio range.
+- Current execution guard: while recording, backend shows `Stop recording before running Transcribe Again.` and waits for stopped state.
 - Uses auto language detect with translation disabled and patches row text/language.
 
 ## PreflightService
@@ -67,7 +68,7 @@
 
 ### `buildPrompt(languageCodes:keywords:) -> String`
 - Returns:
-  - `This is a verbatim transcript of a meeting in [LANGUAGES]. The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language, including profanity, violence, drug terms, and other sensitive words. Do not censor, mask, or replace words. Do not translate. Context: [KEYWORDS].`
+  - `STRICT VERBATIM MODE. Never translate under any condition. Never summarize. Never rewrite... Context: [KEYWORDS].`
 
 ## LiveSessionPipeline
 
@@ -132,8 +133,10 @@
 
 ### `transcribe(audioURL:startOffset:endOffset:preferredLanguageCode:initialPrompt:) async throws -> WhisperTranscriptionResult`
 - Loads chunk audio, resamples to 16kHz, and runs `whisper.cpp`.
-- Default runtime path uses non-CoreML encoder for reliability.
-- CoreML encoder path can be enabled with environment variable `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`.
+- Runtime acceleration is controlled by environment variables:
+  - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
+  - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
+- Runtime logs resolved mode and falls back to CPU decode when ggml GPU decode init fails.
 
 ### `transcribe(samples:sourceSampleRate:preferredLanguageCode:initialPrompt:) async throws -> WhisperTranscriptionResult`
 - Transcribes in-memory chunk PCM and resamples to 16kHz internally.
@@ -151,6 +154,7 @@
 
 ### `updateTranscriptRow(sessionID:rowID:text:language:) -> Void`
 - Patches one persisted transcript row with inferred Whisper text/language.
+- Language value is resolved from detected Whisper language (`AUTO` fallback when unknown).
 
 ### `updateSpeakerName(sessionID:speakerID:newName:) -> Void`
 - Renames one stored speaker profile and updates all rows that reference that `speakerID`.

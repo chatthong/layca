@@ -2,7 +2,7 @@
 
 ## Status
 - Whisper runtime is integrated via `whisper.cpp` (`whisper.xcframework`).
-- Transcription is currently queued automatically per chunk (serial one-by-one mode).
+- Transcription is currently queued automatically per message chunk (serial one-by-one mode).
 - Settings has no model selection or download controls.
 - Settings now provides:
   - Language Focus (multi-select)
@@ -19,21 +19,28 @@
 - Project source directory for bundled model assets: `xcode/layca/Models/RuntimeAssets/`
 
 ## Whisper Inference Behavior (Auto Queue)
-- Language mode: `preferredLanguageCode = "auto"` (always auto-detect for queued chunk transcription)
+- Language mode: `preferredLanguageCode = "auto"` (always auto-detect for queued message transcription)
 - Translation: disabled (`translate = false`)
 - Prompt: `initial_prompt` from settings-driven template:
-  - `This is a verbatim transcript of a meeting in [LANGUAGES]. The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language, including profanity, violence, drug terms, and other sensitive words. Do not censor, mask, or replace words. Do not translate. Context: [KEYWORDS].`
+  - `STRICT VERBATIM MODE. Never translate under any condition. Never summarize. Never rewrite... Context: [KEYWORDS].`
 - Prompt leak guard:
   - If output appears to echo instruction text, backend reruns once without prompt.
 - Empty result guard:
   - If still empty in auto mode, backend reruns once with detected language.
+- Quality guardrails:
+  - Classifies result as `acceptable`, `weak`, or `unusable`.
+  - Unusable placeholder/no-speech outputs are removed instead of keeping placeholder text.
 
 ## Whisper Startup / Backend Selection
 - App does not prewarm Whisper automatically on launch.
-- Whisper context initializes lazily when first queued chunk transcription is requested.
-- Default mode disables CoreML encoder path for startup reliability.
-- Set `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1` to opt in to CoreML encoder path.
-- In default mode, a log like `failed to load Core ML model ... ggml-large-v3-turbo-encoder.mlmodelc` is expected and non-fatal.
+- Whisper context initializes lazily when first queued message transcription is requested.
+- Runtime acceleration toggles:
+  - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
+  - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
+- Current defaults are ON for both toggles.
+- Runtime logs resolved mode:
+  - `[Whisper] CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`
+- If ggml GPU context initialization fails, runtime falls back to CPU decode and logs fallback reason.
 
 ## Pre-flight Behavior
 1. User taps record.

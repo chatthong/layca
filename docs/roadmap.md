@@ -5,7 +5,7 @@
 ### Dynamic Pre-Flight Backend (Credits + Language Prompt)
 - `App/AppBackend.swift`
 - `PreflightService` checks remaining credit and builds prompt:
-  - `This is a verbatim transcript of a meeting in [LANGUAGES]. The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language, including profanity, violence, drug terms, and other sensitive words. Do not censor, mask, or replace words. Do not translate. Context: [KEYWORDS].`
+  - `STRICT VERBATIM MODE. Never translate under any condition. Never summarize. Never rewrite... Context: [KEYWORDS].`
 - Added settings-backed context keyword input for prompt context.
 
 ### Live Pipeline Backend (4-Track Style, Concurrent)
@@ -17,6 +17,7 @@
   - merged transcript events (`speaker`, `language`, `text`, `timestamp`)
 - Current implementation uses real `AVAudioEngine` + bundled/offline CoreML Silero VAD + bundled/offline CoreML speaker diarization.
 - Chunk split defaults are tuned longer (`silenceCutoff=1.2s`, `minChunk=3.2s`, `maxChunk=12s`) to reduce over-splitting.
+- Speaker fallback matching upgraded to multi-feature signature (amplitude + ZCR + RMS) to improve multi-speaker separation when CoreML speaker inference is unavailable.
 
 ### Storage, Update, and Sync Hooks
 - `App/AppBackend.swift`
@@ -58,25 +59,29 @@
 - Chunk transcription now runs automatically in backend queue order and patches row text in place.
 - Queued transcription uses Whisper auto language detection (`preferredLanguageCode = "auto"`) and `translate = false`.
 - Added stuck-state fix for transcription status (transcribing indicator always clears).
-- Added no-speech messaging for empty inference results.
+- Added no-speech handling that removes unusable placeholder rows instead of rendering `No speech detected in this chunk.`
 - Added prompt-leak guard: if output echoes prompt instructions, rerun without prompt.
+- Added transcription quality classification (`acceptable` / `weak` / `unusable`) to trigger retry behavior and reduce junk outputs (e.g., `-`, `foreign`).
 - Playback is disabled while recording, and rows without valid offsets are non-playable.
+- Manual `Transcribe Again` is currently gated while recording (`Stop recording before running Transcribe Again.`).
 - Recorder button tap issue fixed by disabling hit-testing on decorative overlays.
 
-### Automatic Chunk Transcription Queue
+### Automatic Message Transcription Queue
 - `App/AppBackend.swift`, `Features/Chat/ChatTabView.swift`
 - Removed transcription trigger from transcript-bubble tap (tap remains playback-only).
 - Added serial queue processing so finished chunks are transcribed one-by-one automatically.
 - Added queue dedup guards to avoid duplicate transcription jobs per row.
-- Updated placeholder/transcribing UI copy to reflect automatic queue processing.
+- Updated placeholder/transcribing UI copy to reflect automatic queue processing (`Message queued for automatic transcription...`).
 
 ### Whisper Startup Reliability Hardening
 - `App/AppBackend.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
 - Removed automatic Whisper prewarm on app bootstrap and recording start.
 - Whisper context now initializes lazily on first chunk transcription request.
-- Default Whisper mode now avoids CoreML encoder startup path to prevent ANE/CoreML plan-build stalls.
-- Added opt-in switch for CoreML encoder path via `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`.
-- In default mode, CoreML encoder load-failure logs are expected and non-fatal.
+- Added independent acceleration toggles:
+  - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
+  - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
+- Runtime now logs resolved acceleration mode (`CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`).
+- Added ggml GPU decode fallback path to CPU decode when GPU context init fails.
 
 ### Settings Cleanup (Model UI Removed)
 - `Features/Settings/SettingsTabView.swift`, `App/ContentView.swift`, `App/AppBackend.swift`
@@ -147,7 +152,7 @@
 
 ## Next Priority
 1. Add playback/transcription UX polish (playing-state indicator, active-bubble highlight, transcription-progress state).
-2. Add resilience/retry handling for interrupted queued transcription jobs.
+2. Improve recording-time `Transcribe Again` behavior so queued manual retries do not wait for stop.
 3. Add resilience/recovery for interrupted recording or processing.
 4. Add optional SwiftData mirror/index layer for long-term search/filter use cases.
 5. Add configurable VAD/speaker sensitivity tuning in settings.

@@ -19,14 +19,14 @@
 - Primary detector: CoreML Silero VAD probability output.
 - Fallback detector: amplitude threshold when VAD is unavailable.
 - End chunk when silence reaches threshold (`1.2s` by default).
-- Chunk guardrails:
+- Message-chunk guardrails:
   - minimum chunk duration: `3.2s`
   - maximum chunk duration: `12s`
 
 ### Track 3: Dual AI Branch
 - Branch A: speaker embedding extraction from CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) and cosine-similarity matching for session speaker labels.
-- Branch B: deferred transcription marker (text placeholder persisted per chunk until queue worker transcribes it).
-- Speaker branch fallback: lightweight amplitude/ZCR heuristic if speaker CoreML model is unavailable.
+- Branch B: deferred transcription marker (placeholder text persisted per message until queue worker transcribes it).
+- Speaker branch fallback: amplitude + zero-crossing-rate + RMS signature matching when speaker CoreML model is unavailable.
 
 ### Track 4: Merger
 - Merge branch A + branch B output into one transcript event.
@@ -40,25 +40,29 @@
 ## Persistence + UI
 1. Append event to session store.
 2. Write `segments.json` snapshot.
-3. Keep chunk `startOffset`/`endOffset` for transcript-row playback.
-4. Deduct usage credit from chunk duration.
+3. Keep message `startOffset`/`endOffset` for transcript-row playback.
+4. Deduct usage credit from message duration.
 5. Push reactive update to Chat bubble list.
 
-## Chunk Playback Path
-- Chat bubble taps call backend chunk playback.
+## Message Playback Path
+- Chat bubble taps call backend message playback.
 - Playback seeks into `session_full.m4a` at row `startOffset`, then auto-stops at `endOffset`.
-- Chunk transcription runs automatically from backend queue (`whisper.cpp`) and updates row text in storage/UI.
-- Whisper chunk decode is configured for original-language transcript output:
+- Message transcription runs automatically from backend queue (`whisper.cpp`) and updates row text in storage/UI.
+- Whisper decode is configured for original-language transcript output:
   - `preferredLanguageCode = "auto"` (language auto-detect)
   - `translate = false` (never translate)
-  - `initial_prompt` comes from Language Focus + context keywords
-- Whisper initializes lazily on first queued chunk transcription (no app-launch prewarm).
-- Default Whisper startup path is non-CoreML encoder for reliability; set `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1` to opt in.
-- In default mode, CoreML encoder load-failure logs for `ggml-large-v3-turbo-encoder.mlmodelc` are expected and non-fatal.
-- If output is empty or appears to echo prompt instructions, backend applies fallback reruns (without prompt and detected-language retry) before returning no-speech.
+  - `initial_prompt` comes from strict verbatim preflight template + context keywords
+- Whisper initializes lazily on first queued message transcription (no app-launch prewarm).
+- Acceleration flags:
+  - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
+  - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
+- Runtime prints acceleration status (`CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`) and falls back to CPU decode if ggml GPU context init fails.
+- If output is empty or appears to echo prompt instructions, backend applies fallback reruns (without prompt and detected-language retry).
+- Transcription quality guardrails classify outputs and handle unusable values (`-`, `foreign`, empty-like text) by retrying or deleting placeholder rows with no usable speech.
 - Playback is disabled while recording is active.
+- Manual `Transcribe Again` is currently blocked during active recording and shows `Stop recording before running Transcribe Again.`.
 - If offsets are missing or invalid, bubble remains non-playable.
 
 ## Current vs Planned
-- **Current:** real `AVAudioEngine` input + native CoreML Silero VAD + native CoreML speaker diarization + reactive chunk pipeline + chunk-level playback + automatic queued Whisper transcription with auto language detection and no translation.
+- **Current:** real `AVAudioEngine` input + native CoreML Silero VAD + native CoreML speaker diarization + reactive message pipeline + message playback + automatic queued Whisper transcription with auto language detection, no translation, and quality guardrails.
 - **Planned:** add per-bubble processing/progress state and retry controls for debug workflows.

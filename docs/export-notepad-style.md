@@ -37,7 +37,7 @@ Agreed. We can add VAD options after cleanup.
 ```
 
 ## Implementation Notes
-- Reuse transcript segments and timestamps from storage.
-- Export uses latest persisted row text (including any automatic queued Whisper updates).
+- Reuse transcript message rows and timestamps from storage.
+- Export uses latest persisted row text (including any automatic queued Whisper updates and quality-filtered row removals).
 - Apply style transform at export time only.
 - Keep raw transcript unchanged in persistence.

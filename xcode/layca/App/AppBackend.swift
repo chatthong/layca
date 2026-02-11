@@ -47,7 +47,7 @@ struct PreflightService {
         let normalizedKeywords = keywords.trimmingCharacters(in: .whitespacesAndNewlines)
         let context = normalizedKeywords.isEmpty ? "none" : normalizedKeywords
 
-        return "This is a verbatim transcript of a meeting in \(languageList). The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language, including profanity, violence, drug terms, and other sensitive words. Do not censor, mask, or replace words. Do not translate. Context: \(context)."
+        return "STRICT VERBATIM MODE. Never translate under any condition. Never summarize. Never rewrite. Preserve the original spoken language for every utterance: Thai audio must be output in Thai script, English audio must stay English. Do not convert Thai speech into English. This is a verbatim transcript of a meeting in \(languageList). The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language, including profanity, violence, drug terms, and other sensitive words. Do not censor, mask, or replace words. Context: \(context)."
     }
 }
 
@@ -431,6 +431,12 @@ private final class LiveAudioInputController {
 }
 
 actor LiveSessionPipeline {
+    private struct FallbackSpeakerSignature {
+        let amplitude: Double
+        let zeroCrossingRate: Double
+        let rmsEnergy: Double
+    }
+
     private enum VADState {
         case loading
         case ready
@@ -458,7 +464,7 @@ actor LiveSessionPipeline {
     private var speakerObservationCounts: [String: Int] = [:]
     private var pendingSpeakerEmbedding: [Float]?
     private var pendingSpeakerChunks = 0
-    private var fallbackSpeakerEmbeddings: [String: Double] = [:]
+    private var fallbackSpeakerEmbeddings: [String: FallbackSpeakerSignature] = [:]
 
     private var inputController: LiveAudioInputController?
     private var activeConfig: LivePipelineConfig?
@@ -483,7 +489,7 @@ actor LiveSessionPipeline {
     private let newSpeakerCandidateSimilarity: Float = 0.55
     private let pendingChunksBeforeNewSpeaker = 2
     private let maxSpeakersPerSession = 6
-    private let speakerFallbackThreshold: Double = 0.11
+    private let speakerFallbackThreshold: Double = 0.015
     private let deferredTranscriptPlaceholder = "Message queued for automatic transcription..."
 
     func start(config: LivePipelineConfig) -> AsyncStream<PipelineEvent> {
@@ -831,10 +837,24 @@ actor LiveSessionPipeline {
     private func identifySpeakerFallback(chunk: [AudioFrame]) -> String {
         let averageAmplitude = chunk.map(\.amplitude).reduce(0, +) / Double(max(chunk.count, 1))
         let averageZCR = chunk.map(\.zeroCrossingRate).reduce(0, +) / Double(max(chunk.count, 1))
-        let embedding = (averageAmplitude * 0.74) + (averageZCR * 0.26)
+        let flattenedSamples = chunk.flatMap(\.samples)
+        let rmsEnergy: Double = {
+            guard !flattenedSamples.isEmpty else {
+                return 0
+            }
+            let meanSquare = flattenedSamples.reduce(0.0) { partial, sample in
+                partial + (Double(sample) * Double(sample))
+            } / Double(flattenedSamples.count)
+            return sqrt(meanSquare)
+        }()
+        let signature = FallbackSpeakerSignature(
+            amplitude: averageAmplitude,
+            zeroCrossingRate: averageZCR,
+            rmsEnergy: rmsEnergy
+        )
 
-        if let closest = closestFallbackSpeaker(for: embedding) {
-            if closest.distance <= speakerFallbackThreshold || fallbackSpeakerEmbeddings.count >= 3 {
+        if let closest = closestFallbackSpeaker(for: signature) {
+            if closest.distance <= speakerFallbackThreshold || fallbackSpeakerEmbeddings.count >= maxSpeakersPerSession {
                 return closest.label
             }
         }
@@ -842,15 +862,18 @@ actor LiveSessionPipeline {
         let nextIndex = fallbackSpeakerEmbeddings.count
         let scalar = UnicodeScalar(65 + min(nextIndex, 25)) ?? "Z".unicodeScalars.first!
         let label = "Speaker \(Character(scalar))"
-        fallbackSpeakerEmbeddings[label] = embedding
+        fallbackSpeakerEmbeddings[label] = signature
         return label
     }
 
-    private func closestFallbackSpeaker(for embedding: Double) -> (label: String, distance: Double)? {
+    private func closestFallbackSpeaker(for signature: FallbackSpeakerSignature) -> (label: String, distance: Double)? {
         var candidate: (label: String, distance: Double)?
 
         for (label, reference) in fallbackSpeakerEmbeddings {
-            let distance = abs(reference - embedding)
+            let distance =
+                (abs(reference.amplitude - signature.amplitude) * 0.45) +
+                (abs(reference.zeroCrossingRate - signature.zeroCrossingRate) * 0.35) +
+                (abs(reference.rmsEnergy - signature.rmsEnergy) * 0.20)
             if let current = candidate {
                 if distance < current.distance {
                     candidate = (label, distance)
@@ -1703,6 +1726,12 @@ final class AppBackend: ObservableObject {
         let sessionID: UUID
     }
 
+    private enum TranscriptionQuality {
+        case acceptable
+        case weak
+        case unusable
+    }
+
     @Published var isRecording = false
     @Published var recordingSeconds: Double = 0
     @Published var waveformBars: [Double] = Array(repeating: 0.03, count: 9)
@@ -1760,6 +1789,7 @@ final class AppBackend: ObservableObject {
     private var currentRecordingBaseOffset: Double = 0
     private var chatCounter = 0
     private var isHydratingPersistedState = false
+    private let autoTranscriptionPlaceholderPrefix = "message queued for automatic transcription"
 
     init() {
         self.settingsStore = AppSettingsStore()
@@ -2227,6 +2257,10 @@ final class AppBackend: ObservableObject {
         }
 
         do {
+            let preferredLanguageCode = await preferredTranscriptionLanguageCode(
+                sessionID: sessionID,
+                rowID: row.id
+            )
             let initialPrompt = preflightService.buildPrompt(
                 languageCodes: selectedLanguageCodes.map { $0.lowercased() }.sorted(),
                 keywords: focusContextKeywords
@@ -2235,7 +2269,7 @@ final class AppBackend: ObservableObject {
                 audioURL: audioURL,
                 startOffset: startOffset,
                 endOffset: endOffset,
-                preferredLanguageCode: "auto",
+                preferredLanguageCode: preferredLanguageCode,
                 initialPrompt: initialPrompt
             )
 
@@ -2245,11 +2279,33 @@ final class AppBackend: ObservableObject {
                 return
             }
 
+            let quality = transcriptionQuality(
+                text: trimmed,
+                startOffset: startOffset,
+                endOffset: endOffset,
+                detectedLanguage: result.languageID,
+                preferredLanguageCode: preferredLanguageCode
+            )
+            if quality == .unusable {
+                if isAutoTranscriptionPlaceholder(row.text) {
+                    await dropTranscriptRowWithoutSpeech(sessionID: sessionID, rowID: row.id)
+                } else {
+                    preflightStatusMessage = "Low-confidence transcription. Existing message was kept."
+                }
+                return
+            }
+
+            let resolvedLanguage = resolvedTranscriptLanguage(
+                detectedLanguage: result.languageID,
+                text: trimmed,
+                preferredLanguageCode: preferredLanguageCode
+            )
+
             await sessionStore.updateTranscriptRow(
                 sessionID: sessionID,
                 rowID: row.id,
                 text: trimmed,
-                language: result.languageID.uppercased()
+                language: resolvedLanguage
             )
             await refreshSessionsFromStore()
             preflightStatusMessage = nil
@@ -2281,6 +2337,10 @@ final class AppBackend: ObservableObject {
 
         do {
             let rowOffsets = await transcriptOffsets(for: rowID, sessionID: sessionID)
+            let preferredLanguageCode = await preferredTranscriptionLanguageCode(
+                sessionID: sessionID,
+                rowID: rowID
+            )
             let initialPrompt = preflightService.buildPrompt(
                 languageCodes: selectedLanguageCodes.map { $0.lowercased() }.sorted(),
                 keywords: focusContextKeywords
@@ -2288,13 +2348,26 @@ final class AppBackend: ObservableObject {
             let result = try await whisperTranscriber.transcribe(
                 samples: samples,
                 sourceSampleRate: sampleRate,
-                preferredLanguageCode: "auto",
+                preferredLanguageCode: preferredLanguageCode,
                 initialPrompt: initialPrompt
             )
 
             let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
                 await dropTranscriptRowWithoutSpeech(sessionID: sessionID, rowID: rowID)
+                return
+            }
+
+            let quality = transcriptionQuality(
+                text: trimmed,
+                startOffset: rowOffsets?.startOffset,
+                endOffset: rowOffsets?.endOffset,
+                detectedLanguage: result.languageID,
+                preferredLanguageCode: preferredLanguageCode
+            )
+            if quality == .unusable {
+                queueAutomaticQualityRetranscription(rowID: rowID, sessionID: sessionID)
+                preflightStatusMessage = nil
                 return
             }
 
@@ -2305,12 +2378,21 @@ final class AppBackend: ObservableObject {
             ) {
                 queueAutomaticQualityRetranscription(rowID: rowID, sessionID: sessionID)
             }
+            if quality == .weak {
+                queueAutomaticQualityRetranscription(rowID: rowID, sessionID: sessionID)
+            }
+
+            let resolvedLanguage = resolvedTranscriptLanguage(
+                detectedLanguage: result.languageID,
+                text: trimmed,
+                preferredLanguageCode: preferredLanguageCode
+            )
 
             await sessionStore.updateTranscriptRow(
                 sessionID: sessionID,
                 rowID: rowID,
                 text: trimmed,
-                language: result.languageID.uppercased()
+                language: resolvedLanguage
             )
             await refreshSessionsFromStore()
             preflightStatusMessage = nil
@@ -2454,6 +2536,97 @@ final class AppBackend: ObservableObject {
             .count
 
         return wordCount <= 2
+    }
+
+    private func preferredTranscriptionLanguageCode(
+        sessionID: UUID,
+        rowID: UUID
+    ) async -> String {
+        _ = sessionID
+        _ = rowID
+        return "auto"
+    }
+
+    private func transcriptionQuality(
+        text: String,
+        startOffset: Double?,
+        endOffset: Double?,
+        detectedLanguage: String,
+        preferredLanguageCode: String
+    ) -> TranscriptionQuality {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return .unusable
+        }
+
+        let canonical = normalized.lowercased()
+        let junkValues: Set<String> = [
+            "-", "--", "—", "–", "...", "…", ".", "_",
+            "foreign", "music", "inaudible", "[inaudible]", "(inaudible)"
+        ]
+        if junkValues.contains(canonical) {
+            return .unusable
+        }
+
+        let lettersCount = normalized.unicodeScalars.reduce(into: 0) { count, scalar in
+            if CharacterSet.letters.contains(scalar) {
+                count += 1
+            }
+        }
+        guard lettersCount > 0 else {
+            return .unusable
+        }
+
+        let duration: Double = {
+            guard let startOffset, let endOffset, endOffset > startOffset else {
+                return 0
+            }
+            return endOffset - startOffset
+        }()
+        let wordCount = normalized
+            .split { $0.isWhitespace || $0.isNewline }
+            .count
+
+        if duration >= 5, wordCount <= 2 {
+            return .weak
+        }
+
+        if duration >= 8, normalized.count <= 8 {
+            return .weak
+        }
+
+        _ = detectedLanguage
+        _ = preferredLanguageCode
+
+        return .acceptable
+    }
+
+    private func resolvedTranscriptLanguage(
+        detectedLanguage: String,
+        text: String,
+        preferredLanguageCode: String
+    ) -> String {
+        _ = text
+
+        let normalizedDetected = detectedLanguage
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        guard !normalizedDetected.isEmpty, normalizedDetected != "unknown" else {
+            if preferredLanguageCode != "auto" {
+                return preferredLanguageCode.uppercased()
+            }
+            return "AUTO"
+        }
+
+        return normalizedDetected.uppercased()
+    }
+
+    private func isAutoTranscriptionPlaceholder(_ text: String) -> Bool {
+        text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .hasPrefix(autoTranscriptionPlaceholderPrefix)
     }
 
     private func findTranscriptRow(rowID: UUID, sessionID: UUID) async -> TranscriptRow? {

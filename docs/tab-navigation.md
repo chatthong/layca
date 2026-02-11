@@ -76,13 +76,15 @@
   - On macOS, this action is the top-right `Share` toolbar item in Chat detail.
 - On some compact layouts, iOS may prioritize icon rendering for special-role grouped tabs even if text is provided.
 - iOS-family pages use plain `systemBackground` and native material cards/surfaces, so light/dark appearance follows device setting automatically.
-- Transcript bubbles are tappable for per-chunk playback only when recording is stopped.
+- Transcript bubbles are tappable for per-message playback only when recording is stopped.
+- During live recording, new rows may temporarily show `Message queued for automatic transcription...` until queue processing finishes.
 - Long-press on a transcript bubble opens actions for:
   - `Edit Text`
   - `Edit Speaker Name` (syncs all rows with same `speakerID`)
   - `Change Speaker` (pick another existing speaker profile)
   - `Transcribe Again`
 - Bubble long-press is disabled while recording and while queued/active transcription is in progress.
+- `Transcribe Again` execution is currently gated while recording and shows `Stop recording before running Transcribe Again.`.
 - Chunk transcription runs automatically in queue order and keeps original spoken language (auto-detect + no translation).
 
 ## Why This Design

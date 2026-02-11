@@ -44,7 +44,9 @@ actor WhisperGGMLCoreMLService {
         static let targetSampleRate: Double = 16_000
         static let minimumModelSizeBytes: Int64 = 1_000_000_000
         static let coreMLEncoderEnvKey = "LAYCA_ENABLE_WHISPER_COREML_ENCODER"
-        static let coreMLEncoderEnabledByDefault = false
+        static let coreMLEncoderEnabledByDefault = true
+        static let ggmlGPUDecodeEnvKey = "LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE"
+        static let ggmlGPUDecodeEnabledByDefault = true
     }
 
     private let fileManager: FileManager
@@ -362,7 +364,8 @@ actor WhisperGGMLCoreMLService {
 
     private func ensureContext() async throws -> OpaquePointer {
         let modelURL = try await ensureModelFile()
-        let shouldUseGPUPath = isCoreMLEncoderEnabled()
+        let coreMLEncoderEnabled = isCoreMLEncoderEnabled()
+        let shouldUseGPUPath = isGGMLGPUDecodeEnabled()
 
         if let context, activeModelPath == modelURL.path {
             return context
@@ -379,6 +382,11 @@ actor WhisperGGMLCoreMLService {
             self.context = created
             self.activeModelPath = modelURL.path
             self.didWarmupInference = false
+            logAccelerationStatus(
+                coreMLEncoderEnabled: coreMLEncoderEnabled,
+                ggmlGPUDecodeEnabled: true,
+                reason: nil
+            )
             return created
         }
 
@@ -386,10 +394,25 @@ actor WhisperGGMLCoreMLService {
             throw WhisperGGMLCoreMLError.contextInitializationFailed
         }
 
+        let wasForcedCPUContext = shouldForceCPUContext
+        let fallbackReason: String
+        if !shouldUseGPUPath {
+            fallbackReason = "\(Constants.ggmlGPUDecodeEnvKey)=OFF, ggml GPU decode not requested."
+        } else if wasForcedCPUContext {
+            fallbackReason = "ggml GPU context previously failed in this app run, forced CPU fallback."
+        } else {
+            fallbackReason = "ggml GPU context init failed on this runtime/device; using CPU fallback."
+        }
+
         shouldForceCPUContext = true
         self.context = fallback
         self.activeModelPath = modelURL.path
         self.didWarmupInference = false
+        logAccelerationStatus(
+            coreMLEncoderEnabled: coreMLEncoderEnabled,
+            ggmlGPUDecodeEnabled: false,
+            reason: fallbackReason
+        )
         return fallback
     }
 
@@ -456,11 +479,25 @@ actor WhisperGGMLCoreMLService {
     }
 
     private func isCoreMLEncoderEnabled() -> Bool {
-        guard let rawValue = ProcessInfo.processInfo.environment[Constants.coreMLEncoderEnvKey]?
+        parseBooleanEnv(
+            key: Constants.coreMLEncoderEnvKey,
+            defaultValue: Constants.coreMLEncoderEnabledByDefault
+        )
+    }
+
+    private func isGGMLGPUDecodeEnabled() -> Bool {
+        parseBooleanEnv(
+            key: Constants.ggmlGPUDecodeEnvKey,
+            defaultValue: Constants.ggmlGPUDecodeEnabledByDefault
+        )
+    }
+
+    private func parseBooleanEnv(key: String, defaultValue: Bool) -> Bool {
+        guard let rawValue = ProcessInfo.processInfo.environment[key]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         else {
-            return Constants.coreMLEncoderEnabledByDefault
+            return defaultValue
         }
 
         switch rawValue {
@@ -469,8 +506,20 @@ actor WhisperGGMLCoreMLService {
         case "0", "false", "no", "off":
             return false
         default:
-            return Constants.coreMLEncoderEnabledByDefault
+            return defaultValue
         }
+    }
+
+    private func logAccelerationStatus(
+        coreMLEncoderEnabled: Bool,
+        ggmlGPUDecodeEnabled: Bool,
+        reason: String?
+    ) {
+        var line = "[Whisper] CoreML encoder: \(coreMLEncoderEnabled ? "ON" : "OFF"), ggml GPU decode: \(ggmlGPUDecodeEnabled ? "ON" : "OFF")"
+        if let reason {
+            line += " (\(reason))"
+        }
+        print(line)
     }
 
     private func removeCachedCoreMLEncoderIfPresent() throws {

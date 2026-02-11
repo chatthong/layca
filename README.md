@@ -3,7 +3,7 @@
 > **The Ultimate Offline Polyglot Meeting Secretary**
 
 **Project Codename:** `Layca-Core`  
-**Version:** 0.5.2 (Live Audio + CoreML VAD + CoreML Speaker Diarization + Automatic Queued Whisper Chunk Transcription)  
+**Version:** 0.5.3 (Live Audio + CoreML VAD + CoreML Speaker Diarization + Automatic Queued Whisper Message Transcription + Quality Guardrails)  
 **Platforms:** iOS, iPadOS, macOS, tvOS, visionOS  
 **Core Philosophy:** Offline-first after model setup, privacy-first, chat-first UX
 
@@ -25,11 +25,12 @@
 
 ### A. Core Engine Strategy
 
-- **Inference target:** `whisper.cpp` with automatic queued chunk transcription and optional CoreML encoder acceleration (`ggml-large-v3-turbo-encoder.mlmodelc`).
+- **Inference target:** `whisper.cpp` with automatic queued message transcription plus configurable CoreML encoder and ggml GPU decode acceleration.
 - **Decoder model:** `ggml-large-v3-turbo.bin` bundled in app resources (with cache/download fallback).
 - **Model source layout in project:** `xcode/layca/Models/RuntimeAssets/` (copied into app resources at build time).
-- **Whisper startup mode:** no automatic prewarm on app launch; transcription engine initializes lazily on first queued chunk.
-- **CoreML encoder mode:** disabled by default for startup reliability; can be re-enabled with `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`.
+- **Whisper startup mode:** no automatic prewarm on app launch; transcription engine initializes lazily on first queued message.
+- **Acceleration toggles:** `LAYCA_ENABLE_WHISPER_COREML_ENCODER` and `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE` (both default ON in current runtime).
+- **Acceleration fallback:** if ggml GPU context init fails, runtime falls back to CPU decode and logs status.
 - **Pre-flight behavior:** credits and language prompt are validated before recording.
 
 ### B. Audio Stack
@@ -42,7 +43,7 @@
   - Bundled speaker model in app resources (offline-first), with network/cache fallback
   - Chunk merge + persistence + reactive chat updates
 - **Current transcription mode:**
-  - Chunk transcription runs automatically in a serial queue (one-by-one) as chunks are produced.
+  - Message transcription runs automatically in a serial queue (one-by-one) as chunks are produced.
 
 ### C. Data Layer
 
@@ -88,19 +89,20 @@ Documents/
    - Capture stream, emit waveform ticks (~0.05s).
    - Keep session master audio file (`session_full.m4a`).
 2. **Track 2: VAD slicer**
-   - Detect speech/silence, cut chunk after sustained silence.
+   - Detect speech/silence, cut message chunk after sustained silence.
    - Current defaults: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
 3. **Track 3: Speaker branch**
    - CoreML speaker embedding extraction + cosine matching / new speaker assignment.
+   - Fallback branch uses amplitude + zero-crossing-rate + RMS signature matching.
 4. **Track 4: Merger**
-   - Store speaker/language metadata plus chunk offsets and deferred-transcript placeholder text.
+   - Store speaker/language metadata plus message offsets and deferred-transcript placeholder text.
 
 ### Phase 3: Persist + Reactive UI
 
 1. Append transcript into store.
 2. UI updates bubbles reactively.
-3. Transcript rows keep chunk `startOffset`/`endOffset` for playback.
-4. Deduct used credit by chunk duration.
+3. Transcript rows keep message `startOffset`/`endOffset` for playback.
+4. Deduct used credit by message duration.
 5. Optional sync hook runs in background.
 
 ---
@@ -111,8 +113,8 @@ Documents/
 
 #### Dynamic Pre-Flight Backend (Credits + Language Prompt)
 - `App/AppBackend.swift`
-- `PreflightService` checks remaining credit and builds prompt text:
-  - `This is a verbatim transcript of a meeting in [LANGUAGES]. The speakers switch between languages naturally. Transcribe exactly what is spoken in the original language, including profanity, violence, drug terms, and other sensitive words. Do not censor, mask, or replace words. Do not translate. Context: [KEYWORDS].`
+- `PreflightService` checks remaining credit and builds prompt text in strict verbatim mode:
+  - `STRICT VERBATIM MODE. Never translate under any condition. Never summarize. Never rewrite. Preserve the original spoken language for every utterance... Context: [KEYWORDS].`
 
 #### Live Pipeline Backend (4-Track Style, Concurrent)
 - `App/AppBackend.swift`
@@ -123,11 +125,17 @@ Documents/
   - speaker-ID branch
   - merged transcript events (`speaker`, `language`, `text`, `timestamp`)
 - Current implementation uses real `AVAudioEngine` + native CoreML Silero VAD + native CoreML speaker diarization.
-- Chunk rows are persisted with placeholder transcript text and are transcribed by Whisper in automatic queue order.
+- Message rows are persisted with placeholder transcript text and are transcribed by Whisper in automatic queue order.
 - Automatic transcription runs with `preferredLanguageCode = "auto"` and `translate = false` to keep original spoken language (no translation).
 - Whisper prompt-leak fallback is implemented: if output echoes the instruction prompt, inference reruns without prompt.
-- Whisper context initialization is lazy (first queued chunk may be slower once).
-- CoreML encoder is opt-in (`LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`); default path avoids ANE/CoreML plan-build startup stalls.
+- Transcription quality guardrails classify outputs as `acceptable` / `weak` / `unusable`; weak/unusable outputs trigger queued retry or row removal.
+- Rows with unusable/no-speech placeholder output are removed instead of showing "No speech detected in this chunk."
+- Whisper context initialization is lazy (first queued message may be slower once).
+- Acceleration uses environment toggles:
+  - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
+  - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
+- Runtime prints one-line acceleration status:
+  - `[Whisper] CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`
 
 #### Storage, Update, and Sync Hooks
 - `App/AppBackend.swift`
@@ -136,14 +144,14 @@ Documents/
 - Session metadata (title/status/language hints/duration/speakers) is persisted in `session.json` and reloaded on app launch.
 - User settings/state are persisted in `UserDefaults` and restored on app launch.
 - Session deletion removes runtime state and filesystem assets (`Documents/Sessions/{UUID}`).
-- Credit deduction per chunk and iCloud-sync hook point are included.
+- Credit deduction per message and iCloud-sync hook point are included.
 
 #### App Orchestration + UI Wiring
 - `App/AppBackend.swift`, `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and language settings.
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
-- Chat bubble tap plays that chunk from `session_full.m4a`.
+- Chat bubble tap plays that message range from `session_full.m4a`.
 - macOS uses dedicated workspace views (sidebar/detail) rather than iOS-style tabs.
 - macOS chat detail toolbar uses native SwiftUI `ToolbarItem` + `ToolbarItemGroup` composition with `.toolbar(removing: .title)`.
 - iOS-family tabs, cards, and sheets use plain `systemBackground` + native material fills to follow automatic light/dark switching without custom liquid-glass wrappers.
@@ -157,8 +165,9 @@ Documents/
   - speaker reassignment to another existing speaker profile
   - "Transcribe Again" retry
 - Bubble long-press is disabled while recording and while queued/active transcription work is running.
+- "Transcribe Again" execution is currently gated while recording (`Stop recording before running Transcribe Again.`).
 - Bubble option UI is extracted into a dedicated component (`Views/Components/TranscriptBubbleOptionButton.swift`).
-- Row transcription status clears reliably and reports `"No speech detected in this chunk."` when inference returns empty text.
+- Row transcription status clears reliably; no-speech placeholder rows are deleted automatically.
 - Chunk playback is only enabled when recording is stopped.
 - Recorder card hit-testing fix applied so `Record` is tappable.
 

@@ -38,7 +38,8 @@
 - `avatarPalette: [Color]`
 - `startOffset: Double?` (seconds in `session_full.m4a`)
 - `endOffset: Double?` (seconds in `session_full.m4a`)
-- `text` initially stores deferred placeholder and is replaced by queued automatic Whisper result.
+- `text` initially stores deferred placeholder (`Message queued for automatic transcription...`) and is replaced by queued automatic Whisper result.
+- Placeholder rows are deleted when transcription is unusable/no-speech.
 
 ### Speaker Profile (session-scoped)
 - `label: String` (e.g., `Speaker A`)
@@ -72,12 +73,13 @@ Documents/
 3. On each merged transcript event:
    - append row to session runtime store
    - refresh session duration
-   - keep row chunk offsets for playback
+   - keep row message offsets for playback
    - rewrite `session.json` metadata snapshot
    - rewrite `segments.json` snapshot
 4. On each queued transcription update:
    - patch one existing row text/language
    - rewrite `segments.json` snapshot
+   - delete row when result is unusable/no-speech placeholder quality
 5. On speaker edit/reassign actions:
    - rename all rows by shared `speakerID` or rebind one row to another `speakerID`
    - rewrite `session.json` metadata snapshot
@@ -94,5 +96,5 @@ Documents/
 - Speaker appearance remains stable within session once assigned.
 - Transcript updates are append-only during a running session.
 - UI consumes state reactively from backend-published session snapshots.
-- Transcript chunk playback is valid only for rows with non-nil offsets where `endOffset > startOffset`.
+- Transcript message playback is valid only for rows with non-nil offsets where `endOffset > startOffset`.
 - Session list, chat title, transcript rows, and speaker metadata are restored after app relaunch.

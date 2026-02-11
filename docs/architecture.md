@@ -6,6 +6,7 @@
 - Reactive chat UI driven by backend state.
 - Persist chats/settings across app relaunch on iOS-family and macOS.
 - Native platform-adapted shell: tab-driven on iOS-family and split-view workspace on macOS.
+- User-facing transcript timeline uses "Message" terminology (internal processing still slices audio into chunks).
 
 ## High-Level Modules
 1. App Shell + State Coordinator (`App/ContentView.swift`)
@@ -21,6 +22,7 @@
 1. App boots and reloads persisted settings + session snapshots.
 2. User taps record.
 3. Pre-flight checks credit and prepares language prompt.
+   - Prompt uses strict verbatim instructions (`Never translate`, `Never summarize`, `Never rewrite`).
 4. Live pipeline runs concurrent tracks:
    - waveform/input stream
    - CoreML Silero VAD chunk slicing
@@ -44,15 +46,21 @@
   - macOS Chat detail toolbar uses native `ToolbarItem` + `ToolbarItemGroup` controls (`Share`, grouped `Rename` + `New Chat`, and `Info` to open `Setting`).
 - VAD uses native CoreML Silero (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) with bundled offline model.
 - Speaker branch uses native CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) with bundled offline model.
+- Speaker fallback now uses a multi-feature signature (amplitude + zero-crossing-rate + RMS energy) with tunable threshold when CoreML speaker model is unavailable.
 - Runtime model asset sources are organized under `Models/RuntimeAssets/`.
 - Whisper transcription runs automatically through a serial queue (`whisper.cpp`) as chunks are produced.
 - Automatic transcription runs with Whisper auto language detection (`preferredLanguageCode = "auto"`) and `translate = false`.
 - Whisper prompt template is built from Language Focus + context keywords.
 - If output appears to echo the prompt text, the backend reruns inference without prompt.
+- If transcription quality is weak/unusable (e.g., `-`, `foreign`, empty-like output), backend queues retry and/or removes placeholder rows with no usable speech text.
 - Whisper is initialized lazily on first transcription request (no app-launch prewarm).
-- CoreML encoder is opt-in via `LAYCA_ENABLE_WHISPER_COREML_ENCODER=1`; default startup path uses non-CoreML encoder flow for reliability.
+- Whisper acceleration toggles are environment-driven:
+  - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
+  - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
+- Current runtime defaults are ON for both toggles; if ggml GPU decode init fails, runtime falls back to CPU decode and logs reason.
 - Chunk slicing defaults are tuned longer to reduce over-splitting: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
 - Chunk playback is gated off while recording to avoid audio-session conflicts.
+- "Transcribe Again" is currently gated during active recording and runs after recording stops.
 - `SessionStore` persists both `session.json` (session metadata) and `segments.json` (row snapshots) and reloads from disk at startup.
 - `AppSettingsStore` persists user setting values and active-chat selection through relaunch.
 - Library session rows (iOS-family + macOS library workspace) support `Rename`, `Share this chat`, `Delete` via context menu.
