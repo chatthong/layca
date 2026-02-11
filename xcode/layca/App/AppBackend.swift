@@ -1910,15 +1910,29 @@ final class AppBackend: ObservableObject {
     }
 
     var activeSessionTitle: String {
-        sessions.first(where: { $0.id == activeSessionID })?.title ?? "Chat"
+        sessions.first(where: { $0.id == activeSessionID })?.title ?? "Layca"
     }
 
     var activeSessionDateText: String {
-        sessions.first(where: { $0.id == activeSessionID })?.formattedDate ?? "No active chat"
+        sessions.first(where: { $0.id == activeSessionID })?.formattedDate ?? "New chat room"
     }
 
     var recordingTimeText: String {
-        let clamped = Int(max(recordingSeconds, 0).rounded(.down))
+        let displaySeconds: Double = {
+            if isRecording {
+                return max(currentRecordingBaseOffset + recordingSeconds, 0)
+            }
+
+            guard let activeSessionID,
+                  let session = sessions.first(where: { $0.id == activeSessionID })
+            else {
+                return 0
+            }
+
+            return max(session.rows.compactMap(\.endOffset).max() ?? 0, 0)
+        }()
+
+        let clamped = Int(displaySeconds.rounded(.down))
         let hours = clamped / 3600
         let minutes = (clamped % 3600) / 60
         let seconds = clamped % 60
@@ -1939,15 +1953,16 @@ final class AppBackend: ObservableObject {
 
     func bootstrap() async {
         loadPersistedSettings()
+
+        // Always start in draft mode on app launch.
+        activeSessionID = nil
+        activeTranscriptRows = []
+
         applyWhisperAccelerationPreferencesIfNeeded()
-        await refreshSessionsFromStore()
+        await refreshSessionsFromStore(autoSelectFallbackSession: false)
 
         let inferredCounter = inferChatCounter(from: sessions)
         chatCounter = max(chatCounter, inferredCounter, sessions.count)
-
-        if sessions.isEmpty {
-            await createSessionAndActivate()
-        }
 
         persistSettingsIfNeeded()
     }
@@ -1980,7 +1995,14 @@ final class AppBackend: ObservableObject {
 
     func startNewChat() {
         Task {
-            await createSessionAndActivate()
+            if isRecording {
+                await stopRecording()
+            }
+
+            stopChunkPlayback()
+            activeSessionID = nil
+            activeTranscriptRows = []
+            preflightStatusMessage = nil
         }
     }
 
@@ -2983,7 +3005,7 @@ final class AppBackend: ObservableObject {
         persistSettingsIfNeeded()
 
         if let id = try? await sessionStore.createSession(
-            title: "Chat \(chatCounter)",
+            title: "chat \(chatCounter)",
             languageHints: Array(selectedLanguageCodes)
         ) {
             activeSessionID = id
@@ -2991,7 +3013,7 @@ final class AppBackend: ObservableObject {
         }
     }
 
-    private func refreshSessionsFromStore() async {
+    private func refreshSessionsFromStore(autoSelectFallbackSession: Bool = true) async {
         let snapshots = await sessionStore.snapshotSessions()
         sessions = snapshots
 
@@ -2999,8 +3021,10 @@ final class AppBackend: ObservableObject {
             snapshots.contains(where: { $0.id == currentID })
         } ?? false
 
-        if !hasActiveSession {
+        if autoSelectFallbackSession, !hasActiveSession {
             activeSessionID = snapshots.first?.id
+        } else if !hasActiveSession {
+            activeSessionID = nil
         }
 
         if let activeSessionID {

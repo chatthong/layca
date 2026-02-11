@@ -51,7 +51,7 @@
 ### C. Data Layer
 
 - **Current runtime persistence:** actor-based `SessionStore` + filesystem snapshots (`session.json`, `segments.json`) with startup reload.
-- **Current settings persistence:** `UserDefaults`-backed app settings snapshot (language focus, credits, iCloud toggle, active chat, chat counter).
+- **Current settings persistence:** `UserDefaults`-backed app settings snapshot (language focus, credits, iCloud toggle, active-session metadata compatibility, chat counter).
 - **Planned long-term persistence:** `SwiftData`.
 
 ```text
@@ -67,9 +67,10 @@ Documents/
 
 ## 3. UI/UX Strategy: Chat-First 💬
 
-- **iOS/iPadOS/visionOS/tvOS shell:** `TabView` with `Chat`, `Library`, `Setting`, plus a dedicated `New Chat` action tab.
+- **iOS/iPadOS/visionOS/tvOS shell:** `TabView` with `Layca Chat`, `Library`, `Setting`, plus a dedicated right-side `New Chat` action tab.
 - **iOS-family visual style:** plain `systemBackground` canvas + native material cards with automatic device-driven light/dark appearance (no live animated app background).
-- **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Chat`, `Library`, `Setting`) and no top segmented workspace picker.
+- **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Layca Chat`, `Library`, `Setting`) and no top segmented workspace picker.
+- **Launch behavior:** app always opens in a fresh draft room on both iOS-family and macOS; existing saved chats remain available in Library/Recent Chats.
 - **Chat workspace:** Recorder card + live transcript bubbles.
 - **Header/session actions:** macOS chat detail toolbar uses native SwiftUI `ToolbarItem`/`ToolbarItemGroup` actions: `Share`, grouped `Rename` + `New Chat`, and `Info` (opens `Setting`).
 - **Settings workspace:** Hours credit, language focus, context keywords, Advanced Zone (GPU/CoreML/model profile), iCloud toggle, purchase restore, and macOS microphone access controls.
@@ -148,6 +149,7 @@ Documents/
 - Appends transcript rows, persists segment snapshots, and keeps stable speaker profile (color/avatar) per session.
 - Session metadata (title/status/language hints/duration/speakers) is persisted in `session.json` and reloaded on app launch.
 - User settings/state are persisted in `UserDefaults` and restored on app launch.
+- Active session restore is intentionally overridden at startup so UI opens in draft mode.
 - Persisted settings include Whisper acceleration/model preferences (CoreML toggle, GPU toggle, model profile).
 - Session deletion removes runtime state and filesystem assets (`Documents/Sessions/{UUID}`).
 - Credit deduction per message and iCloud-sync hook point are included.
@@ -156,6 +158,9 @@ Documents/
 - `App/AppBackend.swift`, `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - `AppBackend` (`ObservableObject`) now drives recording state, sessions, transcript stream, and language settings.
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
+- `startNewChat()` now switches to draft mode (does not create a session immediately).
+- First record action in draft creates the persisted chat (`chat N`) and begins capture.
+- Recorder timer shows accumulated session duration for saved chats and resets to `00:00:00` in draft.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Chat bubble tap plays that message range from `session_full.m4a`.
 - macOS uses dedicated workspace views (sidebar/detail) rather than iOS-style tabs.

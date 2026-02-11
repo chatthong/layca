@@ -3,7 +3,7 @@
 ## Current Runtime Persistence
 - **Primary runtime store:** actor store (`SessionStore`) for session/transcript state.
 - **Primary durable store:** filesystem (`Documents/Sessions`) plus per-session metadata/segment snapshots.
-- **Settings durable store:** `UserDefaults` (`AppSettingsStore`) for app/UI state restore across relaunch.
+- **Settings durable store:** `UserDefaults` (`AppSettingsStore`) for app/UI state restore across relaunch (including compatibility fields such as `activeSessionID` and `chatCounter`).
 - **Platform note:** same session layout is used on iOS-family and macOS within each platform's app sandbox container.
 - **macOS style note:** sidebar-first `NavigationSplitView` and native toolbar controls do not change persistence schema or file layout.
 - **Bundled runtime asset:** CoreML VAD model directory in app bundle (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) for offline startup.
@@ -75,32 +75,33 @@ Documents/
 
 ## Data Lifecycle
 1. On app launch, `SessionStore` scans `Documents/Sessions`, reloads each `{UUID}` folder, and hydrates in-memory session order/state.
-2. Create session directory and base files on new chat/session.
-3. On each merged transcript event:
+2. Backend startup then forces draft mode (`activeSessionID = nil`) so UI opens in a fresh draft room by default.
+3. Create session directory and base files when recording starts from draft/new chat flow.
+4. On each merged transcript event:
    - append row to session runtime store
    - refresh session duration
    - keep row message offsets for playback
    - rewrite `session.json` metadata snapshot
    - rewrite `segments.json` snapshot
-4. On each queued transcription update:
+5. On each queued transcription update:
    - patch one existing row text/language
    - rewrite `segments.json` snapshot
    - delete row when result is unusable/no-speech placeholder quality
-5. On speaker edit/reassign actions:
+6. On speaker edit/reassign actions:
    - rename all rows by shared `speakerID` or rebind one row to another `speakerID`
    - rewrite `session.json` metadata snapshot
    - rewrite `segments.json` snapshot
-6. On recording stop:
+7. On recording stop:
    - mark session status to `ready`
-7. On session delete:
+8. On session delete:
    - remove session runtime row/state
    - remove session directory (`Documents/Sessions/{UUID}`) and its files.
-8. On app setting updates:
-   - rewrite `UserDefaults` snapshot for settings + active chat metadata.
+9. On app setting updates:
+   - rewrite `UserDefaults` snapshot for settings + compatibility metadata.
 
 ## Consistency Rules Implemented
 - Speaker appearance remains stable within session once assigned.
 - Transcript updates are append-only during a running session.
 - UI consumes state reactively from backend-published session snapshots.
 - Transcript message playback is valid only for rows with non-nil offsets where `endOffset > startOffset`.
-- Session list, chat title, transcript rows, and speaker metadata are restored after app relaunch.
+- Session list, chat title, transcript rows, and speaker metadata are restored after app relaunch; active selection defaults to draft mode.

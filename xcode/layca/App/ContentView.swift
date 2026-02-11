@@ -38,7 +38,7 @@ private extension ContentView {
     var mobileTabLayout: some View {
         TabView(selection: $selectedTab) {
             TabSection {
-                Tab("Chat", systemImage: "bubble.left.and.bubble.right.fill", value: AppTab.chat) {
+                Tab("Layca Chat", systemImage: "bubble.left.and.bubble.right.fill", value: AppTab.chat) {
                     chatScreen(showsTopToolbar: true)
                 }
 
@@ -82,6 +82,7 @@ private extension ContentView {
                 onRenameSession: backend.renameSession,
                 onDeleteSession: backend.deleteSession,
                 shareTextForSession: backend.shareText,
+                onSelectChatWorkspace: openLaycaChatWorkspace,
                 onCreateSession: startNewChatAndReturnToChat
             )
             .navigationSplitViewColumnWidth(min: 230, ideal: 280, max: 360)
@@ -275,6 +276,20 @@ private extension ContentView {
     func startNewChatAndReturnToChat() {
         backend.startNewChat()
         selectedTab = .chat
+    }
+
+    func openLaycaChatWorkspace() {
+        selectedTab = .chat
+
+        guard !backend.isRecording else {
+            return
+        }
+
+        // If user is currently viewing an existing saved chat, tapping "Layca Chat"
+        // returns to a fresh draft room before any new recording starts.
+        if backend.activeSessionID != nil {
+            backend.startNewChat()
+        }
     }
 
     var exportScreen: some View {

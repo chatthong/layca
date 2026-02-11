@@ -4,7 +4,7 @@
 - Offline-first meeting assistant with local-first processing.
 - Dynamic configuration from Settings (language focus + context keywords + sync toggle + Whisper Advanced Zone controls).
 - Reactive chat UI driven by backend state.
-- Persist chats/settings across app relaunch on iOS-family and macOS.
+- Persist chats/settings across app relaunch on iOS-family and macOS while defaulting UI to draft mode at startup.
 - Native platform-adapted shell: tab-driven on iOS-family and split-view workspace on macOS.
 - User-facing transcript timeline uses "Message" terminology (internal processing still slices audio into chunks).
 
@@ -19,7 +19,7 @@
 8. Playback + Export layer (implemented/partial)
 
 ## Runtime Flow
-1. App boots and reloads persisted settings + session snapshots.
+1. App boots, reloads persisted settings + session snapshots, and opens draft mode (`activeSessionID = nil`).
 2. User taps record.
 3. Pre-flight checks credit and prepares language prompt.
    - Prompt uses strict verbatim instructions (`Never translate`, `Never summarize`, `Never rewrite`).
@@ -41,8 +41,10 @@
 - Audio capture uses real `AVAudioEngine`.
 - App shell is platform-aware:
   - iOS-family uses `TabView`/`TabSection`.
+  - iOS-family primary chat tab label is `Layca Chat`, with a separate right-side `New Chat` action tab.
   - iOS-family uses plain `systemBackground` with native material cards and automatic device light/dark appearance.
   - macOS uses `NavigationSplitView` with sidebar workspace sections and dedicated detail views.
+  - macOS sidebar workspace section label is `Layca Chat`.
   - macOS Chat detail toolbar uses native `ToolbarItem` + `ToolbarItemGroup` controls (`Share`, grouped `Rename` + `New Chat`, and `Info` to open `Setting`).
 - VAD uses native CoreML Silero (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) with bundled offline model.
 - Speaker branch uses native CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) with bundled offline model.
@@ -67,12 +69,15 @@
 - If ggml GPU decode init fails, runtime falls back to CPU decode and logs reason.
 - Chunk slicing defaults are tuned longer to reduce over-splitting: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
 - Chunk playback is gated off while recording to avoid audio-session conflicts.
+- `startNewChat()` is draft-reset behavior (does not create a persisted session until recording starts).
+- First recording from draft creates a new persisted session title (`chat N`).
+- Recorder timer shows persisted accumulated duration for saved sessions, resumes from that offset when recording again, and shows `00:00:00` in draft mode.
 - "Transcribe Again" is a submenu (`Transcribe Auto`, plus `Transcribe in <Focus Language>` entries for selected focus languages).
 - Manual retranscribe execution is currently gated during active recording and runs after recording stops.
 - Forced `TH` / `EN` manual retries validate script output; backend retries once without prompt on mismatch, then keeps existing text when mismatch persists.
 - Manual low-confidence retries keep existing text silently (no red warning banner).
 - `SessionStore` persists both `session.json` (session metadata) and `segments.json` (row snapshots) and reloads from disk at startup.
-- `AppSettingsStore` persists user setting values and active-chat selection through relaunch.
+- `AppSettingsStore` persists user setting values and compatibility metadata (`activeSessionID`, `chatCounter`) through relaunch; startup still forces draft mode.
 - Library session rows (iOS-family + macOS library workspace) support `Rename`, `Share this chat`, `Delete` via context menu.
 - macOS sidebar `Recent Chats` rows support the same context menu action group.
 - macOS recording permission uses `AVAudioApplication.requestRecordPermission`.

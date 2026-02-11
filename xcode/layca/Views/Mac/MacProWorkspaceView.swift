@@ -15,7 +15,7 @@ enum MacWorkspaceSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .chat:
-            return "Chat"
+            return "Layca Chat"
         case .library:
             return "Library"
         case .setting:
@@ -43,6 +43,7 @@ struct MacWorkspaceSidebarView: View {
     let onRenameSession: (ChatSession, String) -> Void
     let onDeleteSession: (ChatSession) -> Void
     let shareTextForSession: (ChatSession) -> String
+    let onSelectChatWorkspace: () -> Void
     let onCreateSession: () -> Void
 
     @State private var sessionPendingRename: ChatSession?
@@ -100,20 +101,33 @@ struct MacWorkspaceSidebarView: View {
         Section("Workspace") {
             ForEach(Array(MacWorkspaceSection.allCases), id: \.self) { section in
                 Button {
-                    selectedSection = section
+                    if section == .chat {
+                        onSelectChatWorkspace()
+                    } else {
+                        selectedSection = section
+                    }
                 } label: {
                     Label(section.title, systemImage: section.symbol)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
                 .overlay(alignment: .trailing) {
-                    if selectedSection == section {
+                    if isWorkspaceSectionSelected(section) {
                         Image(systemName: "checkmark")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
                 }
             }
+        }
+    }
+
+    private func isWorkspaceSectionSelected(_ section: MacWorkspaceSection) -> Bool {
+        switch section {
+        case .chat:
+            return selectedSection == .chat && activeSessionID == nil
+        case .library, .setting:
+            return selectedSection == section
         }
     }
 

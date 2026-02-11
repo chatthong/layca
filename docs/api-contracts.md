@@ -4,15 +4,23 @@
 
 ### `toggleRecording() -> Void`
 - Starts or stops recording flow.
+- If current state is draft (`activeSessionID == nil`), start path creates a new persisted session first (`chat N` naming flow), then starts recording.
 - On start, runs pre-flight before pipeline starts.
 - Surfaces microphone permission denial as user-visible preflight message.
 
 ### `startNewChat() -> Void`
-- Creates a new session and switches active session.
-- Used by macOS Chat-detail toolbar `New Chat` action.
+- Resets selection to draft mode (`activeSessionID = nil`) and clears active transcript rows.
+- Does not create a persisted session immediately.
+- Used by iOS `New Chat` action tab and macOS `New Chat` actions.
+- Persisted session is created on first record tap from draft mode.
 
 ### `activateSession(_ session: ChatSession) -> Void`
 - Sets active session and pushes its rows to chat UI.
+
+### `recordingTimeText` (published display value)
+- Draft mode displays `00:00:00`.
+- Saved chat mode displays accumulated duration from persisted transcript offsets.
+- During recording, value displays `currentRecordingBaseOffset + liveElapsedSeconds` so resumed recordings continue from prior duration.
 
 ### `renameActiveSessionTitle(_ newTitle: String) -> Void`
 - Renames active session title (used by Chat header inline rename).
@@ -34,6 +42,7 @@
 - Chat-detail toolbar `Rename` action presents rename sheet, then calls `renameActiveSessionTitle(_:)`.
 - Chat-detail toolbar `New Chat` action calls `startNewChat()`.
 - Chat-detail toolbar `Info` action switches workspace to `Setting`.
+- Sidebar workspace `Layca Chat` action routes through draft-open behavior in `ContentView` (`openLaycaChatWorkspace`).
 
 ### `toggleLanguageFocus(_ code: String) -> Void`
 - Adds/removes language code used to build pre-flight prompt.

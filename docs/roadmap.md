@@ -2,6 +2,18 @@
 
 ## Completed In This Chat
 
+### Navigation + Draft Mode Behavior Alignment (iOS + macOS)
+- `App/ContentView.swift`, `App/AppBackend.swift`, `Views/Mac/MacProWorkspaceView.swift`
+- Updated naming to `Layca Chat` in iOS tab + macOS workspace.
+- Kept iOS `New Chat` as dedicated right-side action tab.
+- macOS sidebar `Layca Chat` now behaves as draft-open action and shows workspace checkmark only in draft mode.
+- App launch now defaults to draft mode on both iOS-family and macOS (no auto-open of last active saved chat).
+- `startNewChat()` now resets to draft state; persisted session is created on first record tap.
+- Recorder timer now:
+  - shows `00:00:00` in draft,
+  - shows accumulated duration for saved chats when idle,
+  - resumes from previous duration when recording continues on an old chat.
+
 ### Dynamic Pre-Flight Backend (Credits + Language Prompt)
 - `App/AppBackend.swift`
 - `PreflightService` checks remaining credit and builds prompt:

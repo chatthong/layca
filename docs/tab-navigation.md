@@ -6,15 +6,15 @@
 
 ## iOS-family Layout (iOS, iPadOS, visionOS, tvOS)
 - Group 1 tabs:
-  - `Chat`
-  - `Setting`
+  - `Layca Chat`
   - `Library`
+  - `Setting`
 - Group 2 tab:
   - `New Chat` (special role, isolated in right-side group)
 - Header identity:
-  - Active chat badge (`Chat N`) supports tap-to-rename inline editing.
+  - Active chat badge (`Layca` in draft, or saved chat title such as `chat N`) supports tap-to-rename inline editing when a saved chat is active.
 - Header action:
-  - `Export` icon (top-right on Chat, next to active chat badge)
+  - `Export` icon (top-right on chat screen, next to active chat badge)
 
 ## iOS-family Implementation Detail
 - SwiftUI `TabView` with `TabSection` groups.
@@ -24,11 +24,14 @@
   - `Features/Settings/SettingsTabView.swift`
   - `Features/Library/LibraryTabView.swift`
 - `App/ContentView.swift` keeps shared state and dispatches actions across tab components.
+- Launch behavior opens draft mode by default (`activeSessionID == nil`).
+- `Layca Chat` tab shows current selection (draft or an activated saved chat).
+- `New Chat` tab action resets UI to draft mode and returns focus to `Layca Chat`.
 
 ## macOS Layout
 - App shell uses `NavigationSplitView` instead of bottom tabs.
 - Sidebar has workspace sections:
-  - `Chat`
+  - `Layca Chat`
   - `Library`
   - `Setting`
 - Sidebar also contains:
@@ -49,16 +52,24 @@
   - right pane: transcript list
 
 ## Cross-platform UX Notes
-- `New Chat` acts like an action tab:
-  - Triggering it creates a new chat/session.
-  - App returns focus to `Chat`.
+- App launch starts in draft mode on both iOS-family and macOS.
+- `New Chat` acts as a draft-reset action:
+  - Triggering it clears active saved session selection.
+  - App returns focus to `Layca Chat`.
+  - A persisted session is created only when recording starts from draft.
 - `Library` acts as session switcher:
   - Shows available chat sessions.
-  - Tapping a session loads it and switches to `Chat`.
+  - Tapping a session loads it and switches to `Layca Chat`.
   - Long-press/right-click on a session row opens:
     - `Rename`
     - `Share this chat`
     - `Delete`
+- macOS-only `Layca Chat` sidebar behavior:
+  - Clicking `Layca Chat` while an old chat is active returns to draft mode (when not recording).
+  - Sidebar checkmark for `Layca Chat` appears only in draft mode; old chat selection is shown in `Recent Chats`.
+- iOS-only `Layca Chat` tab behavior:
+  - Returning from `Library` to `Layca Chat` keeps the selected old chat.
+  - Draft reset is triggered by `New Chat`, not by switching back to `Layca Chat`.
 - `Setting` currently contains:
   - Hours credit
   - Language focus
@@ -79,6 +90,10 @@
 - `Export` opens from a header/toolbar action instead of a tab.
   - On macOS, this action is the top-right `Share` toolbar item in Chat detail.
 - On some compact layouts, iOS may prioritize icon rendering for special-role grouped tabs even if text is provided.
+- Recorder timer behavior:
+  - Draft mode shows `00:00:00`.
+  - Saved chats show accumulated prior recorded duration.
+  - Continuing recording on a saved chat resumes from the previous duration.
 - iOS-family pages use plain `systemBackground` and native material cards/surfaces, so light/dark appearance follows device setting automatically.
 - Transcript bubbles are tappable for per-message playback only when recording is stopped.
 - During live recording, new rows may temporarily show `Message queued for automatic transcription...` until queue processing finishes.
@@ -96,6 +111,6 @@
 
 ## Why This Design
 - Preserves native behavior and consistency with Apple navigation guidance on each platform.
-- Keeps frequent actions (`Chat`, `Setting`, `Library`) stable across device families.
+- Keeps frequent actions (`Layca Chat`, `Setting`, `Library`) stable across device families.
 - Gives macOS a desktop-native workspace model instead of an iOS-style tab chrome.
 - Keeps `New Chat` visually distinct as a quick action.

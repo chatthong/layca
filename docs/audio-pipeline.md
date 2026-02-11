@@ -36,6 +36,10 @@
 - Pipeline tracks elapsed session seconds.
 - Chunk-relative timings are converted into session-global offsets.
 - Transcript row timestamp is stored as formatted `HH:mm:ss`.
+- Recorder timer display behavior:
+  - draft mode (`activeSessionID == nil`) shows `00:00:00`
+  - saved sessions show accumulated prior duration while idle
+  - resumed recording continues from prior persisted duration offset
 
 ## Persistence + UI
 1. Append event to session store.
