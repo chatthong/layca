@@ -7,7 +7,6 @@ import AppKit
 #if os(macOS)
 enum MacWorkspaceSection: String, CaseIterable, Identifiable {
     case chat
-    case library
     case setting
 
     var id: String { rawValue }
@@ -16,8 +15,6 @@ enum MacWorkspaceSection: String, CaseIterable, Identifiable {
         switch self {
         case .chat:
             return "Layca Chat"
-        case .library:
-            return "Library"
         case .setting:
             return "Setting"
         }
@@ -27,8 +24,6 @@ enum MacWorkspaceSection: String, CaseIterable, Identifiable {
         switch self {
         case .chat:
             return "bubble.left.and.bubble.right"
-        case .library:
-            return "books.vertical"
         case .setting:
             return "slider.horizontal.3"
         }
@@ -54,10 +49,17 @@ struct MacWorkspaceSidebarView: View {
         List {
             workspaceSection
             recentChatsSection
-            createChatSection
         }
         .listStyle(.sidebar)
         .navigationTitle("Layca")
+        .toolbar {
+            ToolbarItem {
+                Button(action: onCreateSession) {
+                    Image(systemName: "plus.bubble")
+                }
+                .help("New Chat")
+            }
+        }
         .alert("Rename Chat", isPresented: renameAlertBinding, actions: {
             TextField("Chat name", text: $renameDraft)
             Button("Cancel", role: .cancel) {
@@ -126,7 +128,7 @@ struct MacWorkspaceSidebarView: View {
         switch section {
         case .chat:
             return selectedSection == .chat && activeSessionID == nil
-        case .library, .setting:
+        case .setting:
             return selectedSection == section
         }
     }
@@ -190,15 +192,6 @@ struct MacWorkspaceSidebarView: View {
         }
     }
 
-    private var createChatSection: some View {
-        Section {
-            Button(action: onCreateSession) {
-                Label("New Chat", systemImage: "plus.bubble")
-                    .frame(maxWidth: .infinity)
-            }
-        }
-    }
-
     private var renameAlertBinding: Binding<Bool> {
         Binding(
             get: { sessionPendingRename != nil },
@@ -244,7 +237,6 @@ struct MacChatWorkspaceView: View {
     let onRetranscribeTranscript: (TranscriptRow, String?) -> Void
     let onExportTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
-    let onNewChatTap: () -> Void
     let onOpenSettingsTap: () -> Void
     @State private var titleDraft = ""
     @State private var isEditingTitle = false
@@ -282,13 +274,6 @@ struct MacChatWorkspaceView: View {
             }
 
             ToolbarSpacer(.fixed)
-
-            ToolbarItemGroup {
-                Button(action: onNewChatTap) {
-                    Image(systemName: "plus.bubble")
-                }
-                .help("New Chat")
-            }
         }
         .onAppear {
             titleDraft = activeSessionTitle

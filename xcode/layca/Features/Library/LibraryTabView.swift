@@ -65,11 +65,6 @@ struct LibraryTabView: View {
                                 }
                             }
                         }
-                        .padding(18)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(.regularMaterial)
-                        )
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 18)

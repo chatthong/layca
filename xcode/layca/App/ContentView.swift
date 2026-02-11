@@ -42,7 +42,7 @@ private extension ContentView {
                     chatScreen(showsTopToolbar: true)
                 }
 
-                Tab("Library", systemImage: "books.vertical.fill", value: AppTab.library) {
+                Tab("Recent", systemImage: "books.vertical.fill", value: AppTab.library) {
                     libraryScreen
                 }
 
@@ -91,7 +91,7 @@ private extension ContentView {
         }
         .navigationSplitViewStyle(.balanced)
         .onAppear {
-            if selectedTab == .newChat {
+            if selectedTab == .newChat || selectedTab == .library {
                 selectedTab = .chat
             }
         }
@@ -102,8 +102,6 @@ private extension ContentView {
         switch macSection {
         case .chat:
             macChatScreen
-        case .library:
-            macLibraryScreen
         case .setting:
             macSettingScreen
         }
@@ -114,7 +112,7 @@ private extension ContentView {
         case .chat:
             return .chat
         case .library:
-            return .library
+            return .chat
         case .setting:
             return .setting
         case .newChat:
@@ -129,8 +127,6 @@ private extension ContentView {
                 switch section {
                 case .chat:
                     selectedTab = .chat
-                case .library:
-                    selectedTab = .library
                 case .setting:
                     selectedTab = .setting
                 }
@@ -162,24 +158,9 @@ private extension ContentView {
             },
             onExportTap: { isExportPresented = true },
             onRenameSessionTitle: backend.renameActiveSessionTitle,
-            onNewChatTap: startNewChatAndReturnToChat,
             onOpenSettingsTap: {
                 selectedTab = .setting
             }
-        )
-    }
-
-    var macLibraryScreen: some View {
-        MacLibraryWorkspaceView(
-            sessions: backend.sessions,
-            activeSessionID: backend.activeSessionID,
-            onSelectSession: { session in
-                backend.activateSession(session)
-                selectedTab = .chat
-            },
-            onRenameSession: backend.renameSession,
-            onDeleteSession: backend.deleteSession,
-            shareTextForSession: backend.shareText
         )
     }
 

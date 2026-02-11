@@ -475,16 +475,6 @@ struct ChatTabView: View {
 
     private var liveSegmentsCard: some View {
         VStack(alignment: .leading, spacing: 13) {
-            HStack {
-                Text("Latest Messages")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                Spacer()
-                Label("Live", systemImage: "dot.radiowaves.left.and.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-
             ForEach(liveChatItems) { item in
                 HStack(alignment: .top, spacing: 10) {
                     avatarView(for: item)
@@ -511,11 +501,7 @@ struct ChatTabView: View {
                 }
             }
         }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.regularMaterial)
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func avatarView(for item: TranscriptRow) -> some View {
