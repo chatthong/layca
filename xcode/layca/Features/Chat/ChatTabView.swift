@@ -271,21 +271,38 @@ struct ChatTabView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(.thinMaterial, in: Capsule(style: .continuous))
             } else {
                 Button(action: beginTitleRename) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+
                         Text(activeSessionTitle)
-                            .fontWeight(.semibold)
+                            .font(.headline.weight(.semibold))
+                            .lineLimit(1)
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+                    .contentShape(Capsule(style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ScaleButtonStyle())
             }
         }
         .font(.subheadline)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+    }
+
+    struct ScaleButtonStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+                .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+                .opacity(configuration.isPressed ? 0.8 : 1.0)
+        }
     }
 
 #if !os(macOS)

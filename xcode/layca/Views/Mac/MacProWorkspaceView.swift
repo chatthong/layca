@@ -285,24 +285,35 @@ struct MacChatWorkspaceView: View {
         }
     }
 
+
     private var toolbarTitleLabel: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(.headline)
-                .foregroundStyle(.primary)
+        Button(action: beginTitleRename) {
+            HStack(spacing: 6) {
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
 
-            Text(activeSessionTitle)
-                .font(.headline.weight(.semibold))
-                .lineLimit(1)
+                Text(activeSessionTitle)
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(1)
 
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.ultraThinMaterial, in: Capsule(style: .continuous))
+            .contentShape(Capsule(style: .continuous))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
-        .onTapGesture {
-            beginTitleRename()
-        }
+        .buttonStyle(ScaleButtonStyle())
         .help("Rename Chat")
+    }
+
+    struct ScaleButtonStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+                .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+                .opacity(configuration.isPressed ? 0.8 : 1.0)
+        }
     }
 
     @ViewBuilder
