@@ -371,12 +371,9 @@ struct MacChatWorkspaceView: View {
             }
 
             HStack(spacing: 14) {
-                recorderBarWaveform
-                    .frame(width: 146)
-
                 VStack(alignment: .leading, spacing: 2) {
                     Text(recordingTimeText)
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.9)
@@ -424,28 +421,11 @@ struct MacChatWorkspaceView: View {
         }
     }
 
-    private var recorderBarWaveform: some View {
-        HStack(alignment: .center, spacing: 3) {
-            ForEach(Array(waveformBars.enumerated()), id: \.offset) { _, level in
-                Capsule(style: .continuous)
-                    .fill(isRecording ? Color.red.opacity(0.82) : Color.accentColor.opacity(0.68))
-                    .frame(width: 4, height: max(CGFloat(level) * 26, 6))
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(
-            Capsule(style: .continuous)
-                .fill(.quaternary.opacity(0.58))
-        )
-    }
-
     private var transcriptPane: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottomTrailing) {
                 Group {
-                    if liveChatItems.isEmpty {
+                    if liveChatItems.isEmpty && !isRecording {
                         ContentUnavailableView(
                             "No Messages Yet",
                             systemImage: "waveform.badge.magnifyingglass",
@@ -488,6 +468,14 @@ struct MacChatWorkspaceView: View {
                                 .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
                                 .listRowSeparator(.hidden)
                                 .listRowBackground(Color.clear)
+                            }
+
+                            if isRecording {
+                                recordingSpectrumListRow
+                                    .id("layca.mac.recording.spectrum.row")
+                                    .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
+                                    .listRowSeparator(.hidden)
+                                    .listRowBackground(Color.clear)
                             }
 
                             Color.clear
@@ -543,6 +531,21 @@ struct MacChatWorkspaceView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var recordingSpectrumListRow: some View {
+        HStack {
+            RecordingSpectrumBubble(
+                waveformBars: waveformBars,
+                cornerRadius: 11,
+                horizontalPadding: 10,
+                verticalPadding: 10,
+                strokeOpacity: 0.08
+            )
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 2)
+        .allowsHitTesting(false)
     }
 
     private func transcriptRow(for item: TranscriptRow, isTranscribing: Bool, isQueued: Bool) -> some View {
@@ -626,6 +629,7 @@ struct MacChatWorkspaceView: View {
     private var transcriptUpdateSignature: Int {
         var hasher = Hasher()
         hasher.combine(liveChatItems.count)
+        hasher.combine(isRecording)
         for item in liveChatItems {
             hasher.combine(item.id)
             hasher.combine(item.text)

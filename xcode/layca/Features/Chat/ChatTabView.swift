@@ -280,19 +280,18 @@ struct ChatTabView: View {
                     .padding(.horizontal, 12)
             }
 
-            HStack(spacing: 10) {
-                recorderAccessoryWaveform
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(isRecording ? "Recording" : "Ready")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text(recordingTimeText)
-                        .font(.headline.weight(.semibold))
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.88)
+                    Text(activeSessionDateText)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
 
                 Spacer(minLength: 8)
@@ -334,22 +333,6 @@ struct ChatTabView: View {
         .padding(.top, 8)
         .padding(.bottom, 6)
     }
-
-    private var recorderAccessoryWaveform: some View {
-        HStack(alignment: .center, spacing: 2.5) {
-            ForEach(Array(waveformBars.prefix(20).enumerated()), id: \.offset) { _, level in
-                Capsule(style: .continuous)
-                    .fill(isRecording ? Color.red.opacity(0.82) : Color.accentColor.opacity(0.72))
-                    .frame(width: 2.6, height: max(CGFloat(level) * 18, 5))
-            }
-        }
-        .frame(width: 78, height: 32)
-        .padding(.horizontal, 6)
-        .background(
-            Capsule(style: .continuous)
-                .fill(.thinMaterial)
-        )
-    }
 #endif
 
     private var recorderCard: some View {
@@ -358,10 +341,6 @@ struct ChatTabView: View {
                 waveformPanel
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("New Recording")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-
                     Text(recordingTimeText)
                         .font(.system(size: 46, weight: .semibold, design: .rounded))
                         .foregroundStyle(.primary)
@@ -500,8 +479,34 @@ struct ChatTabView: View {
                     }
                 }
             }
+
+            if isRecording {
+                recordingSpectrumRow
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var recordingSpectrumRow: some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.84))
+
+                Image(systemName: "waveform")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.95))
+            }
+            .frame(width: 34, height: 34)
+            .overlay(
+                Circle()
+                    .stroke(.white.opacity(0.55), lineWidth: 0.8)
+            )
+            .shadow(color: .black.opacity(0.12), radius: 7, x: 0, y: 4)
+
+            RecordingSpectrumBubble(waveformBars: waveformBars)
+        }
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     private func avatarView(for item: TranscriptRow) -> some View {
@@ -633,6 +638,7 @@ struct ChatTabView: View {
     private var transcriptUpdateSignature: Int {
         var hasher = Hasher()
         hasher.combine(liveChatItems.count)
+        hasher.combine(isRecording)
         for item in liveChatItems {
             hasher.combine(item.id)
             hasher.combine(item.text)
