@@ -289,7 +289,7 @@ struct ChatTabView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.88)
                     Text(activeSessionDateText)
-                        .font(.caption.weight(.medium))
+                        .font(.caption2.weight(.medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -306,30 +306,31 @@ struct ChatTabView: View {
                     .foregroundStyle(isRecording ? Color.red.opacity(0.92) : .primary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
+                    .glassEffect(.clear, in: Capsule(style: .continuous))
                     .background(
                         Capsule(style: .continuous)
-                            .fill(.thinMaterial)
+                            .fill(.black.opacity(0.32))
                     )
                     .overlay(
                         Capsule(style: .continuous)
-                            .stroke(.primary.opacity(0.14), lineWidth: 0.8)
+                            .stroke(.white.opacity(0.14), lineWidth: 0.7)
                     )
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .glassEffect(.clear, in: Capsule(style: .continuous))
             .background(
                 Capsule(style: .continuous)
-                    .fill(.regularMaterial)
+                    .fill(.black.opacity(0.28))
             )
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(.primary.opacity(0.16), lineWidth: 0.9)
+                    .stroke(.white.opacity(0.16), lineWidth: 0.7)
             )
-            .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 20)
         .padding(.top, 8)
         .padding(.bottom, 6)
     }
