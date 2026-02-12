@@ -248,6 +248,7 @@ struct ChatTabView: View {
             if isEditingTitle {
                 HStack(spacing: 8) {
                     Image(systemName: "bubble.left.and.bubble.right.fill")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.primary)
 
                     TextField("Chat name", text: $titleDraft)
@@ -280,7 +281,7 @@ struct ChatTabView: View {
                 Button(action: beginTitleRename) {
                     HStack(spacing: 6) {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
-                            .font(.footnote.weight(.semibold))
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(.primary)
 
                         Text(activeSessionTitle)

@@ -148,21 +148,23 @@ struct MacWorkspaceSidebarView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(session.title)
                                 .lineLimit(1)
+                                .fontWeight(activeSessionID == session.id ? .semibold : .regular)
                             Text(session.formattedDate)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .overlay(alignment: .trailing) {
-                                if activeSessionID == session.id {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(Color.accentColor)
-                                }
-                        }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .padding(.vertical, 3)
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 8)
+                    .background(
+                        activeSessionID == session.id
+                            ? RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color(nsColor: .quaternaryLabelColor))
+                            : nil
+                    )
                     .contextMenu {
                         Section("Chat Actions") {
                             Button {
