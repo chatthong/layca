@@ -278,16 +278,16 @@ struct ChatTabView: View {
                 Button(action: beginTitleRename) {
                     HStack(spacing: 6) {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
-                            .font(.headline)
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
 
                         Text(activeSessionTitle)
-                            .font(.headline.weight(.semibold))
+                            .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
 #if os(macOS)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
                     .background(.ultraThinMaterial, in: Capsule(style: .continuous))
                     .contentShape(Capsule(style: .continuous))
 #endif
