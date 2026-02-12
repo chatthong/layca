@@ -113,13 +113,14 @@ struct MacWorkspaceSidebarView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
-                .overlay(alignment: .trailing) {
-                    if isWorkspaceSectionSelected(section) {
-                        Image(systemName: "checkmark")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                .padding(.vertical, 5)
+                .padding(.horizontal, 8)
+                .background(
+                    isWorkspaceSectionSelected(section)
+                        ? RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color(nsColor: .quaternaryLabelColor))
+                        : nil
+                )
             }
         }
     }
