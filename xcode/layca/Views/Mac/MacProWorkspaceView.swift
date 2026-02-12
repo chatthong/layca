@@ -396,7 +396,7 @@ struct MacChatWorkspaceView: View {
 
                 Button(action: onRecordTap) {
                     HStack(spacing: 7) {
-                        Image(systemName: isRecording ? "stop.circle.fill" : "record.circle.fill")
+                        Image(systemName: isRecording ? "stop.fill" : "record.circle.fill")
                         Text(isRecording ? "Stop" : "Record")
                     }
                     .font(.headline.weight(.semibold))

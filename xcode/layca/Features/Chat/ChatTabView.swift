@@ -343,7 +343,7 @@ struct ChatTabView: View {
                         Text(isRecording ? "Stop" : "Record")
                             .font(.subheadline.weight(.semibold))
                     }
-                    .foregroundStyle(isRecording ? Color.red.opacity(0.92) : .primary)
+                    .foregroundStyle(isRecording ? Color.red.opacity(0.92) : Color.accentColor)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .glassEffect(.clear, in: Capsule(style: .continuous))
