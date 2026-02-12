@@ -113,7 +113,7 @@ struct MacWorkspaceSidebarView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
-                .padding(.vertical, 5)
+                .padding(.vertical, 8)
                 .padding(.horizontal, 8)
                 .background(
                     isWorkspaceSectionSelected(section)
@@ -308,7 +308,7 @@ struct MacChatWorkspaceView: View {
             .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(ScaleButtonStyle())
-        .brightness(isTitleHovered ? 0.1 : 0)
+        .brightness(isTitleHovered ? 0.08 : 0)
         .onHover { hovering in
             isTitleHovered = hovering
         }
