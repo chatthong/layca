@@ -298,7 +298,7 @@ private struct LanguageChip: View {
                 .font(.caption.weight(.semibold))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text("\(language.code.uppercased()) • \(language.iso3.uppercased())")
+            Text(language.hello)
                 .font(.caption2)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)

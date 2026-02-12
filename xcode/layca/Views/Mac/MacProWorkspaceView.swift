@@ -1070,7 +1070,7 @@ struct MacSettingsWorkspaceView: View {
             Text(language.name)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
-            Text("\(language.code.uppercased()) • \(language.iso3.uppercased())")
+            Text(language.hello)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
