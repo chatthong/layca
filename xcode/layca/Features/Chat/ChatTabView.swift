@@ -339,7 +339,7 @@ struct ChatTabView: View {
                 Button(action: onRecordTap) {
                     HStack(spacing: 6) {
                         Image(systemName: isRecording ? "stop.fill" : "record.circle.fill")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.caption.weight(.semibold))
                         Text(isRecording ? "Stop" : "Record")
                             .font(.subheadline.weight(.semibold))
                     }
