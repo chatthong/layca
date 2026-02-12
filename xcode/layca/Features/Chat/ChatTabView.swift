@@ -285,10 +285,12 @@ struct ChatTabView: View {
                             .font(.headline.weight(.semibold))
                             .lineLimit(1)
                     }
+#if os(macOS)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
                     .background(.ultraThinMaterial, in: Capsule(style: .continuous))
                     .contentShape(Capsule(style: .continuous))
+#endif
                 }
                 .buttonStyle(ScaleButtonStyle())
             }
