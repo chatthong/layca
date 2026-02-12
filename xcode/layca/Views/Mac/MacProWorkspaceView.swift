@@ -246,6 +246,7 @@ struct MacChatWorkspaceView: View {
 
     @FocusState private var isTitleFieldFocused: Bool
     @State private var isTranscriptNearBottom = true
+    @State private var isTitleHovered = false
     @State private var hasPendingNewMessage = false
 
     private let transcriptBottomAnchorID = "layca.mac.transcript.bottom"
@@ -307,6 +308,10 @@ struct MacChatWorkspaceView: View {
             .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(ScaleButtonStyle())
+        .brightness(isTitleHovered ? 0.1 : 0)
+        .onHover { hovering in
+            isTitleHovered = hovering
+        }
         .help("Rename Chat")
     }
 
