@@ -273,12 +273,14 @@ struct ChatTabView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
+#if os(macOS)
                 .background(.thinMaterial, in: Capsule(style: .continuous))
+#endif
             } else {
                 Button(action: beginTitleRename) {
                     HStack(spacing: 6) {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.footnote.weight(.semibold))
                             .foregroundStyle(.primary)
 
                         Text(activeSessionTitle)
