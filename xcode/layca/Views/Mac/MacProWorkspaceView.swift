@@ -288,8 +288,8 @@ struct MacChatWorkspaceView: View {
     private var toolbarTitleLabel: some View {
         HStack(spacing: 6) {
             Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .font(.headline)
+                .foregroundStyle(.primary)
 
             Text(activeSessionTitle)
                 .font(.headline.weight(.semibold))
@@ -298,7 +298,7 @@ struct MacChatWorkspaceView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .contentShape(Rectangle())
+        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
         .onTapGesture {
             beginTitleRename()
         }

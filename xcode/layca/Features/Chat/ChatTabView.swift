@@ -285,7 +285,7 @@ struct ChatTabView: View {
         .font(.subheadline)
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(.thinMaterial, in: Capsule(style: .continuous))
+        .background(.ultraThinMaterial, in: Capsule(style: .continuous))
     }
 
 #if !os(macOS)
