@@ -363,7 +363,7 @@ struct ChatTabView: View {
             .glassEffect(.clear, in: Capsule(style: .continuous))
             .background(
                 Capsule(style: .continuous)
-                    .fill(.black.opacity(0.28))
+                    .fill(isRecording ? Color.red.opacity(0.1) : .black.opacity(0.32))
             )
             .overlay(
                 Capsule(style: .continuous)

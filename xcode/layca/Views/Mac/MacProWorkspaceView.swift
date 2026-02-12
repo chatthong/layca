@@ -420,7 +420,7 @@ struct MacChatWorkspaceView: View {
             .glassEffect(.clear, in: Capsule(style: .continuous))
             .background(
                 Capsule(style: .continuous)
-                    .fill(.black.opacity(0.28))
+                    .fill(isRecording ? Color.red.opacity(0.1) : .black.opacity(0.32))
             )
             .overlay(
                 Capsule(style: .continuous)
@@ -517,7 +517,7 @@ struct MacChatWorkspaceView: View {
                         Capsule(style: .continuous)
                             .stroke(.primary.opacity(0.16), lineWidth: 0.9)
                     )
-                    .shadow(color: .black.opacity(0.14), radius: 8, x: 0, y: 4)
+                    .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
                     .padding(.trailing, 20)
                     .padding(.bottom, 20)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
