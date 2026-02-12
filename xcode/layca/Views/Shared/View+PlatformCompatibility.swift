@@ -25,8 +25,6 @@ extension View {
     func laycaApplyTabBarBackgroundStyle() -> some View {
 #if os(iOS) || os(visionOS)
         self
-            .toolbarBackground(.visible, for: .tabBar)
-            .toolbarBackground(.ultraThinMaterial, for: .tabBar)
 #else
         self
 #endif
