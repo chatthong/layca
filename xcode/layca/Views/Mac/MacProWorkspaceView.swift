@@ -887,8 +887,8 @@ struct MacSettingsWorkspaceView: View {
     let usedHours: Double
     @Binding var selectedLanguageCodes: Set<String>
     @Binding var languageSearchText: String
-    @Binding var focusContextKeywords: String
     let filteredFocusLanguages: [FocusLanguage]
+    let groupedFocusLanguages: [LanguageRegionGroup]
     @Binding var isICloudSyncEnabled: Bool
     @Binding var whisperCoreMLEncoderEnabled: Bool
     @Binding var whisperGGMLGPUDecodeEnabled: Bool
@@ -961,18 +961,26 @@ struct MacSettingsWorkspaceView: View {
             Section("Language Focus") {
                 TextField("Search language (en, th, japanese...)", text: $languageSearchText)
                     .textFieldStyle(.roundedBorder)
-                TextField("Context keywords", text: $focusContextKeywords)
-                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.leading)
 
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 8)], spacing: 8) {
-                        ForEach(filteredFocusLanguages, id: \.id) { language in
-                            languageChip(for: language)
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(groupedFocusLanguages) { group in
+                            Text(group.region.rawValue)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 4)
+
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 8)], spacing: 8) {
+                                ForEach(group.languages, id: \.id) { language in
+                                    languageChip(for: language)
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, 4)
                 }
-                .frame(maxHeight: 220)
+                .frame(maxHeight: 300)
             }
 
             Section("Cloud & Purchases") {

@@ -6,9 +6,9 @@ struct SettingsTabView: View {
 
     @Binding var selectedLanguageCodes: Set<String>
     @Binding var languageSearchText: String
-    @Binding var focusContextKeywords: String
 
     let filteredFocusLanguages: [FocusLanguage]
+    let groupedFocusLanguages: [LanguageRegionGroup]
 
     @Binding var isICloudSyncEnabled: Bool
     @Binding var whisperCoreMLEncoderEnabled: Bool
@@ -142,31 +142,31 @@ struct SettingsTabView: View {
                         .fill(.regularMaterial)
                 )
 
-            TextField("Context keywords (product names, people, jargon)", text: $focusContextKeywords)
-                .laycaApplyTextInputAutocorrectionPolicy()
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.regularMaterial)
-                )
-
             ScrollView(showsIndicators: true) {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
-                    ForEach(filteredFocusLanguages) { language in
-                        Button {
-                            onToggleLanguage(language.code)
-                        } label: {
-                            LanguageChip(
-                                language: language,
-                                isSelected: selectedLanguageCodes.contains(language.code)
-                            )
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    ForEach(groupedFocusLanguages) { group in
+                        Text(group.region.rawValue)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 4)
+
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
+                            ForEach(group.languages) { language in
+                                Button {
+                                    onToggleLanguage(language.code)
+                                } label: {
+                                    LanguageChip(
+                                        language: language,
+                                        isSelected: selectedLanguageCodes.contains(language.code)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
-            .frame(maxHeight: 230)
+            .frame(maxHeight: 280)
         }
         .padding(18)
         .background(
