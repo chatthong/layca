@@ -84,6 +84,7 @@ struct ChatTabView: View {
 
     var body: some View {
         NavigationStack {
+#if os(macOS)
             Group {
                 if showsTopToolbar {
                     chatContent
@@ -97,6 +98,24 @@ struct ChatTabView: View {
                     chatContent
                 }
             }
+#else
+            chatContent
+                .toolbar {
+                    if showsTopToolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            sessionTitleControl
+                                .fixedSize()
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button(action: onExportTap) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+#endif
         }
         .onAppear {
             titleDraft = activeSessionTitle
@@ -114,7 +133,6 @@ struct ChatTabView: View {
             .laycaHideNavigationBar()
 #else
         chatContentBody
-            .laycaHideNavigationBar()
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 recorderTabBarAccessory
             }

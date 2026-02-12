@@ -240,7 +240,7 @@ struct MacChatWorkspaceView: View {
     let onOpenSettingsTap: () -> Void
     @State private var titleDraft = ""
     @State private var isEditingTitle = false
-    @State private var isTitleHovered = false
+
     @FocusState private var isTitleFieldFocused: Bool
     @State private var isTranscriptNearBottom = true
     @State private var hasPendingNewMessage = false
@@ -295,21 +295,10 @@ struct MacChatWorkspaceView: View {
                 .font(.headline.weight(.semibold))
                 .lineLimit(1)
 
-            if isTitleHovered {
-                Image(systemName: "pencil")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity)
-            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .contentShape(Rectangle())
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) {
-                isTitleHovered = hovering
-            }
-        }
         .onTapGesture {
             beginTitleRename()
         }
