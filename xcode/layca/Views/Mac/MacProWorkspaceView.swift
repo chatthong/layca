@@ -250,6 +250,7 @@ struct MacChatWorkspaceView: View {
     @State private var hasPendingNewMessage = false
 
     private let transcriptBottomAnchorID = "layca.mac.transcript.bottom"
+    private let recordingSpectrumRowID = "layca.mac.recording.spectrum.row"
 
     var body: some View {
         transcriptPane
@@ -480,7 +481,13 @@ struct MacChatWorkspaceView: View {
 
                             if isRecording {
                                 recordingSpectrumListRow
-                                    .id("layca.mac.recording.spectrum.row")
+                                    .id(recordingSpectrumRowID)
+                                    .onAppear {
+                                        handleRecordingSpectrumRowVisible()
+                                    }
+                                    .onDisappear {
+                                        handleRecordingSpectrumRowHidden()
+                                    }
                                     .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
                                     .listRowSeparator(.hidden)
                                     .listRowBackground(Color.clear)
@@ -525,6 +532,9 @@ struct MacChatWorkspaceView: View {
             }
             .animation(.easeInOut(duration: 0.18), value: hasPendingNewMessage && !isTranscriptNearBottom)
             .onAppear {
+                guard isRecording else {
+                    return
+                }
                 DispatchQueue.main.async {
                     scrollToTranscriptBottom(using: proxy, animated: false)
                 }
@@ -663,8 +673,22 @@ struct MacChatWorkspaceView: View {
         isTranscriptNearBottom = false
     }
 
+    private func handleRecordingSpectrumRowVisible() {
+        guard isRecording else {
+            return
+        }
+        isTranscriptNearBottom = true
+    }
+
+    private func handleRecordingSpectrumRowHidden() {
+        guard isRecording else {
+            return
+        }
+        isTranscriptNearBottom = false
+    }
+
     private func handleTranscriptUpdate(using proxy: ScrollViewProxy) {
-        guard !liveChatItems.isEmpty else {
+        guard isRecording else {
             hasPendingNewMessage = false
             return
         }
@@ -679,7 +703,9 @@ struct MacChatWorkspaceView: View {
 
     private func scrollToTranscriptBottom(using proxy: ScrollViewProxy, animated: Bool) {
         let scrollAction = {
-            if let lastID = liveChatItems.last?.id {
+            if isRecording {
+                proxy.scrollTo(recordingSpectrumRowID, anchor: .bottom)
+            } else if let lastID = liveChatItems.last?.id {
                 proxy.scrollTo(lastID, anchor: .bottom)
             } else {
                 proxy.scrollTo(transcriptBottomAnchorID, anchor: .bottom)

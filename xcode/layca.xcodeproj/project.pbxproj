@@ -101,6 +101,7 @@
 			buildPhases = (
 				D7BE3AA52F38D7A2000297EC /* Sources */,
 				D7BE3AA62F38D7A2000297EC /* Frameworks */,
+				D7BE3AD32F38D7A3000297EC /* Copy Runtime Assets */,
 				D7BE3AA72F38D7A2000297EC /* Resources */,
 			);
 			buildRules = (
@@ -230,6 +231,30 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		D7BE3AD32F38D7A3000297EC /* Copy Runtime Assets */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/layca/Models/RuntimeAssets",
+			);
+			name = "Copy Runtime Assets";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Models/RuntimeAssets",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nSRC_ASSETS_DIR=\"${SRCROOT}/layca/Models/RuntimeAssets\"\nDST_ASSETS_DIR=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Models/RuntimeAssets\"\nmkdir -p \"${DST_ASSETS_DIR}\"\nrsync -a --delete \"${SRC_ASSETS_DIR}/\" \"${DST_ASSETS_DIR}/\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		D7BE3AA52F38D7A2000297EC /* Sources */ = {
@@ -398,7 +423,12 @@
 				ENABLE_AUDIO_INPUT = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				EXCLUDED_SOURCE_FILE_NAMES = (
+					"Models/RuntimeAssets/*",
+					"Models/RuntimeAssets/**/*",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Layca needs microphone access to record your meeting audio.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -447,7 +477,12 @@
 				ENABLE_AUDIO_INPUT = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				EXCLUDED_SOURCE_FILE_NAMES = (
+					"Models/RuntimeAssets/*",
+					"Models/RuntimeAssets/**/*",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Layca needs microphone access to record your meeting audio.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;

@@ -35,8 +35,9 @@ private extension ContentView {
 #endif
     }
 
+    @ViewBuilder
     var mobileTabLayout: some View {
-        TabView(selection: $selectedTab) {
+        let tabs = TabView(selection: $selectedTab) {
             TabSection {
                 Tab("Layca Chat", systemImage: "bubble.left.and.bubble.right.fill", value: AppTab.chat) {
                     chatScreen(showsTopToolbar: true)
@@ -66,6 +67,27 @@ private extension ContentView {
                 startNewChatAndReturnToChat()
             }
         }
+
+#if os(iOS)
+        if #available(iOS 26.1, *) {
+            tabs
+                .tabBarMinimizeBehavior(.onScrollDown)
+                .tabViewBottomAccessory(isEnabled: selectedTab == .chat) {
+                    tabBarRecorderAccessory
+                }
+        } else {
+            tabs
+                .tabViewBottomAccessory {
+                    if selectedTab == .chat {
+                        tabBarRecorderAccessory
+                    } else {
+                        EmptyView()
+                    }
+                }
+        }
+#else
+        tabs
+#endif
     }
 
 #if os(macOS)
@@ -212,7 +234,9 @@ private extension ContentView {
             },
             onExportTap: { isExportPresented = true },
             onRenameSessionTitle: backend.renameActiveSessionTitle,
-            showsTopToolbar: showsTopToolbar
+            showsTopToolbar: showsTopToolbar,
+            showsBottomRecorderAccessory: !usesMergedTabBarRecorderAccessory,
+            showsMergedTabBarRecorderAccessory: usesMergedTabBarRecorderAccessory
         )
     }
 
@@ -399,6 +423,29 @@ private extension ContentView {
             let langs = filtered.filter { $0.region == region }
             return langs.isEmpty ? nil : LanguageRegionGroup(region: region, languages: langs)
         }
+    }
+
+    var usesMergedTabBarRecorderAccessory: Bool {
+#if os(iOS)
+        true
+#else
+        false
+#endif
+    }
+
+    @ViewBuilder
+    var tabBarRecorderAccessory: some View {
+#if os(iOS)
+        TabBarRecorderAccessoryView(
+            isRecording: backend.isRecording,
+            recordingTimeText: backend.recordingTimeText,
+            activeSessionDateText: backend.activeSessionDateText,
+            preflightMessage: backend.preflightStatusMessage,
+            onRecordTap: backend.toggleRecording
+        )
+#else
+        EmptyView()
+#endif
     }
 
     var focusLanguages: [FocusLanguage] {

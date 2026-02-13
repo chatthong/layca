@@ -23,6 +23,8 @@ struct ChatTabView: View {
     let onExportTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
     let showsTopToolbar: Bool
+    let showsBottomRecorderAccessory: Bool
+    let showsMergedTabBarRecorderAccessory: Bool
 
     @State private var titleDraft = ""
     @State private var isEditingTitle = false
@@ -34,6 +36,7 @@ struct ChatTabView: View {
 
     private let transcriptScrollSpace = "layca.chat.transcript.scroll"
     private let transcriptBottomAnchorID = "layca.chat.transcript.bottom"
+    private let recordingSpectrumAnchorID = "layca.chat.recording.spectrum"
     private let transcriptBottomTolerance: CGFloat = 78
 
     init(
@@ -57,7 +60,9 @@ struct ChatTabView: View {
         onRetranscribeTranscript: @escaping (TranscriptRow, String?) -> Void,
         onExportTap: @escaping () -> Void,
         onRenameSessionTitle: @escaping (String) -> Void,
-        showsTopToolbar: Bool = true
+        showsTopToolbar: Bool = true,
+        showsBottomRecorderAccessory: Bool = true,
+        showsMergedTabBarRecorderAccessory: Bool = false
     ) {
         self.isRecording = isRecording
         self.recordingTimeText = recordingTimeText
@@ -80,6 +85,8 @@ struct ChatTabView: View {
         self.onExportTap = onExportTap
         self.onRenameSessionTitle = onRenameSessionTitle
         self.showsTopToolbar = showsTopToolbar
+        self.showsBottomRecorderAccessory = showsBottomRecorderAccessory
+        self.showsMergedTabBarRecorderAccessory = showsMergedTabBarRecorderAccessory
     }
 
     var body: some View {
@@ -127,15 +134,20 @@ struct ChatTabView: View {
         }
     }
 
+    @ViewBuilder
     private var chatContent: some View {
 #if os(macOS)
         chatContentBody
             .laycaHideNavigationBar()
 #else
-        chatContentBody
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                recorderTabBarAccessory
-            }
+        if showsBottomRecorderAccessory {
+            chatContentBody
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    recorderTabBarAccessory
+                }
+        } else {
+            chatContentBody
+        }
 #endif
     }
 
@@ -145,27 +157,7 @@ struct ChatTabView: View {
                 ZStack {
                     backgroundFill
 
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 18) {
-#if os(macOS)
-                            recorderCard
-#endif
-                            liveSegmentsCard
-                            transcriptBottomMarker
-                        }
-                        .padding(.horizontal, 18)
-                        .padding(.top, 10)
-                        .padding(.bottom, 24)
-                    }
-                    .coordinateSpace(name: transcriptScrollSpace)
-                    .background(
-                        GeometryReader { proxy in
-                            Color.clear.preference(
-                                key: ChatTranscriptViewportHeightPreferenceKey.self,
-                                value: proxy.size.height
-                            )
-                        }
-                    )
+                    transcriptScrollView
                 }
 
                 if hasPendingNewMessage && !isUserNearBottom {
@@ -180,6 +172,9 @@ struct ChatTabView: View {
             }
             .animation(.easeInOut(duration: 0.18), value: hasPendingNewMessage && !isUserNearBottom)
             .onAppear {
+                guard isRecording else {
+                    return
+                }
                 DispatchQueue.main.async {
                     scrollToTranscriptBottom(using: proxy, animated: false)
                 }
@@ -201,6 +196,37 @@ struct ChatTabView: View {
                 refreshBottomTracking()
             }
         }
+    }
+
+    @ViewBuilder
+    private var transcriptScrollView: some View {
+        let baseScrollView = ScrollView(showsIndicators: false) {
+            VStack(spacing: 18) {
+#if os(macOS)
+                recorderCard
+#endif
+                liveSegmentsCard
+                transcriptBottomMarker
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 10)
+            .padding(.bottom, transcriptContentBottomPadding)
+        }
+        .coordinateSpace(name: transcriptScrollSpace)
+        .background(
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: ChatTranscriptViewportHeightPreferenceKey.self,
+                    value: proxy.size.height
+                )
+            }
+        )
+
+#if os(iOS)
+        baseScrollView
+#else
+        baseScrollView
+#endif
     }
 
     @ViewBuilder
@@ -523,6 +549,7 @@ struct ChatTabView: View {
 
             if isRecording {
                 recordingSpectrumRow
+                    .id(recordingSpectrumAnchorID)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -695,7 +722,24 @@ struct ChatTabView: View {
 #if os(macOS)
         return 24
 #else
-        return 106
+        return isBottomRecorderAccessoryVisible ? 106 : 24
+#endif
+    }
+
+    private var transcriptContentBottomPadding: CGFloat {
+#if os(macOS)
+        return 24
+#else
+        // Keep the recording spectrum bubble visible above either recorder accessory mode.
+        return (isBottomRecorderAccessoryVisible && isRecording) ? 124 : 24
+#endif
+    }
+
+    private var isBottomRecorderAccessoryVisible: Bool {
+#if os(macOS)
+        false
+#else
+        showsBottomRecorderAccessory || showsMergedTabBarRecorderAccessory
 #endif
     }
 
@@ -744,7 +788,7 @@ struct ChatTabView: View {
     }
 
     private func handleTranscriptUpdate(using proxy: ScrollViewProxy) {
-        guard !liveChatItems.isEmpty else {
+        guard isRecording else {
             hasPendingNewMessage = false
             return
         }
@@ -759,7 +803,11 @@ struct ChatTabView: View {
 
     private func scrollToTranscriptBottom(using proxy: ScrollViewProxy, animated: Bool) {
         let scrollAction = {
-            proxy.scrollTo(transcriptBottomAnchorID, anchor: .bottom)
+            if isRecording {
+                proxy.scrollTo(recordingSpectrumAnchorID, anchor: .bottom)
+            } else {
+                proxy.scrollTo(transcriptBottomAnchorID, anchor: .bottom)
+            }
         }
 
         if animated {
