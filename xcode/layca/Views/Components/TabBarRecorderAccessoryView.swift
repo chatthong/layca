@@ -19,21 +19,22 @@ struct TabBarRecorderAccessoryView: View {
                 expandedAccessory
             }
         }
+        .glassEffect(accessoryGlass, in: Capsule(style: .continuous))
     }
 
     private var isInlinePlacement: Bool {
         accessoryPlacement == .inline
     }
 
-    private var expandedAccessory: some View {
-        HStack(spacing: 10) {
-            Image(systemName: isRecording ? "waveform.circle.fill" : "record.circle.fill")
-                .foregroundStyle(isRecording ? Color.red : Color.accentColor)
-                .font(.system(size: 16, weight: .semibold))
+    private var accessoryGlass: Glass {
+        .identity
+    }
 
+    private var expandedAccessory: some View {
+        HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(recordingTimeText)
-                    .font(.headline.weight(.semibold))
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
@@ -43,10 +44,11 @@ struct TabBarRecorderAccessoryView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            .padding(.leading, 12)
 
             Spacer(minLength: 8)
 
-            recordActionButton(showsLabel: true)
+            expandedRecordControl
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 2)
@@ -54,49 +56,50 @@ struct TabBarRecorderAccessoryView: View {
 
     private var inlineAccessory: some View {
         HStack(spacing: 6) {
-            Image(systemName: isRecording ? "waveform.circle.fill" : "record.circle")
-                .foregroundStyle(isRecording ? Color.red : Color.accentColor)
-                .font(.system(size: 13, weight: .semibold))
-
             Text(recordingTimeText)
-                .font(.footnote.weight(.semibold))
+                .font(.system(size: 17, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
+                .padding(.leading, 12)
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 8)
 
-            recordActionButton(showsLabel: false)
+            inlineRecordIcon
+                .padding(.trailing, 10)
         }
         .padding(.horizontal, 2)
         .padding(.vertical, 1)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onRecordTap()
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(isRecording ? "Stop" : "Record")
     }
 
-    private func recordActionButton(showsLabel: Bool) -> some View {
-        Button(action: onRecordTap) {
-            HStack(spacing: showsLabel ? 6 : 0) {
-                Image(systemName: isRecording ? "stop.fill" : "record.circle.fill")
-                    .font(.subheadline.weight(.bold))
-
-                if showsLabel {
-                    Text(isRecording ? "Stop" : "Record")
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                }
-            }
+    private var inlineRecordIcon: some View {
+        Image(systemName: isRecording ? "stop.circle" : "record.circle")
+            .font(.subheadline.weight(.bold))
             .foregroundStyle(isRecording ? Color.red : Color.accentColor)
-            .frame(width: showsLabel ? 112 : 40, height: 38)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(.thinMaterial)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(.secondary.opacity(0.25), lineWidth: 0.8)
-            )
+            .frame(width: 30, height: 30)
+    }
+
+    private var expandedRecordControl: some View {
+        HStack(spacing: 6) {
+            Image(systemName: isRecording ? "stop.circle" : "record.circle")
+                .font(.subheadline.weight(.bold))
+            Text(isRecording ? "Stop" : "Record")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(isRecording ? Color.red : Color.accentColor)
+        .frame(minWidth: 96, minHeight: 34)
         .contentShape(Rectangle())
-        .fixedSize()
+        .onTapGesture {
+            onRecordTap()
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(isRecording ? "Stop" : "Record")
     }
 }
 #endif

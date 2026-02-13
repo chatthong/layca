@@ -406,28 +406,22 @@ struct MacChatWorkspaceView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(isRecording ? Color.red.opacity(0.90) : Color.accentColor)
-                .glassEffect(.clear, in: Capsule(style: .continuous))
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(.black.opacity(0.32))
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(.white.opacity(0.14), lineWidth: 0.7)
-                )
+                .glassEffect(recorderControlGlass, in: Capsule(style: .continuous))
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
-            .glassEffect(.clear, in: Capsule(style: .continuous))
-            .background(
-                Capsule(style: .continuous)
-                    .fill(isRecording ? Color.red.opacity(0.1) : .black.opacity(0.32))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(.white.opacity(0.16), lineWidth: 0.7)
-            )
+            .glassEffect(recorderContainerGlass, in: Capsule(style: .continuous))
         }
+    }
+
+    private var recorderContainerGlass: Glass {
+        Glass.regular
+            .tint(isRecording ? Color.red.opacity(0.12) : nil)
+            .interactive(false)
+    }
+
+    private var recorderControlGlass: Glass {
+        Glass.regular.interactive(false)
     }
 
     private var transcriptPane: some View {

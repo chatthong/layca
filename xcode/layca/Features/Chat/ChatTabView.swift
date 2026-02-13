@@ -362,43 +362,33 @@ struct ChatTabView: View {
 
                 Spacer(minLength: 8)
 
-                Button(action: onRecordTap) {
-                    HStack(spacing: 6) {
-                        Image(systemName: isRecording ? "stop.fill" : "record.circle.fill")
-                            .font(.caption.weight(.semibold))
-                        Text(isRecording ? "Stop" : "Record")
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .foregroundStyle(isRecording ? Color.red.opacity(0.92) : Color.accentColor)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .glassEffect(.clear, in: Capsule(style: .continuous))
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(.black.opacity(0.32))
-                    )
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(.white.opacity(0.14), lineWidth: 0.7)
-                    )
+                HStack(spacing: 6) {
+                    Image(systemName: isRecording ? "stop.circle" : "record.circle")
+                        .font(.caption.weight(.semibold))
+                    Text(isRecording ? "Stop" : "Record")
+                        .font(.subheadline.weight(.semibold))
                 }
-                .buttonStyle(.plain)
+                .foregroundStyle(isRecording ? Color.red.opacity(0.92) : Color.accentColor)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onRecordTap()
+                }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityLabel(isRecording ? "Stop" : "Record")
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
-            .glassEffect(.clear, in: Capsule(style: .continuous))
-            .background(
-                Capsule(style: .continuous)
-                    .fill(isRecording ? Color.red.opacity(0.1) : .black.opacity(0.32))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(.white.opacity(0.16), lineWidth: 0.7)
-            )
+            .glassEffect(recorderAccessoryContainerGlass, in: Capsule(style: .continuous))
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
         .padding(.bottom, 6)
+    }
+
+    private var recorderAccessoryContainerGlass: Glass {
+        .identity
     }
 #endif
 
