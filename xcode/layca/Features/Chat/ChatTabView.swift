@@ -371,6 +371,7 @@ struct ChatTabView: View {
                 .foregroundStyle(isRecording ? Color.red.opacity(0.92) : Color.accentColor)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
+                .glassEffect(recorderAccessoryControlGlass, in: Capsule(style: .continuous))
                 .contentShape(Rectangle())
                 .onTapGesture {
                     onRecordTap()
@@ -388,7 +389,14 @@ struct ChatTabView: View {
     }
 
     private var recorderAccessoryContainerGlass: Glass {
-        .identity
+        if isRecording {
+            return .regular.tint(.red.opacity(0.12))
+        }
+        return .regular
+    }
+
+    private var recorderAccessoryControlGlass: Glass {
+        return .regular
     }
 #endif
 

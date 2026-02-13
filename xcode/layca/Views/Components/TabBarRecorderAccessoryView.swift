@@ -27,7 +27,10 @@ struct TabBarRecorderAccessoryView: View {
     }
 
     private var accessoryGlass: Glass {
-        .identity
+        if isRecording {
+            return .regular.tint(.red.opacity(0.12))
+        }
+        return .regular
     }
 
     private var expandedAccessory: some View {
@@ -94,12 +97,20 @@ struct TabBarRecorderAccessoryView: View {
         }
         .foregroundStyle(isRecording ? Color.red : Color.accentColor)
         .frame(minWidth: 96, minHeight: 34)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .glassEffect(recordControlGlass, in: Capsule(style: .continuous))
+        .glassEffectTransition(.identity)
         .contentShape(Rectangle())
         .onTapGesture {
             onRecordTap()
         }
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(isRecording ? "Stop" : "Record")
+    }
+
+    private var recordControlGlass: Glass {
+        return .regular
     }
 }
 #endif

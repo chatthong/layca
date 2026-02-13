@@ -72,18 +72,8 @@ private extension ContentView {
         if #available(iOS 26.1, *) {
             tabs
                 .tabBarMinimizeBehavior(.onScrollDown)
-                .tabViewBottomAccessory(isEnabled: selectedTab == .chat) {
-                    tabBarRecorderAccessory
-                }
         } else {
             tabs
-                .tabViewBottomAccessory {
-                    if selectedTab == .chat {
-                        tabBarRecorderAccessory
-                    } else {
-                        EmptyView()
-                    }
-                }
         }
 #else
         tabs
@@ -427,24 +417,9 @@ private extension ContentView {
 
     var usesMergedTabBarRecorderAccessory: Bool {
 #if os(iOS)
-        true
+        false
 #else
         false
-#endif
-    }
-
-    @ViewBuilder
-    var tabBarRecorderAccessory: some View {
-#if os(iOS)
-        TabBarRecorderAccessoryView(
-            isRecording: backend.isRecording,
-            recordingTimeText: backend.recordingTimeText,
-            activeSessionDateText: backend.activeSessionDateText,
-            preflightMessage: backend.preflightStatusMessage,
-            onRecordTap: backend.toggleRecording
-        )
-#else
-        EmptyView()
 #endif
     }
 
