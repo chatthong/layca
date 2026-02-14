@@ -43,6 +43,9 @@
 - Chat-detail toolbar `New Chat` action calls `startNewChat()`.
 - Chat-detail toolbar `Info` action switches workspace to `Setting`.
 - Sidebar workspace `Layca Chat` action routes through draft-open behavior in `ContentView` (`openLaycaChatWorkspace`).
+- Chat header inline-rename UX (iOS + macOS):
+  - entering edit mode hides non-title header actions
+  - tapping outside edit context (content/sidebar/focus-loss path) cancels edit without applying changes
 
 ### `toggleLanguageFocus(_ code: String) -> Void`
 - Adds/removes language code used to build pre-flight prompt.

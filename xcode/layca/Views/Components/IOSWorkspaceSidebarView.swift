@@ -103,6 +103,14 @@ struct IOSWorkspaceSidebarView: View {
                 Text("This will permanently remove this chat and its recording.")
             }
         }
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                NotificationCenter.default.post(
+                    name: Notification.Name("LaycaCancelTitleRenameEditing"),
+                    object: nil
+                )
+            }
+        )
     }
 
     private var sidebarBackground: some View {

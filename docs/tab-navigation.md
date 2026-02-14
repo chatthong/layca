@@ -10,7 +10,7 @@
   - swipe from left edge to open
   - drag left to close
   - tap dimmed detail area to close
-  - floating menu button toggles open/close
+  - chat-header sidebar toggle button opens/closes the drawer (positioned before chat title)
 - Sidebar top area is fixed (non-scrolling):
   - search pill (visual shell)
   - `New Chat` compose button
@@ -83,6 +83,9 @@
 - Active chat badge supports inline rename:
   - tap chat title in the Chat header to edit
   - saved title appears in both Chat and session lists
+- While chat-title editing is active (iOS + macOS):
+  - non-title header actions are hidden
+  - tapping outside the edit form (content/sidebar/toolbar focus-loss path) cancels editing
 - Renaming from Library/sidebar context menu updates the same persisted session title used by Chat header.
 - `Export` opens from a header/toolbar action instead of a tab.
 - Recorder timer behavior:

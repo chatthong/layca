@@ -67,7 +67,7 @@ Documents/
 
 ## 3. UI/UX Strategy: Chat-First 💬
 
-- **iOS/iPadOS shell:** custom swipeable drawer sidebar (`Layca Chat`, `Setting`, `Recent Chats`) with fixed top actions (`Search`, `New Chat`) and a menu trigger button.
+- **iOS/iPadOS shell:** custom swipeable drawer sidebar (`Layca Chat`, `Setting`, `Recent Chats`) with fixed top actions (`Search`, `New Chat`) and a chat-header sidebar toggle button.
 - **visionOS/tvOS shell:** `TabView` with `Layca Chat`, `Library`, `Setting`, plus a dedicated `New Chat` action tab.
 - **iOS-family visual style:** plain `systemBackground` chat/settings canvas + native material cards; iOS/iPadOS sidebar uses a dark workspace surface with material controls.
 - **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Layca Chat`, `Library`, `Setting`) and no top segmented workspace picker.
@@ -166,6 +166,8 @@ Documents/
 - Chat bubble tap plays that message range from `session_full.m4a`.
 - iOS/iPadOS uses a custom drawer workspace shell; macOS uses dedicated split workspace views (sidebar/detail).
 - macOS chat detail toolbar uses native SwiftUI `ToolbarItem` + `ToolbarItemGroup` composition with `.toolbar(removing: .title)`.
+- iOS chat header uses leading controls with sidebar toggle before chat title and a trailing share action.
+- Inline chat-title edit mode on iOS and macOS hides non-title header controls and cancels on outside interaction (content/sidebar/tap-away focus loss).
 - iOS-family cards and sheets use plain `systemBackground` + native material fills to follow automatic light/dark switching without custom liquid-glass wrappers.
 - Recorder accessory glass uses red-tinted style while recording (`.tint(.red.opacity(0.12))`) on chat controls.
 - Library rows now support long-press action menu: `Rename`, `Share this chat`, `Delete`.

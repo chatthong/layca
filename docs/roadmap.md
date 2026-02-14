@@ -16,10 +16,16 @@
 ### iOS Drawer Sidebar + Recording Glass Alignment
 - `App/ContentView.swift`, `Views/Components/IOSWorkspaceSidebarView.swift`, `Features/Chat/ChatTabView.swift`
 - Replaced iOS/iPadOS tab-first shell with a swipeable drawer sidebar.
-- Added drawer trigger button + edge-swipe gesture open/close behavior.
+- Moved drawer trigger into chat header leading controls (before chat title) + kept edge-swipe gesture open/close behavior.
 - Sidebar top area (`Search` + `New Chat`) is fixed; `Workspace` + `Recent Chats` are scrollable.
 - `Recent Chats` rows use the same action group (`Rename`, `Share this chat`, `Delete`).
 - Recording accessory glass now switches to red tint while recording to match macOS behavior.
+
+### Chat Header Rename UX Hardening
+- `Features/Chat/ChatTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `Views/Components/IOSWorkspaceSidebarView.swift`
+- iOS chat header control order is aligned as sidebar toggle first, then chat title, with share on trailing side.
+- During chat-title inline edit, non-title header controls are hidden to avoid toolbar collapse/overlap.
+- Tapping outside the title edit form now cancels editing on both iOS and macOS (content area, sidebar interactions, and focus-loss path).
 
 ### Dynamic Pre-Flight Backend (Credits + Language Prompt)
 - `App/AppBackend.swift`

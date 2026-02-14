@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 import AVFoundation
 #if os(macOS)
 import AppKit
@@ -60,6 +63,14 @@ struct MacWorkspaceSidebarView: View {
                 .help("New Chat")
             }
         }
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                NotificationCenter.default.post(
+                    name: Notification.Name("LaycaCancelTitleRenameEditing"),
+                    object: nil
+                )
+            }
+        )
         .alert("Rename Chat", isPresented: renameAlertBinding, actions: {
             TextField("Chat name", text: $renameDraft)
             Button("Cancel", role: .cancel) {
@@ -254,6 +265,15 @@ struct MacChatWorkspaceView: View {
 
     var body: some View {
         transcriptPane
+        .overlay {
+            if isEditingTitle {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        cancelTitleRename()
+                    }
+            }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             recorderBottomBar
                 .padding(.horizontal, 16)
@@ -264,18 +284,19 @@ struct MacChatWorkspaceView: View {
             ToolbarItem(placement: .navigation) {
                 if isEditingTitle {
                     toolbarTitleEditor
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     toolbarTitleLabel
                 }
             }
 
-
-
-            ToolbarItem {
-                Button(action: onExportTap) {
-                    Image(systemName: "square.and.arrow.up")
+            if !isEditingTitle {
+                ToolbarItem {
+                    Button(action: onExportTap) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .help("Share")
                 }
-                .help("Share")
             }
 
             ToolbarSpacer(.fixed)
@@ -286,6 +307,22 @@ struct MacChatWorkspaceView: View {
         .onChange(of: activeSessionTitle) { _, newTitle in
             if !isEditingTitle {
                 titleDraft = newTitle
+            }
+        }
+        .onChange(of: isEditingTitle) { _, editing in
+            guard editing else {
+                return
+            }
+            requestTitleFieldFocus()
+        }
+        .onChange(of: isTitleFieldFocused) { _, focused in
+            if isEditingTitle && !focused {
+                cancelTitleRename()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LaycaCancelTitleRenameEditing"))) { _ in
+            if isEditingTitle {
+                cancelTitleRename()
             }
         }
     }
@@ -336,6 +373,8 @@ struct MacChatWorkspaceView: View {
                 .textFieldStyle(.plain)
                 .font(.headline.weight(.semibold))
                 .lineLimit(1)
+                .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
                 .focused($isTitleFieldFocused)
                 .onSubmit {
                     commitTitleRename()
@@ -344,6 +383,7 @@ struct MacChatWorkspaceView: View {
             Button(action: commitTitleRename) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
+                    .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
             .help("Save")
@@ -351,13 +391,14 @@ struct MacChatWorkspaceView: View {
             Button(action: cancelTitleRename) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
             .help("Cancel")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .frame(width: 292, alignment: .leading)
+        .frame(minWidth: 320, idealWidth: 420, maxWidth: 520, alignment: .leading)
     }
 
     private var recorderBottomBar: some View {
@@ -718,9 +759,7 @@ struct MacChatWorkspaceView: View {
     private func beginTitleRename() {
         titleDraft = activeSessionTitle
         isEditingTitle = true
-        DispatchQueue.main.async {
-            isTitleFieldFocused = true
-        }
+        requestTitleFieldFocus()
     }
 
     private func commitTitleRename() {
@@ -739,6 +778,22 @@ struct MacChatWorkspaceView: View {
         titleDraft = activeSessionTitle
         isEditingTitle = false
         isTitleFieldFocused = false
+    }
+
+    private func requestTitleFieldFocus() {
+        let delays: [Double] = [0.0, 0.08, 0.2]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard isEditingTitle else {
+                    return
+                }
+#if os(macOS)
+                NSApp.keyWindow?.makeFirstResponder(nil)
+#endif
+                isTitleFieldFocused = false
+                isTitleFieldFocused = true
+            }
+        }
     }
 }
 

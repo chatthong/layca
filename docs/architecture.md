@@ -40,7 +40,7 @@
 - Pipeline internals are production-style backend services.
 - Audio capture uses real `AVAudioEngine`.
 - App shell is platform-aware:
-  - iOS/iPadOS uses a custom drawer sidebar (`iosDrawerLayout`) with edge-swipe open/close and a floating menu trigger.
+  - iOS/iPadOS uses a custom drawer sidebar (`iosDrawerLayout`) with edge-swipe open/close and a chat-header sidebar toggle.
   - iOS/iPadOS sidebar contains fixed top actions (`Search`, `New Chat`), workspace rows (`Layca Chat`, `Setting`), and a scrollable `Recent Chats` list.
   - visionOS/tvOS currently use `TabView`/`TabSection` fallback with a `New Chat` action tab.
   - iOS-family uses plain `systemBackground` for chat/settings surfaces with native material cards and automatic device light/dark appearance.
@@ -72,6 +72,8 @@
 - Chunk playback is gated off while recording to avoid audio-session conflicts.
 - `startNewChat()` is draft-reset behavior (does not create a persisted session until recording starts).
 - First recording from draft creates a new persisted session title (`chat N`).
+- iOS chat header keeps sidebar toggle before chat title and keeps share action on trailing side.
+- Inline chat-title editing on iOS/macOS hides other header actions and cancels on outside interaction (tap-away/focus loss/sidebar tap).
 - Recorder timer shows persisted accumulated duration for saved sessions, resumes from that offset when recording again, and shows `00:00:00` in draft mode.
 - Recorder accessory glass tint switches to red while recording (`.tint(.red.opacity(0.12))`).
 - "Transcribe Again" is a submenu (`Transcribe Auto`, plus `Transcribe in <Focus Language>` entries for selected focus languages).

@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ChatTabView: View {
+    private let topToolbarControlSize: CGFloat = 44
+
     let isRecording: Bool
     let recordingTimeText: String
     let waveformBars: [Double]
@@ -23,6 +25,7 @@ struct ChatTabView: View {
     let onRetranscribeTranscript: (TranscriptRow, String?) -> Void
     let onExportTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
+    let onSidebarToggle: (() -> Void)?
     let showsTopToolbar: Bool
     let showsBottomRecorderAccessory: Bool
     let showsMergedTabBarRecorderAccessory: Bool
@@ -62,6 +65,7 @@ struct ChatTabView: View {
         onRetranscribeTranscript: @escaping (TranscriptRow, String?) -> Void,
         onExportTap: @escaping () -> Void,
         onRenameSessionTitle: @escaping (String) -> Void,
+        onSidebarToggle: (() -> Void)? = nil,
         showsTopToolbar: Bool = true,
         showsBottomRecorderAccessory: Bool = true,
         showsMergedTabBarRecorderAccessory: Bool = false
@@ -87,6 +91,7 @@ struct ChatTabView: View {
         self.onRetranscribeTranscript = onRetranscribeTranscript
         self.onExportTap = onExportTap
         self.onRenameSessionTitle = onRenameSessionTitle
+        self.onSidebarToggle = onSidebarToggle
         self.showsTopToolbar = showsTopToolbar
         self.showsBottomRecorderAccessory = showsBottomRecorderAccessory
         self.showsMergedTabBarRecorderAccessory = showsMergedTabBarRecorderAccessory
@@ -112,16 +117,41 @@ struct ChatTabView: View {
             chatContent
                 .toolbar {
                     if showsTopToolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            sessionTitleControl
-                                .fixedSize()
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button(action: onExportTap) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.subheadline.weight(.semibold))
+                        if let onSidebarToggle, !isEditingTitle {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button(action: onSidebarToggle) {
+                                    Image(systemName: "line.3.horizontal")
+                                        .font(.system(size: 17, weight: .semibold))
+                                        .frame(width: topToolbarControlSize, height: topToolbarControlSize)
+                                }
+                                .buttonStyle(.plain)
+                                .glassEffect(.regular, in: Circle())
+                                .accessibilityLabel("Toggle Sidebar")
                             }
-                            .buttonStyle(.plain)
+                            .sharedBackgroundVisibility(.hidden)
+                        }
+                        ToolbarItem(placement: .topBarLeading) {
+                            if isEditingTitle {
+                                sessionTitleControl
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                sessionTitleControl
+                                    .fixedSize()
+                            }
+                        }
+                        .sharedBackgroundVisibility(.hidden)
+                        if !isEditingTitle {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button(action: onExportTap) {
+                                    Image(systemName: "square.and.arrow.up")
+                                        .font(.system(size: 17, weight: .semibold))
+                                        .frame(width: topToolbarControlSize, height: topToolbarControlSize)
+                                }
+                                .buttonStyle(.plain)
+                                .glassEffect(.regular, in: Circle())
+                                .contentShape(Circle())
+                            }
+                            .sharedBackgroundVisibility(.hidden)
                         }
                     }
                 }
@@ -133,6 +163,16 @@ struct ChatTabView: View {
         .onChange(of: activeSessionTitle) { _, newTitle in
             if !isEditingTitle {
                 titleDraft = newTitle
+            }
+        }
+        .onChange(of: isTitleFieldFocused) { _, focused in
+            if isEditingTitle && !focused {
+                cancelTitleRename()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LaycaCancelTitleRenameEditing"))) { _ in
+            if isEditingTitle {
+                cancelTitleRename()
             }
         }
     }
@@ -171,6 +211,14 @@ struct ChatTabView: View {
                     .padding(.trailing, 20)
                     .padding(.bottom, floatingButtonBottomPadding)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                if isEditingTitle {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            cancelTitleRename()
+                        }
                 }
             }
             .animation(.easeInOut(duration: 0.18), value: hasPendingNewMessage && !isUserNearBottom)
@@ -318,6 +366,9 @@ struct ChatTabView: View {
                     TextField("Chat name", text: $titleDraft)
                         .textFieldStyle(.plain)
                         .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(minWidth: 160, maxWidth: .infinity, alignment: .leading)
+                        .layoutPriority(1)
                         .submitLabel(.done)
                         .focused($isTitleFieldFocused)
                         .onSubmit {
@@ -327,12 +378,14 @@ struct ChatTabView: View {
                     Button(action: commitTitleRename) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green.opacity(0.9))
+                            .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.plain)
 
                     Button(action: cancelTitleRename) {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
+                            .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.plain)
                 }
@@ -340,6 +393,10 @@ struct ChatTabView: View {
                 .padding(.vertical, 9)
 #if os(macOS)
                 .background(.thinMaterial, in: Capsule(style: .continuous))
+#elseif os(iOS)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: topToolbarControlSize)
+                .glassEffect(.regular, in: Capsule(style: .continuous))
 #endif
             } else {
                 Button(action: beginTitleRename) {
@@ -357,6 +414,9 @@ struct ChatTabView: View {
 #if os(macOS)
                     .background(.ultraThinMaterial, in: Capsule(style: .continuous))
                     .contentShape(Capsule(style: .continuous))
+#elseif os(iOS)
+                    .frame(height: topToolbarControlSize)
+                    .glassEffect(.regular, in: Capsule(style: .continuous))
 #endif
                 }
                 .buttonStyle(ScaleButtonStyle())

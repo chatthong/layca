@@ -87,7 +87,6 @@ private extension ContentView {
             let sidebarWidth = min(max(proxy.size.width * 0.82, 300), 360)
             let sidebarOffset = iosSidebarOffsetX(width: sidebarWidth)
             let reveal = max(0, min(1, 1 + (sidebarOffset / sidebarWidth)))
-            let handleX = max(10, sidebarWidth + sidebarOffset - 24)
 
             ZStack(alignment: .leading) {
                 iosDetailScreen
@@ -127,22 +126,6 @@ private extension ContentView {
                 .frame(width: sidebarWidth)
                 .frame(maxHeight: .infinity, alignment: .topLeading)
                 .offset(x: sidebarOffset)
-
-                Button {
-                    setIOSSidebarPresented(!isIOSSidebarPresented)
-                } label: {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay(
-                            Circle()
-                                .stroke(.white.opacity(0.15), lineWidth: 0.8)
-                        )
-                }
-                .buttonStyle(.plain)
-                .offset(x: handleX, y: max(proxy.safeAreaInsets.top + 16, 20))
             }
             .contentShape(Rectangle())
             .gesture(iosSidebarDragGesture(width: sidebarWidth))
@@ -158,7 +141,12 @@ private extension ContentView {
     var iosDetailScreen: some View {
         switch selectedTab {
         case .chat, .newChat:
-            chatScreen(showsTopToolbar: true)
+            chatScreen(
+                showsTopToolbar: true,
+                onSidebarToggle: {
+                    setIOSSidebarPresented(!isIOSSidebarPresented)
+                }
+            )
         case .library:
             libraryScreen
         case .setting:
@@ -351,7 +339,7 @@ private extension ContentView {
 
 #endif
 
-    func chatScreen(showsTopToolbar: Bool) -> some View {
+    func chatScreen(showsTopToolbar: Bool, onSidebarToggle: (() -> Void)? = nil) -> some View {
         ChatTabView(
             isRecording: backend.isRecording,
             recordingTimeText: backend.recordingTimeText,
@@ -376,6 +364,7 @@ private extension ContentView {
             },
             onExportTap: { isExportPresented = true },
             onRenameSessionTitle: backend.renameActiveSessionTitle,
+            onSidebarToggle: onSidebarToggle,
             showsTopToolbar: showsTopToolbar,
             showsBottomRecorderAccessory: !usesMergedTabBarRecorderAccessory,
             showsMergedTabBarRecorderAccessory: usesMergedTabBarRecorderAccessory
