@@ -12,6 +12,10 @@ struct ContentView: View {
     @State private var isExportPresented = false
 
     @State private var selectedTab: AppTab = .chat
+#if os(iOS)
+    @State private var isIOSSidebarPresented = false
+    @State private var iosSidebarDragOffset: CGFloat = 0
+#endif
 
     var body: some View {
         rootLayout
@@ -30,6 +34,8 @@ private extension ContentView {
     var rootLayout: some View {
 #if os(macOS)
         macDesktopLayout
+#elseif os(iOS)
+        iosDrawerLayout
 #else
         mobileTabLayout
 #endif
@@ -69,16 +75,161 @@ private extension ContentView {
         }
 
 #if os(iOS)
-        if #available(iOS 26.1, *) {
-            tabs
-                .tabBarMinimizeBehavior(.onScrollDown)
-        } else {
-            tabs
-        }
+        tabs
 #else
         tabs
 #endif
     }
+
+#if os(iOS)
+    var iosDrawerLayout: some View {
+        GeometryReader { proxy in
+            let sidebarWidth = min(max(proxy.size.width * 0.82, 300), 360)
+            let sidebarOffset = iosSidebarOffsetX(width: sidebarWidth)
+            let reveal = max(0, min(1, 1 + (sidebarOffset / sidebarWidth)))
+            let handleX = max(10, sidebarWidth + sidebarOffset - 24)
+
+            ZStack(alignment: .leading) {
+                iosDetailScreen
+                    .offset(x: reveal * 24)
+                    .animation(.spring(response: 0.28, dampingFraction: 0.9), value: reveal)
+
+                if reveal > 0.001 {
+                    Color.black
+                        .opacity(0.34 * reveal)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            setIOSSidebarPresented(false)
+                        }
+                }
+
+                IOSWorkspaceSidebarView(
+                    selectedSection: iosSectionBinding,
+                    sessions: backend.sessions,
+                    activeSessionID: backend.activeSessionID,
+                    onSelectSession: { session in
+                        backend.activateSession(session)
+                        selectedTab = .chat
+                        setIOSSidebarPresented(false)
+                    },
+                    onRenameSession: backend.renameSession,
+                    onDeleteSession: backend.deleteSession,
+                    shareTextForSession: backend.shareText,
+                    onSelectChatWorkspace: {
+                        openLaycaChatWorkspace()
+                        setIOSSidebarPresented(false)
+                    },
+                    onCreateSession: {
+                        startNewChatAndReturnToChat()
+                        setIOSSidebarPresented(false)
+                    }
+                )
+                .frame(width: sidebarWidth)
+                .frame(maxHeight: .infinity, alignment: .topLeading)
+                .offset(x: sidebarOffset)
+
+                Button {
+                    setIOSSidebarPresented(!isIOSSidebarPresented)
+                } label: {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(.white.opacity(0.15), lineWidth: 0.8)
+                        )
+                }
+                .buttonStyle(.plain)
+                .offset(x: handleX, y: max(proxy.safeAreaInsets.top + 16, 20))
+            }
+            .contentShape(Rectangle())
+            .gesture(iosSidebarDragGesture(width: sidebarWidth))
+            .onAppear {
+                if selectedTab == .newChat {
+                    selectedTab = .chat
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    var iosDetailScreen: some View {
+        switch selectedTab {
+        case .chat, .newChat:
+            chatScreen(showsTopToolbar: true)
+        case .library:
+            libraryScreen
+        case .setting:
+            settingScreen
+        }
+    }
+
+    var iosSection: IOSWorkspaceSection {
+        switch selectedTab {
+        case .setting:
+            return .setting
+        case .chat, .library, .newChat:
+            return .chat
+        }
+    }
+
+    var iosSectionBinding: Binding<IOSWorkspaceSection> {
+        Binding(
+            get: { iosSection },
+            set: { section in
+                switch section {
+                case .chat:
+                    selectedTab = .chat
+                case .setting:
+                    selectedTab = .setting
+                }
+            }
+        )
+    }
+
+    func setIOSSidebarPresented(_ isPresented: Bool) {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+            isIOSSidebarPresented = isPresented
+            iosSidebarDragOffset = 0
+        }
+    }
+
+    func iosSidebarOffsetX(width: CGFloat) -> CGFloat {
+        let base: CGFloat = isIOSSidebarPresented ? 0 : -width
+        return min(0, max(-width, base + iosSidebarDragOffset))
+    }
+
+    func iosSidebarDragGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .global)
+            .onChanged { value in
+                if isIOSSidebarPresented {
+                    iosSidebarDragOffset = min(0, value.translation.width)
+                } else if value.startLocation.x <= 26 {
+                    iosSidebarDragOffset = max(0, value.translation.width)
+                }
+            }
+            .onEnded { value in
+                defer { iosSidebarDragOffset = 0 }
+
+                if isIOSSidebarPresented {
+                    let shouldClose = value.predictedEndTranslation.width < -(width * 0.2)
+                        || value.translation.width < -(width * 0.28)
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                        isIOSSidebarPresented = !shouldClose
+                    }
+                } else {
+                    let shouldOpen = value.startLocation.x <= 26
+                        && (value.predictedEndTranslation.width > (width * 0.2)
+                            || value.translation.width > (width * 0.28))
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                        isIOSSidebarPresented = shouldOpen
+                    }
+                }
+            }
+    }
+#endif
 
 #if os(macOS)
     var macDesktopLayout: some View {
@@ -207,6 +358,7 @@ private extension ContentView {
             waveformBars: backend.waveformBars,
             activeSessionTitle: backend.activeSessionTitle,
             activeSessionDateText: backend.activeSessionDateText,
+            isDraftSession: backend.activeSessionID == nil,
             liveChatItems: backend.activeTranscriptRows,
             selectedFocusLanguageCodes: backend.selectedLanguageCodes,
             transcribingRowIDs: backend.transcribingRowIDs,

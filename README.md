@@ -67,8 +67,9 @@ Documents/
 
 ## 3. UI/UX Strategy: Chat-First 💬
 
-- **iOS/iPadOS/visionOS/tvOS shell:** `TabView` with `Layca Chat`, `Library`, `Setting`, plus a dedicated right-side `New Chat` action tab.
-- **iOS-family visual style:** plain `systemBackground` canvas + native material cards with automatic device-driven light/dark appearance (no live animated app background).
+- **iOS/iPadOS shell:** custom swipeable drawer sidebar (`Layca Chat`, `Setting`, `Recent Chats`) with fixed top actions (`Search`, `New Chat`) and a menu trigger button.
+- **visionOS/tvOS shell:** `TabView` with `Layca Chat`, `Library`, `Setting`, plus a dedicated `New Chat` action tab.
+- **iOS-family visual style:** plain `systemBackground` chat/settings canvas + native material cards; iOS/iPadOS sidebar uses a dark workspace surface with material controls.
 - **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Layca Chat`, `Library`, `Setting`) and no top segmented workspace picker.
 - **Launch behavior:** app always opens in a fresh draft room on both iOS-family and macOS; existing saved chats remain available in Library/Recent Chats.
 - **Chat workspace:** Recorder card + live transcript bubbles.
@@ -163,9 +164,10 @@ Documents/
 - Recorder timer shows accumulated session duration for saved chats and resets to `00:00:00` in draft.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Chat bubble tap plays that message range from `session_full.m4a`.
-- macOS uses dedicated workspace views (sidebar/detail) rather than iOS-style tabs.
+- iOS/iPadOS uses a custom drawer workspace shell; macOS uses dedicated split workspace views (sidebar/detail).
 - macOS chat detail toolbar uses native SwiftUI `ToolbarItem` + `ToolbarItemGroup` composition with `.toolbar(removing: .title)`.
-- iOS-family tabs, cards, and sheets use plain `systemBackground` + native material fills to follow automatic light/dark switching without custom liquid-glass wrappers.
+- iOS-family cards and sheets use plain `systemBackground` + native material fills to follow automatic light/dark switching without custom liquid-glass wrappers.
+- Recorder accessory glass uses red-tinted style while recording (`.tint(.red.opacity(0.12))`) on chat controls.
 - Library rows now support long-press action menu: `Rename`, `Share this chat`, `Delete`.
 - macOS sidebar `Recent Chats` rows now support the same action menu: `Rename`, `Share this chat`, `Delete`.
 - macOS settings includes live microphone permission status and actions (`Allow Microphone Access` / `Open System Settings`).

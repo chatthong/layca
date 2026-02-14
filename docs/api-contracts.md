@@ -11,7 +11,7 @@
 ### `startNewChat() -> Void`
 - Resets selection to draft mode (`activeSessionID = nil`) and clears active transcript rows.
 - Does not create a persisted session immediately.
-- Used by iOS `New Chat` action tab and macOS `New Chat` actions.
+- Used by iOS/iPadOS sidebar `New Chat` compose action, visionOS/tvOS `New Chat` tab action, and macOS `New Chat` actions.
 - Persisted session is created on first record tap from draft mode.
 
 ### `activateSession(_ session: ChatSession) -> Void`

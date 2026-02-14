@@ -5,12 +5,12 @@
 - Dynamic configuration from Settings (language focus + context keywords + sync toggle + Whisper Advanced Zone controls).
 - Reactive chat UI driven by backend state.
 - Persist chats/settings across app relaunch on iOS-family and macOS while defaulting UI to draft mode at startup.
-- Native platform-adapted shell: tab-driven on iOS-family and split-view workspace on macOS.
+- Native platform-adapted shell: drawer workspace on iOS/iPadOS, split-view workspace on macOS, and tab fallback on visionOS/tvOS.
 - User-facing transcript timeline uses "Message" terminology (internal processing still slices audio into chunks).
 
 ## High-Level Modules
 1. App Shell + State Coordinator (`App/ContentView.swift`)
-2. Platform UI Components (`Features/Chat/ChatTabView.swift`, `Features/Settings/SettingsTabView.swift`, `Features/Library/LibraryTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`)
+2. Platform UI Components (`Features/Chat/ChatTabView.swift`, `Features/Settings/SettingsTabView.swift`, `Features/Library/LibraryTabView.swift`, `Views/Components/IOSWorkspaceSidebarView.swift`, `Views/Mac/MacProWorkspaceView.swift`)
 3. Backend Orchestrator (`App/AppBackend.swift`)
 4. Preflight Layer (`PreflightService`)
 5. Live Pipeline (`LiveSessionPipeline`)
@@ -40,9 +40,10 @@
 - Pipeline internals are production-style backend services.
 - Audio capture uses real `AVAudioEngine`.
 - App shell is platform-aware:
-  - iOS-family uses `TabView`/`TabSection`.
-  - iOS-family primary chat tab label is `Layca Chat`, with a separate right-side `New Chat` action tab.
-  - iOS-family uses plain `systemBackground` with native material cards and automatic device light/dark appearance.
+  - iOS/iPadOS uses a custom drawer sidebar (`iosDrawerLayout`) with edge-swipe open/close and a floating menu trigger.
+  - iOS/iPadOS sidebar contains fixed top actions (`Search`, `New Chat`), workspace rows (`Layca Chat`, `Setting`), and a scrollable `Recent Chats` list.
+  - visionOS/tvOS currently use `TabView`/`TabSection` fallback with a `New Chat` action tab.
+  - iOS-family uses plain `systemBackground` for chat/settings surfaces with native material cards and automatic device light/dark appearance.
   - macOS uses `NavigationSplitView` with sidebar workspace sections and dedicated detail views.
   - macOS sidebar workspace section label is `Layca Chat`.
   - macOS Chat detail toolbar uses native `ToolbarItem` + `ToolbarItemGroup` controls (`Share`, grouped `Rename` + `New Chat`, and `Info` to open `Setting`).
@@ -72,6 +73,7 @@
 - `startNewChat()` is draft-reset behavior (does not create a persisted session until recording starts).
 - First recording from draft creates a new persisted session title (`chat N`).
 - Recorder timer shows persisted accumulated duration for saved sessions, resumes from that offset when recording again, and shows `00:00:00` in draft mode.
+- Recorder accessory glass tint switches to red while recording (`.tint(.red.opacity(0.12))`).
 - "Transcribe Again" is a submenu (`Transcribe Auto`, plus `Transcribe in <Focus Language>` entries for selected focus languages).
 - Manual retranscribe execution is currently gated during active recording and runs after recording stops.
 - Forced `TH` / `EN` manual retries validate script output; backend retries once without prompt on mismatch, then keeps existing text when mismatch persists.
@@ -108,6 +110,7 @@ xcode/layca/
 │       └── wespeaker_v2.mlmodelc/
 ├── Views/
 │   ├── Components/
+│   │   ├── IOSWorkspaceSidebarView.swift
 │   │   └── TranscriptBubbleOptionButton.swift
 │   ├── Mac/
 │   │   └── MacProWorkspaceView.swift

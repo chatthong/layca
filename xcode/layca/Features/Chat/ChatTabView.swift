@@ -7,6 +7,7 @@ struct ChatTabView: View {
 
     let activeSessionTitle: String
     let activeSessionDateText: String
+    let isDraftSession: Bool
     let liveChatItems: [TranscriptRow]
     let selectedFocusLanguageCodes: Set<String>
     let transcribingRowIDs: Set<UUID>
@@ -45,6 +46,7 @@ struct ChatTabView: View {
         waveformBars: [Double],
         activeSessionTitle: String,
         activeSessionDateText: String,
+        isDraftSession: Bool,
         liveChatItems: [TranscriptRow],
         selectedFocusLanguageCodes: Set<String>,
         transcribingRowIDs: Set<UUID>,
@@ -69,6 +71,7 @@ struct ChatTabView: View {
         self.waveformBars = waveformBars
         self.activeSessionTitle = activeSessionTitle
         self.activeSessionDateText = activeSessionDateText
+        self.isDraftSession = isDraftSession
         self.liveChatItems = liveChatItems
         self.selectedFocusLanguageCodes = selectedFocusLanguageCodes
         self.transcribingRowIDs = transcribingRowIDs
@@ -205,7 +208,17 @@ struct ChatTabView: View {
 #if os(macOS)
                 recorderCard
 #endif
+#if os(iOS)
+                if showsDraftEmptyState {
+                    draftEmptyState
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 320)
+                } else {
+                    liveSegmentsCard
+                }
+#else
                 liveSegmentsCard
+#endif
                 transcriptBottomMarker
             }
             .padding(.horizontal, 18)
@@ -243,8 +256,33 @@ struct ChatTabView: View {
         )
         .ignoresSafeArea()
 #else
-        Color(uiColor: .systemBackground)
-            .ignoresSafeArea()
+        Group {
+            if showsDraftEmptyState {
+                Color.black
+            } else {
+                Color(uiColor: .systemBackground)
+            }
+        }
+        .ignoresSafeArea()
+#endif
+    }
+
+#if os(iOS)
+    private var draftEmptyState: some View {
+        ContentUnavailableView(
+            "No Messages Yet",
+            systemImage: "waveform.badge.magnifyingglass",
+            description: Text("Start recording to stream transcript messages here.")
+        )
+        .foregroundStyle(.white.opacity(0.66))
+    }
+#endif
+
+    private var showsDraftEmptyState: Bool {
+#if os(iOS)
+        isDraftSession && liveChatItems.isEmpty && !isRecording
+#else
+        false
 #endif
     }
 

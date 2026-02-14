@@ -4,8 +4,7 @@
 
 ### Navigation + Draft Mode Behavior Alignment (iOS + macOS)
 - `App/ContentView.swift`, `App/AppBackend.swift`, `Views/Mac/MacProWorkspaceView.swift`
-- Updated naming to `Layca Chat` in iOS tab + macOS workspace.
-- Kept iOS `New Chat` as dedicated right-side action tab.
+- Updated naming to `Layca Chat` in iOS/iPadOS workspace and macOS workspace.
 - macOS sidebar `Layca Chat` now behaves as draft-open action and shows workspace checkmark only in draft mode.
 - App launch now defaults to draft mode on both iOS-family and macOS (no auto-open of last active saved chat).
 - `startNewChat()` now resets to draft state; persisted session is created on first record tap.
@@ -13,6 +12,14 @@
   - shows `00:00:00` in draft,
   - shows accumulated duration for saved chats when idle,
   - resumes from previous duration when recording continues on an old chat.
+
+### iOS Drawer Sidebar + Recording Glass Alignment
+- `App/ContentView.swift`, `Views/Components/IOSWorkspaceSidebarView.swift`, `Features/Chat/ChatTabView.swift`
+- Replaced iOS/iPadOS tab-first shell with a swipeable drawer sidebar.
+- Added drawer trigger button + edge-swipe gesture open/close behavior.
+- Sidebar top area (`Search` + `New Chat`) is fixed; `Workspace` + `Recent Chats` are scrollable.
+- `Recent Chats` rows use the same action group (`Rename`, `Share this chat`, `Delete`).
+- Recording accessory glass now switches to red tint while recording to match macOS behavior.
 
 ### Dynamic Pre-Flight Backend (Credits + Language Prompt)
 - `App/AppBackend.swift`
@@ -119,7 +126,7 @@
 ### macOS Native Workspace + Permission Hardening
 - `App/ContentView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `layca.xcodeproj/project.pbxproj`
 - Added dedicated macOS workspace shell using `NavigationSplitView` and sidebar workspace sections.
-- Added desktop-optimized chat/library/settings views for macOS (instead of reusing iOS tab layout).
+- Added desktop-optimized chat/library/settings views for macOS (instead of reusing iOS mobile layout).
 - Added microphone permission status and actions in macOS settings plus deep-link action from recorder denial state.
 - Added macOS codesigning entitlement wiring for sandbox audio input so app appears in Privacy > Microphone after permission request.
 
