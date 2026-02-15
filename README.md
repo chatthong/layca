@@ -51,7 +51,7 @@
 ### C. Data Layer
 
 - **Current runtime persistence:** actor-based `SessionStore` + filesystem snapshots (`session.json`, `segments.json`) with startup reload.
-- **Current settings persistence:** `UserDefaults`-backed app settings snapshot (language focus, credits, iCloud toggle, active-session metadata compatibility, chat counter).
+- **Current settings persistence:** `UserDefaults`-backed app settings snapshot (language focus, credits, iCloud toggle, Whisper runtime profile/toggles, main-timer display style, active-session metadata compatibility, chat counter).
 - **Planned long-term persistence:** `SwiftData`.
 
 ```text
@@ -74,7 +74,7 @@ Documents/
 - **Launch behavior:** app always opens in a fresh draft room on both iOS-family and macOS; existing saved chats remain available in `Recent Chats` (and `Library` on visionOS/tvOS).
 - **Chat workspace:** Recorder card + live transcript bubbles.
 - **Header/session actions:** iOS chat header keeps sidebar toggle before chat title, with share on trailing side; macOS chat detail keeps inline title rename + trailing `Share`.
-- **Settings workspace:** Hours credit, language focus, context keywords, Advanced Zone (GPU/CoreML/model profile), iCloud toggle, purchase restore, and macOS microphone access controls.
+- **Settings workspace:** Hours credit, language focus, context keywords, Advanced Zone (GPU/CoreML/model profile + main timer `Time Display`), iCloud toggle, purchase restore, and macOS microphone access controls.
 - **Library workspace:** Session switcher with long-press/right-click action group (`Rename`, `Share this chat`, `Delete`) on session rows (where Library is present).
 - **macOS recent chats sidebar:** Same long-press/right-click action group (`Rename`, `Share this chat`, `Delete`).
 - **Export:** Separate sheet; Notepad-style formatting is export-only.
@@ -151,7 +151,7 @@ Documents/
 - Session metadata (title/status/language hints/duration/speakers) is persisted in `session.json` and reloaded on app launch.
 - User settings/state are persisted in `UserDefaults` and restored on app launch.
 - Active session restore is intentionally overridden at startup so UI opens in draft mode.
-- Persisted settings include Whisper acceleration/model preferences (CoreML toggle, GPU toggle, model profile).
+- Persisted settings include Whisper acceleration/model preferences (CoreML toggle, GPU toggle, model profile) plus main timer display style (`Friendly` / `Hybrid` / `Professional`).
 - Session deletion removes runtime state and filesystem assets (`Documents/Sessions/{UUID}`).
 - Credit deduction per message and iCloud-sync hook point are included.
 
@@ -161,9 +161,17 @@ Documents/
 - Record button uses backend pipeline; chat bubbles update reactively from backend rows.
 - `startNewChat()` now switches to draft mode (does not create a session immediately).
 - First record action in draft creates the persisted chat (`chat N`) and begins capture.
-- Recorder timer shows accumulated session duration for saved chats and resets to `00:00:00` in draft.
+- Main timer uses selectable formatting (`Friendly`, `Hybrid`, `Professional`) from settings.
+- Friendly format trims zero units (`11 sec`, `5 min 22 sec`, `1 hr 5 sec`).
+- Draft idle state shows starter copy instead of timer (`Tap to start record` on iOS/iPadOS, `Click to start record` on macOS).
+- Saved chats show accumulated session duration while idle, and resumed recording continues from prior duration.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Chat bubble tap plays that message range from `session_full.m4a`.
+- While transcript chunk playback is active (player mode), recorder controls switch to playback state on iOS/iPadOS and macOS:
+  - action button changes to `Stop`
+  - recorder tint changes to green (recording still uses red)
+  - main timer shows remaining playback time (countdown)
+  - subtitle shows segment range (`mm:ss → mm:ss`)
 - iOS/iPadOS uses a custom drawer workspace shell; macOS uses dedicated split workspace views (sidebar/detail).
 - macOS chat detail toolbar keeps inline title-rename + trailing `Share`; `New Chat` and `Setting` are sidebar actions.
 - iOS chat header uses leading controls with sidebar toggle before chat title and a trailing share action.
@@ -171,7 +179,9 @@ Documents/
 - Inline chat-title edit mode on iOS and macOS hides non-title header controls and cancels on outside interaction (content/sidebar/tap-away focus loss).
 - During live recording, transcript updates do not force-scroll; a `New message` button appears. Tapping it jumps to bottom and enables follow mode until user scrolls away.
 - iOS-family cards and sheets use plain `systemBackground` + native material fills to follow automatic light/dark switching without custom liquid-glass wrappers.
-- Recorder accessory glass uses red-tinted style while recording (`.tint(.red.opacity(0.12))`) on chat controls.
+- Recorder accessory glass uses state tint on chat controls:
+  - red while recording
+  - green during transcript-chunk playback
 - Library rows now support long-press action menu: `Rename`, `Share this chat`, `Delete`.
 - macOS sidebar `Recent Chats` rows now support the same action menu: `Rename`, `Share this chat`, `Delete`.
 - macOS split detail uses a minimum width guard to prevent over-compressed chat layout.

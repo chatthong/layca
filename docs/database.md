@@ -3,7 +3,7 @@
 ## Current Runtime Persistence
 - **Primary runtime store:** actor store (`SessionStore`) for session/transcript state.
 - **Primary durable store:** filesystem (`Documents/Sessions`) plus per-session metadata/segment snapshots.
-- **Settings durable store:** `UserDefaults` (`AppSettingsStore`) for app/UI state restore across relaunch (including compatibility fields such as `activeSessionID` and `chatCounter`).
+- **Settings durable store:** `UserDefaults` (`AppSettingsStore`) for app/UI state restore across relaunch (including timer display preference plus compatibility fields such as `activeSessionID` and `chatCounter`).
 - **Platform note:** same session layout is used on iOS-family and macOS within each platform's app sandbox container.
 - **macOS style note:** sidebar-first `NavigationSplitView` and native toolbar controls do not change persistence schema or file layout.
 - **Bundled runtime asset:** CoreML VAD model directory in app bundle (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) for offline startup.
@@ -60,6 +60,7 @@
 - `whisperCoreMLEncoderEnabled: Bool`
 - `whisperGGMLGPUDecodeEnabled: Bool`
 - `whisperModelProfileRawValue: String` (`quick` / `normal` / `pro`)
+- `mainTimerDisplayStyleRawValue: String` (`friendly` / `hybrid` / `professional`)
 - `activeSessionID: UUID?`
 - `chatCounter: Int`
 

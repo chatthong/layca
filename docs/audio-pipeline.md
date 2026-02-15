@@ -37,9 +37,12 @@
 - Chunk-relative timings are converted into session-global offsets.
 - Transcript row timestamp is stored as formatted `HH:mm:ss`.
 - Recorder timer display behavior:
-  - draft mode (`activeSessionID == nil`) shows `00:00:00`
+  - main timer formatting is user-selectable (`Friendly`, `Hybrid`, `Professional`)
+  - `Friendly` trims zero units (for example, `11 sec` instead of `0 min 11 sec`)
+  - draft mode (`activeSessionID == nil`) shows starter text in UI (`Tap to start record` / `Click to start record`) until first recording starts
   - saved sessions show accumulated prior duration while idle
   - resumed recording continues from prior persisted duration offset
+  - during transcript chunk playback, main timer shows remaining playback time (countdown)
 
 ## Persistence + UI
 1. Append event to session store.
@@ -51,6 +54,11 @@
 ## Message Playback Path
 - Chat bubble taps call backend message playback.
 - Playback seeks into `session_full.m4a` at row `startOffset`, then auto-stops at `endOffset`.
+- Playback mode (when a chunk is playing) updates recorder UI on iOS/iPadOS and macOS:
+  - action control changes from `Record` to `Stop`
+  - recorder tint switches green (recording mode still uses red)
+  - subtitle switches from session date to segment range (`mm:ss → mm:ss`)
+- Pressing the recorder action while playback is active stops playback (does not start recording).
 - Message transcription runs automatically from backend queue (`whisper.cpp`) and updates row text in storage/UI.
 - Whisper decode is configured for original-language transcript output:
   - `preferredLanguageCode = "auto"` (language auto-detect)

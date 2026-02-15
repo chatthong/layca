@@ -5,11 +5,14 @@ struct ChatTabView: View {
     private let titleEditorMaxWidth: CGFloat = 456
 
     let isRecording: Bool
+    let isTranscriptChunkPlaying: Bool
     let recordingTimeText: String
+    let transcriptChunkPlaybackRemainingText: String
     let waveformBars: [Double]
 
     let activeSessionTitle: String
     let activeSessionDateText: String
+    let transcriptChunkPlaybackRangeText: String?
     let isDraftSession: Bool
     let liveChatItems: [TranscriptRow]
     let selectedFocusLanguageCodes: Set<String>
@@ -47,10 +50,13 @@ struct ChatTabView: View {
 
     init(
         isRecording: Bool,
+        isTranscriptChunkPlaying: Bool,
         recordingTimeText: String,
+        transcriptChunkPlaybackRemainingText: String,
         waveformBars: [Double],
         activeSessionTitle: String,
         activeSessionDateText: String,
+        transcriptChunkPlaybackRangeText: String?,
         isDraftSession: Bool,
         liveChatItems: [TranscriptRow],
         selectedFocusLanguageCodes: Set<String>,
@@ -73,10 +79,13 @@ struct ChatTabView: View {
         showsMergedTabBarRecorderAccessory: Bool = false
     ) {
         self.isRecording = isRecording
+        self.isTranscriptChunkPlaying = isTranscriptChunkPlaying
         self.recordingTimeText = recordingTimeText
+        self.transcriptChunkPlaybackRemainingText = transcriptChunkPlaybackRemainingText
         self.waveformBars = waveformBars
         self.activeSessionTitle = activeSessionTitle
         self.activeSessionDateText = activeSessionDateText
+        self.transcriptChunkPlaybackRangeText = transcriptChunkPlaybackRangeText
         self.isDraftSession = isDraftSession
         self.liveChatItems = liveChatItems
         self.selectedFocusLanguageCodes = selectedFocusLanguageCodes
@@ -441,13 +450,21 @@ struct ChatTabView: View {
 
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(recordingTimeText)
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.88)
-                    Text(activeSessionDateText)
+                    if recorderAccessoryShowsDraftPrompt {
+                        Text(recorderAccessoryTimerText)
+                            .font(.system(size: 19, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.9)
+                    } else {
+                        Text(recorderAccessoryTimerText)
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .foregroundStyle(.primary)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.88)
+                    }
+                    Text(recorderAccessorySubtitleText)
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -456,12 +473,12 @@ struct ChatTabView: View {
                 Spacer(minLength: 8)
 
                 HStack(spacing: 6) {
-                    Image(systemName: isRecording ? "stop.circle" : "record.circle")
+                    Image(systemName: recorderAccessoryActionSymbol)
                         .font(.caption.weight(.semibold))
-                    Text(isRecording ? "Stop" : "Record")
+                    Text(recorderAccessoryActionTitle)
                         .font(.subheadline.weight(.semibold))
                 }
-                .foregroundStyle(isRecording ? Color.red.opacity(0.92) : Color.accentColor)
+                .foregroundStyle(recorderAccessoryActionColor)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .glassEffect(recorderAccessoryControlGlass, in: Capsule(style: .continuous))
@@ -470,7 +487,7 @@ struct ChatTabView: View {
                     onRecordTap()
                 }
                 .accessibilityAddTraits(.isButton)
-                .accessibilityLabel(isRecording ? "Stop" : "Record")
+                .accessibilityLabel(recorderAccessoryActionTitle)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
@@ -482,14 +499,67 @@ struct ChatTabView: View {
     }
 
     private var recorderAccessoryContainerGlass: Glass {
-        if isRecording {
-            return .regular.tint(.red.opacity(0.12))
+        if let recorderAccessoryTintColor {
+            return .regular.tint(recorderAccessoryTintColor.opacity(0.12))
         }
         return .regular
     }
 
     private var recorderAccessoryControlGlass: Glass {
         return .regular
+    }
+
+    private var recorderAccessoryActionIsStopMode: Bool {
+        isRecording || isTranscriptChunkPlaying
+    }
+
+    private var recorderAccessoryActionTitle: String {
+        recorderAccessoryActionIsStopMode ? "Stop" : "Record"
+    }
+
+    private var recorderAccessoryActionSymbol: String {
+        recorderAccessoryActionIsStopMode ? "stop.circle" : "record.circle"
+    }
+
+    private var recorderAccessoryActionColor: Color {
+        if isRecording {
+            return Color.red.opacity(0.92)
+        }
+        if isTranscriptChunkPlaying {
+            return Color.green.opacity(0.90)
+        }
+        return Color.accentColor
+    }
+
+    private var recorderAccessoryTintColor: Color? {
+        if isRecording {
+            return .red
+        }
+        if isTranscriptChunkPlaying {
+            return .green
+        }
+        return nil
+    }
+
+    private var recorderAccessoryTimerText: String {
+        if isTranscriptChunkPlaying {
+            return transcriptChunkPlaybackRemainingText
+        }
+        if recorderAccessoryShowsDraftPrompt {
+            return "Tap to start record"
+        }
+        return recordingTimeText
+    }
+
+    private var recorderAccessorySubtitleText: String {
+        if isTranscriptChunkPlaying {
+            return transcriptChunkPlaybackRangeText ?? "Segment Range"
+        }
+        return activeSessionDateText
+    }
+
+    private var recorderAccessoryShowsDraftPrompt: Bool {
+        isDraftSession && !isRecording && !isTranscriptChunkPlaying
     }
 #endif
 

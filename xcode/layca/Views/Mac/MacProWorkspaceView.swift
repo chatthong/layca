@@ -232,10 +232,14 @@ struct MacWorkspaceSidebarView: View {
 
 struct MacChatWorkspaceView: View {
     let isRecording: Bool
+    let isTranscriptChunkPlaying: Bool
+    let isDraftSession: Bool
     let recordingTimeText: String
+    let transcriptChunkPlaybackRemainingText: String
     let waveformBars: [Double]
     let activeSessionTitle: String
     let activeSessionDateText: String
+    let transcriptChunkPlaybackRangeText: String?
     let liveChatItems: [TranscriptRow]
     let selectedFocusLanguageCodes: Set<String>
     let transcribingRowIDs: Set<UUID>
@@ -423,13 +427,20 @@ struct MacChatWorkspaceView: View {
 
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(recordingTimeText)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.9)
+                    if recorderShowsDraftPrompt {
+                        Text(recorderTimerText)
+                            .font(.system(size: 20, weight: .semibold, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.9)
+                    } else {
+                        Text(recorderTimerText)
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.9)
+                    }
 
-                    Text(activeSessionDateText)
+                    Text(recorderSubtitleText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -439,15 +450,15 @@ struct MacChatWorkspaceView: View {
 
                 Button(action: onRecordTap) {
                     HStack(spacing: 7) {
-                        Image(systemName: isRecording ? "stop.fill" : "record.circle.fill")
-                        Text(isRecording ? "Stop" : "Record")
+                        Image(systemName: recorderActionSymbol)
+                        Text(recorderActionTitle)
                     }
                     .font(.headline.weight(.semibold))
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(isRecording ? Color.red.opacity(0.90) : Color.accentColor)
+                .foregroundStyle(recorderActionColor)
                 .glassEffect(recorderControlGlass, in: Capsule(style: .continuous))
             }
             .padding(.horizontal, 18)
@@ -458,12 +469,65 @@ struct MacChatWorkspaceView: View {
 
     private var recorderContainerGlass: Glass {
         Glass.regular
-            .tint(isRecording ? Color.red.opacity(0.12) : nil)
+            .tint(recorderContainerTintColor)
             .interactive(false)
     }
 
     private var recorderControlGlass: Glass {
         Glass.regular.interactive(false)
+    }
+
+    private var recorderActionIsStopMode: Bool {
+        isRecording || isTranscriptChunkPlaying
+    }
+
+    private var recorderActionTitle: String {
+        recorderActionIsStopMode ? "Stop" : "Record"
+    }
+
+    private var recorderActionSymbol: String {
+        recorderActionIsStopMode ? "stop.fill" : "record.circle.fill"
+    }
+
+    private var recorderActionColor: Color {
+        if isRecording {
+            return Color.red.opacity(0.90)
+        }
+        if isTranscriptChunkPlaying {
+            return Color.green.opacity(0.90)
+        }
+        return Color.accentColor
+    }
+
+    private var recorderContainerTintColor: Color? {
+        if isRecording {
+            return Color.red.opacity(0.12)
+        }
+        if isTranscriptChunkPlaying {
+            return Color.green.opacity(0.12)
+        }
+        return nil
+    }
+
+    private var recorderTimerText: String {
+        if isTranscriptChunkPlaying {
+            return transcriptChunkPlaybackRemainingText
+        }
+        if recorderShowsDraftPrompt {
+            return "Click to start record"
+        }
+        return recordingTimeText
+    }
+
+    private var recorderSubtitleText: String {
+        if isTranscriptChunkPlaying {
+            return transcriptChunkPlaybackRangeText ?? "Segment Range"
+        }
+        return activeSessionDateText
+    }
+
+    private var recorderShowsDraftPrompt: Bool {
+        isDraftSession && !isRecording && !isTranscriptChunkPlaying
     }
 
     private var transcriptPane: some View {
@@ -963,6 +1027,7 @@ struct MacSettingsWorkspaceView: View {
     @Binding var whisperCoreMLEncoderEnabled: Bool
     @Binding var whisperGGMLGPUDecodeEnabled: Bool
     @Binding var whisperModelProfile: WhisperModelProfile
+    @Binding var mainTimerDisplayStyle: MainTimerDisplayStyle
     let whisperCoreMLEncoderRecommendationText: String
     let whisperGGMLGPUDecodeRecommendationText: String
     let whisperModelRecommendationText: String
@@ -1086,6 +1151,15 @@ struct MacSettingsWorkspaceView: View {
 
                 Toggle("Whisper CoreML Encoder", isOn: $whisperCoreMLEncoderEnabled)
                 Text(whisperCoreMLEncoderRecommendationText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Picker("Time Display", selection: $mainTimerDisplayStyle) {
+                    ForEach(MainTimerDisplayStyle.allCases, id: \.self) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                Text("Main timer only: \(mainTimerDisplayStyle.sampleText)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

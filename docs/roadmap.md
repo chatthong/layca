@@ -2,6 +2,19 @@
 
 ## Completed In This Chat
 
+### Player Mode + Main Timer UX (iOS + macOS)
+- `App/AppBackend.swift`, `Features/Chat/ChatTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`
+- Transcript-bubble playback now drives recorder player mode on both iOS-family and macOS.
+- Recorder action changes to `Stop` while playback is active, and tapping it stops playback.
+- Recorder tint now uses state color:
+  - red while recording
+  - green while playback is active
+- Main timer shows playback time remaining (countdown) in player mode.
+- Recorder subtitle switches to segment range text (`mm:ss → mm:ss`) in player mode.
+- Draft idle state now shows starter copy in the main timer slot:
+  - `Tap to start record` (iOS/iPadOS)
+  - `Click to start record` (macOS)
+
 ### iOS Drawer Swipe Capture Reliability
 - `App/ContentView.swift`
 - Replaced edge-only/parent-only swipe dependency with global iOS pan capture wiring.
@@ -23,7 +36,7 @@
 - App launch now defaults to draft mode on both iOS-family and macOS (no auto-open of last active saved chat).
 - `startNewChat()` now resets to draft state; persisted session is created on first record tap.
 - Recorder timer now:
-  - shows `00:00:00` in draft,
+  - shows draft starter copy before first recording starts,
   - shows accumulated duration for saved chats when idle,
   - resumes from previous duration when recording continues on an old chat.
 
@@ -33,7 +46,9 @@
 - Moved drawer trigger into chat header leading controls (before chat title).
 - Sidebar top area (`Search` + `New Chat`) is fixed; `Workspace` + `Recent Chats` are scrollable.
 - `Recent Chats` rows use the same action group (`Rename`, `Share this chat`, `Delete`).
-- Recording accessory glass now switches to red tint while recording to match macOS behavior.
+- Recording accessory glass now uses recorder state tint:
+  - red while recording
+  - green in player mode during transcript playback
 
 ### Chat Header Rename UX Hardening
 - `Features/Chat/ChatTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `Views/Components/IOSWorkspaceSidebarView.swift`
@@ -139,9 +154,10 @@
 - Added Advanced Zone controls on iOS-family and macOS settings:
   - `Whisper ggml GPU Decode` toggle
   - `Whisper CoreML Encoder` toggle
+  - `Time Display` (`Friendly` / `Hybrid` / `Professional`) for main timer only
   - `Model Switch` (`Fast` / `Normal` / `Pro`)
 - Added auto-detected first-launch defaults per device with persisted user overrides.
-- Added settings persistence fields for CoreML toggle, GPU toggle, and model profile.
+- Added settings persistence fields for CoreML toggle, GPU toggle, model profile, and main timer display style.
 
 ### macOS Native Workspace + Permission Hardening
 - `App/ContentView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `layca.xcodeproj/project.pbxproj`

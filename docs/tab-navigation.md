@@ -73,6 +73,7 @@
   - Advanced Zone:
     - Whisper ggml GPU Decode toggle
     - Whisper CoreML Encoder toggle
+    - Time Display (`Friendly` / `Hybrid` / `Professional`) for main timer only
     - Model Switch (`Fast` / `Normal` / `Pro`)
   - iCloud sync + restore purchases
 - macOS `Setting` additionally includes:
@@ -88,10 +89,16 @@
 - Renaming from session context menu (Library where available or sidebar `Recent Chats`) updates the same persisted session title used by Chat header.
 - `Export` opens from a header/toolbar action instead of a tab.
 - Recorder timer behavior:
-  - draft mode shows `00:00:00`
+  - draft idle state shows starter text (`Tap to start record` on iOS/iPadOS, `Click to start record` on macOS)
+  - main timer formatting follows setting `Time Display` (`Friendly` / `Hybrid` / `Professional`)
   - saved chats show accumulated prior recorded duration
   - continuing recording on a saved chat resumes from previous duration
-- Recorder accessory glass tint switches to red while recording (`.tint(.red.opacity(0.12))`).
+- During transcript-bubble playback (player mode):
+  - recorder action changes to `Stop`
+  - recorder tint switches to green
+  - main timer shows countdown (time remaining)
+  - subtitle shows segment range (`mm:ss → mm:ss`)
+- Recorder accessory glass tint stays red while recording.
 - During active recording, new transcript updates do not auto-scroll by default.
 - `New message` button appears for pending updates; tapping it jumps to bottom and enables follow mode.
 - Follow mode stays enabled until user scrolls away from bottom.

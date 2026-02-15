@@ -9,10 +9,12 @@
   - Advanced Zone:
     - Whisper ggml GPU Decode (toggle)
     - Whisper CoreML Encoder (toggle)
+    - Time Display (main timer only: `Friendly`, `Hybrid`, `Professional`)
     - Model Switch (`Fast`, `Normal`, `Pro`)
 - On macOS, the same model-related settings are shown in the native settings workspace form.
 - macOS settings view is reachable from sidebar `Setting`.
 - Initial Advanced Zone values are auto-detected by device and persisted; users can override anytime.
+- `Time Display` default is `Friendly` and persists in app settings (`mainTimerDisplayStyleRawValue`).
 
 ## Current Runtime Assets
 - Bundled VAD directory: app bundle `silero-vad-unified-256ms-v6.0.0.mlmodelc` (CoreML Silero, offline-first)

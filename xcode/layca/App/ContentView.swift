@@ -319,10 +319,14 @@ private extension ContentView {
     var macChatScreen: some View {
         MacChatWorkspaceView(
             isRecording: backend.isRecording,
+            isTranscriptChunkPlaying: backend.isTranscriptChunkPlaying,
+            isDraftSession: backend.activeSessionID == nil,
             recordingTimeText: backend.recordingTimeText,
+            transcriptChunkPlaybackRemainingText: backend.transcriptChunkPlaybackRemainingText,
             waveformBars: backend.waveformBars,
             activeSessionTitle: backend.activeSessionTitle,
             activeSessionDateText: backend.activeSessionDateText,
+            transcriptChunkPlaybackRangeText: backend.transcriptChunkPlaybackRangeText,
             liveChatItems: backend.activeTranscriptRows,
             selectedFocusLanguageCodes: backend.selectedLanguageCodes,
             transcribingRowIDs: backend.transcribingRowIDs,
@@ -358,6 +362,7 @@ private extension ContentView {
             whisperCoreMLEncoderEnabled: whisperCoreMLEncoderBinding,
             whisperGGMLGPUDecodeEnabled: whisperGGMLGPUDecodeBinding,
             whisperModelProfile: whisperModelProfileBinding,
+            mainTimerDisplayStyle: mainTimerDisplayStyleBinding,
             whisperCoreMLEncoderRecommendationText: backend.whisperCoreMLEncoderRecommendationText,
             whisperGGMLGPUDecodeRecommendationText: backend.whisperGGMLGPUDecodeRecommendationText,
             whisperModelRecommendationText: backend.whisperModelRecommendationText,
@@ -373,10 +378,13 @@ private extension ContentView {
     func chatScreen(showsTopToolbar: Bool, onSidebarToggle: (() -> Void)? = nil) -> some View {
         ChatTabView(
             isRecording: backend.isRecording,
+            isTranscriptChunkPlaying: backend.isTranscriptChunkPlaying,
             recordingTimeText: backend.recordingTimeText,
+            transcriptChunkPlaybackRemainingText: backend.transcriptChunkPlaybackRemainingText,
             waveformBars: backend.waveformBars,
             activeSessionTitle: backend.activeSessionTitle,
             activeSessionDateText: backend.activeSessionDateText,
+            transcriptChunkPlaybackRangeText: backend.transcriptChunkPlaybackRangeText,
             isDraftSession: backend.activeSessionID == nil,
             liveChatItems: backend.activeTranscriptRows,
             selectedFocusLanguageCodes: backend.selectedLanguageCodes,
@@ -430,6 +438,7 @@ private extension ContentView {
             whisperCoreMLEncoderEnabled: whisperCoreMLEncoderBinding,
             whisperGGMLGPUDecodeEnabled: whisperGGMLGPUDecodeBinding,
             whisperModelProfile: whisperModelProfileBinding,
+            mainTimerDisplayStyle: mainTimerDisplayStyleBinding,
             whisperCoreMLEncoderRecommendationText: backend.whisperCoreMLEncoderRecommendationText,
             whisperGGMLGPUDecodeRecommendationText: backend.whisperGGMLGPUDecodeRecommendationText,
             whisperModelRecommendationText: backend.whisperModelRecommendationText,
@@ -560,6 +569,13 @@ private extension ContentView {
         Binding(
             get: { backend.whisperModelProfile },
             set: { backend.whisperModelProfile = $0 }
+        )
+    }
+
+    var mainTimerDisplayStyleBinding: Binding<MainTimerDisplayStyle> {
+        Binding(
+            get: { backend.mainTimerDisplayStyle },
+            set: { backend.mainTimerDisplayStyle = $0 }
         )
     }
 

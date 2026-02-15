@@ -1670,6 +1670,34 @@ actor SessionStore {
     }
 }
 
+enum MainTimerDisplayStyle: String, CaseIterable, Codable, Sendable {
+    case friendly
+    case hybrid
+    case professional
+
+    var title: String {
+        switch self {
+        case .friendly:
+            return "Friendly"
+        case .hybrid:
+            return "Hybrid"
+        case .professional:
+            return "Professional"
+        }
+    }
+
+    var sampleText: String {
+        switch self {
+        case .friendly:
+            return "5 min 22 sec"
+        case .hybrid:
+            return "5:22"
+        case .professional:
+            return "00:05:22"
+        }
+    }
+}
+
 struct PersistedAppSettings: Codable, Equatable {
     var schemaVersion: Int
     var selectedLanguageCodes: [String]
@@ -1681,6 +1709,7 @@ struct PersistedAppSettings: Codable, Equatable {
     var whisperCoreMLEncoderEnabled: Bool
     var whisperGGMLGPUDecodeEnabled: Bool
     var whisperModelProfileRawValue: String
+    var mainTimerDisplayStyleRawValue: String
     var activeSessionID: UUID?
     var chatCounter: Int
 
@@ -1695,6 +1724,7 @@ struct PersistedAppSettings: Codable, Equatable {
         case whisperCoreMLEncoderEnabled
         case whisperGGMLGPUDecodeEnabled
         case whisperModelProfileRawValue
+        case mainTimerDisplayStyleRawValue
         case activeSessionID
         case chatCounter
     }
@@ -1710,6 +1740,7 @@ struct PersistedAppSettings: Codable, Equatable {
         whisperCoreMLEncoderEnabled: Bool = AppBackend.defaultWhisperCoreMLEncoderEnabledForCurrentDevice(),
         whisperGGMLGPUDecodeEnabled: Bool = AppBackend.defaultWhisperGPUDecodeEnabledForCurrentDevice(),
         whisperModelProfileRawValue: String = AppBackend.defaultWhisperModelProfileForCurrentDevice().rawValue,
+        mainTimerDisplayStyleRawValue: String = MainTimerDisplayStyle.friendly.rawValue,
         activeSessionID: UUID?,
         chatCounter: Int
     ) {
@@ -1723,6 +1754,7 @@ struct PersistedAppSettings: Codable, Equatable {
         self.whisperCoreMLEncoderEnabled = whisperCoreMLEncoderEnabled
         self.whisperGGMLGPUDecodeEnabled = whisperGGMLGPUDecodeEnabled
         self.whisperModelProfileRawValue = whisperModelProfileRawValue
+        self.mainTimerDisplayStyleRawValue = mainTimerDisplayStyleRawValue
         self.activeSessionID = activeSessionID
         self.chatCounter = chatCounter
     }
@@ -1745,6 +1777,9 @@ struct PersistedAppSettings: Codable, Equatable {
         whisperModelProfileRawValue =
             try container.decodeIfPresent(String.self, forKey: .whisperModelProfileRawValue)
             ?? AppBackend.defaultWhisperModelProfileForCurrentDevice().rawValue
+        mainTimerDisplayStyleRawValue =
+            try container.decodeIfPresent(String.self, forKey: .mainTimerDisplayStyleRawValue)
+            ?? MainTimerDisplayStyle.friendly.rawValue
         activeSessionID = try container.decodeIfPresent(UUID.self, forKey: .activeSessionID)
         chatCounter = try container.decode(Int.self, forKey: .chatCounter)
     }
@@ -1761,6 +1796,7 @@ struct PersistedAppSettings: Codable, Equatable {
         try container.encode(whisperCoreMLEncoderEnabled, forKey: .whisperCoreMLEncoderEnabled)
         try container.encode(whisperGGMLGPUDecodeEnabled, forKey: .whisperGGMLGPUDecodeEnabled)
         try container.encode(whisperModelProfileRawValue, forKey: .whisperModelProfileRawValue)
+        try container.encode(mainTimerDisplayStyleRawValue, forKey: .mainTimerDisplayStyleRawValue)
         try container.encodeIfPresent(activeSessionID, forKey: .activeSessionID)
         try container.encode(chatCounter, forKey: .chatCounter)
     }
@@ -1818,6 +1854,9 @@ final class AppBackend: ObservableObject {
     }
 
     @Published var isRecording = false
+    @Published private(set) var isTranscriptChunkPlaying = false
+    @Published private(set) var transcriptChunkPlaybackRemainingSeconds: Double = 0
+    @Published private(set) var transcriptChunkPlaybackRangeText: String?
     @Published var recordingSeconds: Double = 0
     @Published var waveformBars: [Double] = Array(repeating: 0.03, count: 9)
 
@@ -1859,6 +1898,9 @@ final class AppBackend: ObservableObject {
             applyWhisperAccelerationPreferencesIfNeeded()
         }
     }
+    @Published var mainTimerDisplayStyle: MainTimerDisplayStyle = .friendly {
+        didSet { persistSettingsIfNeeded() }
+    }
     @Published var isRestoringPurchases = false
     @Published var restoreStatusMessage: String?
 
@@ -1883,6 +1925,7 @@ final class AppBackend: ObservableObject {
     private var streamTask: Task<Void, Never>?
     private var chunkPlayer: AVAudioPlayer?
     private var chunkStopTask: Task<Void, Never>?
+    private var chunkProgressTask: Task<Void, Never>?
     private var attemptedTranscriptionRowIDs: Set<UUID> = []
     private var queuedTranscriptionRowIDs: Set<UUID> = []
     private var queuedChunkTranscriptions: [QueuedChunkTranscription] = []
@@ -1932,11 +1975,12 @@ final class AppBackend: ObservableObject {
             return max(session.rows.compactMap(\.endOffset).max() ?? 0, 0)
         }()
 
-        let clamped = Int(displaySeconds.rounded(.down))
-        let hours = clamped / 3600
-        let minutes = (clamped % 3600) / 60
-        let seconds = clamped % 60
-        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+        return formatMainTimerText(seconds: displaySeconds)
+    }
+
+    var transcriptChunkPlaybackRemainingText: String {
+        let remaining = max(transcriptChunkPlaybackRemainingSeconds, 0).rounded(.up)
+        return formatMainTimerText(seconds: remaining)
     }
 
     var whisperCoreMLEncoderRecommendationText: String {
@@ -2076,6 +2120,8 @@ final class AppBackend: ObservableObject {
             Task {
                 await stopRecording()
             }
+        } else if isTranscriptChunkPlaying {
+            stopChunkPlayback()
         } else {
             Task {
                 await startRecording()
@@ -2356,12 +2402,20 @@ final class AppBackend: ObservableObject {
             let player = try AVAudioPlayer(contentsOf: audioURL)
             let start = max(0, min(startOffset, player.duration))
             let duration = max(min(endOffset, player.duration) - start, 0.05)
+            let stopAt = start + duration
 
             player.currentTime = start
             player.prepareToPlay()
-            player.play()
+            guard player.play() else {
+                stopChunkPlayback()
+                return
+            }
 
             chunkPlayer = player
+            isTranscriptChunkPlaying = true
+            transcriptChunkPlaybackRemainingSeconds = duration
+            transcriptChunkPlaybackRangeText = playbackRangeText(startSeconds: start, endSeconds: stopAt)
+            startChunkPlaybackProgressUpdates(player: player, stopAt: stopAt)
             chunkStopTask = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
                 guard let self else {
@@ -2927,11 +2981,81 @@ final class AppBackend: ObservableObject {
     }
 
     private func stopChunkPlayback() {
+        chunkProgressTask?.cancel()
+        chunkProgressTask = nil
         chunkStopTask?.cancel()
         chunkStopTask = nil
         chunkPlayer?.stop()
         chunkPlayer = nil
+        isTranscriptChunkPlaying = false
+        transcriptChunkPlaybackRemainingSeconds = 0
+        transcriptChunkPlaybackRangeText = nil
         deactivateChunkPlaybackAudioSessionIfSupported()
+    }
+
+    private func startChunkPlaybackProgressUpdates(player: AVAudioPlayer, stopAt: TimeInterval) {
+        chunkProgressTask?.cancel()
+        chunkProgressTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            while !Task.isCancelled {
+                guard self.chunkPlayer === player else {
+                    return
+                }
+
+                let remaining = max(stopAt - player.currentTime, 0)
+                self.transcriptChunkPlaybackRemainingSeconds = remaining
+
+                if remaining <= 0.01 || !player.isPlaying {
+                    return
+                }
+
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
+    }
+
+    private func playbackRangeText(startSeconds: Double, endSeconds: Double) -> String {
+        "\(segmentClockText(seconds: startSeconds)) \u{2192} \(segmentClockText(seconds: endSeconds))"
+    }
+
+    private func segmentClockText(seconds: Double) -> String {
+        let clamped = max(Int(seconds.rounded(.down)), 0)
+        let minutes = clamped / 60
+        let remainderSeconds = clamped % 60
+        return String(format: "%02d:%02d", minutes, remainderSeconds)
+    }
+
+    private func formatMainTimerText(seconds: Double) -> String {
+        let clamped = max(Int(seconds.rounded(.down)), 0)
+        let hours = clamped / 3600
+        let minutes = (clamped % 3600) / 60
+        let totalMinutes = clamped / 60
+        let remainderSeconds = clamped % 60
+
+        switch mainTimerDisplayStyle {
+        case .friendly:
+            var parts: [String] = []
+            if hours > 0 {
+                parts.append("\(hours) hr")
+            }
+            if minutes > 0 {
+                parts.append("\(minutes) min")
+            }
+            if remainderSeconds > 0 || parts.isEmpty {
+                parts.append("\(remainderSeconds) sec")
+            }
+            return parts.joined(separator: " ")
+        case .hybrid:
+            if hours > 0 {
+                return "\(hours):\(String(format: "%02d", minutes)):\(String(format: "%02d", remainderSeconds))"
+            }
+            return "\(totalMinutes):\(String(format: "%02d", remainderSeconds))"
+        case .professional:
+            return String(format: "%02d:%02d:%02d", hours, minutes, remainderSeconds)
+        }
     }
 
     private func configureAudioSessionForChunkPlaybackIfSupported() throws {
@@ -3071,6 +3195,8 @@ final class AppBackend: ObservableObject {
         whisperGGMLGPUDecodeEnabled = persisted.whisperGGMLGPUDecodeEnabled
         whisperModelProfile = WhisperModelProfile(rawValue: persisted.whisperModelProfileRawValue)
             ?? Self.defaultWhisperModelProfileForCurrentDevice()
+        mainTimerDisplayStyle = MainTimerDisplayStyle(rawValue: persisted.mainTimerDisplayStyleRawValue)
+            ?? .friendly
         activeSessionID = persisted.activeSessionID
         chatCounter = max(persisted.chatCounter, 0)
         isHydratingPersistedState = false
@@ -3092,6 +3218,7 @@ final class AppBackend: ObservableObject {
             whisperCoreMLEncoderEnabled: whisperCoreMLEncoderEnabled,
             whisperGGMLGPUDecodeEnabled: whisperGGMLGPUDecodeEnabled,
             whisperModelProfileRawValue: whisperModelProfile.rawValue,
+            mainTimerDisplayStyleRawValue: mainTimerDisplayStyle.rawValue,
             activeSessionID: activeSessionID,
             chatCounter: max(chatCounter, 0)
         )

@@ -14,6 +14,7 @@ struct SettingsTabView: View {
     @Binding var whisperCoreMLEncoderEnabled: Bool
     @Binding var whisperGGMLGPUDecodeEnabled: Bool
     @Binding var whisperModelProfile: WhisperModelProfile
+    @Binding var mainTimerDisplayStyle: MainTimerDisplayStyle
     let whisperCoreMLEncoderRecommendationText: String
     let whisperGGMLGPUDecodeRecommendationText: String
     let whisperModelRecommendationText: String
@@ -256,6 +257,23 @@ struct SettingsTabView: View {
                 Toggle("Whisper CoreML Encoder", isOn: $whisperCoreMLEncoderEnabled)
                     .tint(.accentColor)
                 Text(whisperCoreMLEncoderRecommendationText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Time Display")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Picker("Time Display", selection: $mainTimerDisplayStyle) {
+                    ForEach(MainTimerDisplayStyle.allCases, id: \.self) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text("Main timer only: \(mainTimerDisplayStyle.sampleText)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

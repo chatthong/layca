@@ -6,6 +6,7 @@
 - Starts or stops recording flow.
 - If current state is draft (`activeSessionID == nil`), start path creates a new persisted session first (`chat N` naming flow), then starts recording.
 - On start, runs pre-flight before pipeline starts.
+- If transcript chunk playback is active, call stops playback (player mode stop action) instead of starting recording.
 - Surfaces microphone permission denial as user-visible preflight message.
 
 ### `startNewChat() -> Void`
@@ -18,9 +19,17 @@
 - Sets active session and pushes its rows to chat UI.
 
 ### `recordingTimeText` (published display value)
-- Draft mode displays `00:00:00`.
+- Value is formatted by selected `mainTimerDisplayStyle` (`friendly`, `hybrid`, `professional`).
 - Saved chat mode displays accumulated duration from persisted transcript offsets.
 - During recording, value displays `currentRecordingBaseOffset + liveElapsedSeconds` so resumed recordings continue from prior duration.
+
+### `mainTimerDisplayStyle` (published setting)
+- Controls main timer formatting only.
+- Supported values:
+  - `friendly` (trim zero units, e.g. `11 sec`, `5 min 22 sec`, `1 hr 5 sec`)
+  - `hybrid` (e.g. `5:22`, `1:05:22`)
+  - `professional` (e.g. `00:05:22`)
+- Default is `friendly`.
 
 ### `renameActiveSessionTitle(_ newTitle: String) -> Void`
 - Renames active session title (used by Chat header inline rename).
@@ -49,6 +58,9 @@
   - incoming rows during recording show `New message` (no forced auto-follow by default)
   - tapping `New message` jumps to bottom and enables follow mode
   - follow mode disables when user scrolls away from bottom
+- Recorder bottom-bar UX (iOS + macOS):
+  - draft idle state shows starter text (`Tap to start record` / `Click to start record`) until recording starts
+  - transcript playback state changes action to `Stop`, switches recorder tint green, and shows countdown + segment range subtitle
 
 ### `toggleLanguageFocus(_ code: String) -> Void`
 - Adds/removes language code used to build pre-flight prompt.
@@ -56,6 +68,7 @@
 ### `playTranscriptChunk(_ row: TranscriptRow) -> Void`
 - Plays one transcript row chunk from the active session audio file.
 - Requires valid row offsets (`startOffset`, `endOffset`) and recording must be stopped.
+- When active, backend publishes playback countdown (`transcriptChunkPlaybackRemainingText`) and segment-range subtitle (`transcriptChunkPlaybackRangeText`, `mm:ss → mm:ss`) for recorder player mode.
 - If constraints are not met, call is a no-op.
 
 ### `editTranscriptRow(_ row: TranscriptRow, text: String) -> Void`
@@ -207,7 +220,7 @@
 
 ### `load() -> PersistedAppSettings?`
 - Loads persisted app/UI setting snapshot from `UserDefaults`.
-- Snapshot includes Whisper runtime preferences (`whisperCoreMLEncoderEnabled`, `whisperGGMLGPUDecodeEnabled`, `whisperModelProfileRawValue`).
+- Snapshot includes Whisper runtime preferences (`whisperCoreMLEncoderEnabled`, `whisperGGMLGPUDecodeEnabled`, `whisperModelProfileRawValue`) and main timer display style (`mainTimerDisplayStyleRawValue`).
 
 ### `save(_ settings: PersistedAppSettings) -> Void`
 - Persists app/UI setting snapshot to `UserDefaults`.
