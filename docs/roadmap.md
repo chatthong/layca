@@ -2,6 +2,12 @@
 
 ## Completed In This Chat
 
+### iOS Chat-Title Pill Sizing + Truncation Tuning
+- `Features/Chat/ChatTabView.swift`
+- Kept chat title in leading header position on iOS (not center placement).
+- Non-edit chat-title pill now auto-sizes by title length with min/max bounds.
+- Short titles keep readable width; long titles tail-truncate only after hitting max safe width (prevents `...` overflow toolbar collapse).
+
 ### Player Mode + Main Timer UX (iOS + macOS)
 - `App/AppBackend.swift`, `Features/Chat/ChatTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - Transcript-bubble playback now drives recorder player mode on both iOS-family and macOS.

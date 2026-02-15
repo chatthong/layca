@@ -83,6 +83,10 @@
 - Active chat badge supports inline rename:
   - tap chat title in the Chat header to edit
   - saved title appears in both Chat and session lists
+- iOS non-edit chat-title pill:
+  - auto-sizes by title length
+  - keeps a minimum width for short names
+  - caps width to avoid toolbar overflow, then uses tail truncation for long names
 - While chat-title editing is active (iOS + macOS):
   - non-title header actions are hidden
   - tapping outside the edit form (content/sidebar/toolbar focus-loss path) cancels editing

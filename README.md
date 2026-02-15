@@ -175,6 +175,7 @@ Documents/
 - iOS/iPadOS uses a custom drawer workspace shell; macOS uses dedicated split workspace views (sidebar/detail).
 - macOS chat detail toolbar keeps inline title-rename + trailing `Share`; `New Chat` and `Setting` are sidebar actions.
 - iOS chat header uses leading controls with sidebar toggle before chat title and a trailing share action.
+- iOS non-edit chat-title pill auto-sizes with title length (bounded min/max to prevent toolbar overflow) and uses tail truncation only when needed.
 - iOS drawer opens via right-swipe from anywhere on the screen (including over chat bubbles), not only from the left edge.
 - Inline chat-title edit mode on iOS and macOS hides non-title header controls and cancels on outside interaction (content/sidebar/tap-away focus loss).
 - During live recording, transcript updates do not force-scroll; a `New message` button appears. Tapping it jumps to bottom and enables follow mode until user scrolls away.

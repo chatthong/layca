@@ -54,6 +54,9 @@
 - Chat header inline-rename UX (iOS + macOS):
   - entering edit mode hides non-title header actions
   - tapping outside edit context (content/sidebar/focus-loss path) cancels edit without applying changes
+- iOS non-edit chat-title pill:
+  - width auto-sizes from title text with min/max bounds
+  - applies tail truncation only when the max width limit is reached
 - Recording transcript follow UX (iOS + macOS):
   - incoming rows during recording show `New message` (no forced auto-follow by default)
   - tapping `New message` jumps to bottom and enables follow mode
