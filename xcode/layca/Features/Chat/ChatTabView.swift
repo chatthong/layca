@@ -149,7 +149,7 @@ struct ChatTabView: View {
                                 if let onSidebarToggle, !isEditingTitle {
                                     Button(action: onSidebarToggle) {
                                         Image(systemName: "line.3.horizontal")
-                                            .font(.system(size: 16, weight: .semibold))
+                                            .font(.system(size: 20, weight: .semibold))
                                             .frame(width: topToolbarGroupedIconSize - 4, height: topToolbarGroupedIconSize - 4)
                                     }
                                     .buttonStyle(.glass)
@@ -377,7 +377,7 @@ struct ChatTabView: View {
         ControlGroup {
             Button(action: onPlayFromStartTap) {
                 Label("Play", systemImage: "play.fill")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .frame(width: topToolbarGroupedIconSize - 4, height: topToolbarGroupedIconSize - 4)
             }
             .disabled(!canPlaySessionFromStart)
@@ -386,7 +386,7 @@ struct ChatTabView: View {
                 topTrailingMenuActions
             } label: {
                 Label("More", systemImage: "ellipsis")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .frame(width: topToolbarGroupedIconSize - 4, height: topToolbarGroupedIconSize - 4)
             }
         } label: {
@@ -467,7 +467,11 @@ struct ChatTabView: View {
                 Button(action: beginTitleRename) {
                     HStack(spacing: 6) {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
+#if os(iOS)
+                            .font(.system(size: 21, weight: .semibold))
+#else
                             .font(.caption.weight(.semibold))
+#endif
                             .foregroundStyle(.primary)
 
                         Text(activeSessionTitle)
