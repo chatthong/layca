@@ -255,15 +255,18 @@ struct MacChatWorkspaceView: View {
     let onEditSpeakerName: (TranscriptRow, String) -> Void
     let onChangeSpeaker: (TranscriptRow, String) -> Void
     let onRetranscribeTranscript: (TranscriptRow, String?) -> Void
+    let canPlaySessionFromStart: Bool
+    let onPlayFromStartTap: () -> Void
     let onExportTap: () -> Void
+    let onDeleteActiveSessionTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
     let onOpenSettingsTap: () -> Void
     @State private var titleDraft = ""
     @State private var isEditingTitle = false
+    @State private var isDeleteDialogPresented = false
 
     @FocusState private var isTitleFieldFocused: Bool
     @State private var isTranscriptNearBottom = true
-    @State private var isTitleHovered = false
     @State private var hasPendingNewMessage = false
     @State private var isAutoScrollModeEnabled = false
 
@@ -298,11 +301,42 @@ struct MacChatWorkspaceView: View {
             }
 
             if !isEditingTitle {
-                ToolbarItem {
-                    Button(action: onExportTap) {
-                        Image(systemName: "square.and.arrow.up")
+                ToolbarSpacer(.flexible)
+
+                ToolbarItemGroup {
+                    Button(action: onPlayFromStartTap) {
+                        Image(systemName: "play.fill")
                     }
-                    .help("Share")
+                    .labelStyle(.iconOnly)
+                    .help("Play from 00:00 to end")
+                    .disabled(!canPlaySessionFromStart)
+
+                    Menu {
+                        Button {
+                            onExportTap()
+                        } label: {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
+
+                        Button {
+                            beginTitleRename()
+                        } label: {
+                            Label("Rename", systemImage: "pencil")
+                        }
+                        .disabled(isDraftSession)
+
+                        Button(role: .destructive) {
+                            isDeleteDialogPresented = true
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .disabled(isDraftSession)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .labelStyle(.iconOnly)
+                    .menuIndicator(.hidden)
+                    .disabled(isDraftSession)
                 }
             }
 
@@ -332,6 +366,20 @@ struct MacChatWorkspaceView: View {
                 cancelTitleRename()
             }
         }
+        .confirmationDialog(
+            "Delete this chat?",
+            isPresented: $isDeleteDialogPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Chat", role: .destructive) {
+                onDeleteActiveSessionTap()
+            }
+            Button("Cancel", role: .cancel) {
+                isDeleteDialogPresented = false
+            }
+        } message: {
+            Text("This will permanently remove \"\(activeSessionTitle)\" and its recording.")
+        }
     }
 
 
@@ -349,26 +397,8 @@ struct MacChatWorkspaceView: View {
 
             }
             .frame(maxWidth: toolbarTitleMaxWidth, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.ultraThinMaterial, in: Capsule(style: .continuous))
-            .contentShape(Capsule(style: .continuous))
-        }
-        .buttonStyle(ScaleButtonStyle())
-        .brightness(isTitleHovered ? 0.08 : 0)
-        .onHover { hovering in
-            isTitleHovered = hovering
         }
         .help("Rename Chat")
-    }
-
-    struct ScaleButtonStyle: ButtonStyle {
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-                .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
-                .opacity(configuration.isPressed ? 0.8 : 1.0)
-        }
     }
 
     @ViewBuilder

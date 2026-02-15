@@ -1983,6 +1983,18 @@ final class AppBackend: ObservableObject {
         return formatMainTimerText(seconds: remaining)
     }
 
+    var canPlayActiveSessionFromStart: Bool {
+        guard !isRecording,
+              let activeSessionID,
+              let session = sessions.first(where: { $0.id == activeSessionID })
+        else {
+            return false
+        }
+
+        let duration = max(session.rows.compactMap(\.endOffset).max() ?? 0, 0)
+        return duration > 0.05
+    }
+
     var whisperCoreMLEncoderRecommendationText: String {
         Self.whisperCoreMLEncoderRecommendationTextForCurrentDevice()
     }
@@ -2093,6 +2105,15 @@ final class AppBackend: ObservableObject {
         }
     }
 
+    func deleteActiveSession() {
+        guard let activeSessionID,
+              let session = sessions.first(where: { $0.id == activeSessionID })
+        else {
+            return
+        }
+        deleteSession(session)
+    }
+
     func shareText(for session: ChatSession) -> String {
         let header = [
             session.title,
@@ -2132,6 +2153,12 @@ final class AppBackend: ObservableObject {
     func playTranscriptChunk(_ row: TranscriptRow) {
         Task {
             await playTranscriptChunkInternal(row, sessionID: resolvedSessionID(for: row))
+        }
+    }
+
+    func playActiveSessionFromStart() {
+        Task {
+            await playActiveSessionFromStartInternal()
         }
     }
 
@@ -2390,6 +2417,32 @@ final class AppBackend: ObservableObject {
             return
         }
 
+        await playSessionAudioRange(
+            sessionID: sessionID,
+            startOffset: startOffset,
+            endOffset: endOffset
+        )
+    }
+
+    private func playActiveSessionFromStartInternal() async {
+        guard !isRecording,
+              let sessionID = activeSessionID
+        else {
+            return
+        }
+
+        await playSessionAudioRange(
+            sessionID: sessionID,
+            startOffset: 0,
+            endOffset: nil
+        )
+    }
+
+    private func playSessionAudioRange(
+        sessionID: UUID,
+        startOffset: Double,
+        endOffset: Double?
+    ) async {
         guard let audioURL = await sessionStore.audioFileURL(for: sessionID) else {
             return
         }
@@ -2401,7 +2454,12 @@ final class AppBackend: ObservableObject {
 
             let player = try AVAudioPlayer(contentsOf: audioURL)
             let start = max(0, min(startOffset, player.duration))
-            let duration = max(min(endOffset, player.duration) - start, 0.05)
+            let resolvedEndOffset = min(endOffset ?? player.duration, player.duration)
+            guard resolvedEndOffset > start else {
+                stopChunkPlayback()
+                return
+            }
+            let duration = max(resolvedEndOffset - start, 0.05)
             let stopAt = start + duration
 
             player.currentTime = start

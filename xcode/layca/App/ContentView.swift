@@ -342,7 +342,10 @@ private extension ContentView {
             onRetranscribeTranscript: { row, languageCode in
                 backend.retranscribeTranscriptRow(row, preferredLanguageCodeOverride: languageCode)
             },
+            canPlaySessionFromStart: backend.canPlayActiveSessionFromStart,
+            onPlayFromStartTap: backend.playActiveSessionFromStart,
             onExportTap: { isExportPresented = true },
+            onDeleteActiveSessionTap: backend.deleteActiveSession,
             onRenameSessionTitle: backend.renameActiveSessionTitle,
             onOpenSettingsTap: {
                 selectedTab = .setting
@@ -401,7 +404,10 @@ private extension ContentView {
             onRetranscribeTranscript: { row, languageCode in
                 backend.retranscribeTranscriptRow(row, preferredLanguageCodeOverride: languageCode)
             },
+            canPlaySessionFromStart: backend.canPlayActiveSessionFromStart,
+            onPlayFromStartTap: backend.playActiveSessionFromStart,
             onExportTap: { isExportPresented = true },
+            onDeleteActiveSessionTap: backend.deleteActiveSession,
             onRenameSessionTitle: backend.renameActiveSessionTitle,
             onSidebarToggle: onSidebarToggle,
             showsTopToolbar: showsTopToolbar,

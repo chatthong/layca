@@ -8,6 +8,7 @@ struct ChatTabView: View {
     private let titleDisplayMinWidth: CGFloat = 130
     private let titleDisplayBaseWidth: CGFloat = 56
     private let titleDisplayCharacterWidth: CGFloat = 9
+    private let topToolbarGroupedIconSize: CGFloat = 36
 
     let isRecording: Bool
     let isTranscriptChunkPlaying: Bool
@@ -32,7 +33,10 @@ struct ChatTabView: View {
     let onEditSpeakerName: (TranscriptRow, String) -> Void
     let onChangeSpeaker: (TranscriptRow, String) -> Void
     let onRetranscribeTranscript: (TranscriptRow, String?) -> Void
+    let canPlaySessionFromStart: Bool
+    let onPlayFromStartTap: () -> Void
     let onExportTap: () -> Void
+    let onDeleteActiveSessionTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
     let onSidebarToggle: (() -> Void)?
     let showsTopToolbar: Bool
@@ -47,6 +51,7 @@ struct ChatTabView: View {
     @State private var isAutoScrollModeEnabled = false
     @State private var scrollViewportHeight: CGFloat = 0
     @State private var scrollContentBottom: CGFloat = 0
+    @State private var isDeleteDialogPresented = false
 
     private let transcriptScrollSpace = "layca.chat.transcript.scroll"
     private let transcriptBottomAnchorID = "layca.chat.transcript.bottom"
@@ -76,7 +81,10 @@ struct ChatTabView: View {
         onEditSpeakerName: @escaping (TranscriptRow, String) -> Void,
         onChangeSpeaker: @escaping (TranscriptRow, String) -> Void,
         onRetranscribeTranscript: @escaping (TranscriptRow, String?) -> Void,
+        canPlaySessionFromStart: Bool,
+        onPlayFromStartTap: @escaping () -> Void,
         onExportTap: @escaping () -> Void,
+        onDeleteActiveSessionTap: @escaping () -> Void,
         onRenameSessionTitle: @escaping (String) -> Void,
         onSidebarToggle: (() -> Void)? = nil,
         showsTopToolbar: Bool = true,
@@ -105,7 +113,10 @@ struct ChatTabView: View {
         self.onEditSpeakerName = onEditSpeakerName
         self.onChangeSpeaker = onChangeSpeaker
         self.onRetranscribeTranscript = onRetranscribeTranscript
+        self.canPlaySessionFromStart = canPlaySessionFromStart
+        self.onPlayFromStartTap = onPlayFromStartTap
         self.onExportTap = onExportTap
+        self.onDeleteActiveSessionTap = onDeleteActiveSessionTap
         self.onRenameSessionTitle = onRenameSessionTitle
         self.onSidebarToggle = onSidebarToggle
         self.showsTopToolbar = showsTopToolbar
@@ -158,14 +169,7 @@ struct ChatTabView: View {
                         .sharedBackgroundVisibility(.hidden)
                         if !isEditingTitle {
                             ToolbarItem(placement: .topBarTrailing) {
-                                Button(action: onExportTap) {
-                                    Image(systemName: "square.and.arrow.up")
-                                        .font(.system(size: 17, weight: .semibold))
-                                        .frame(width: topToolbarControlSize, height: topToolbarControlSize)
-                                }
-                                .buttonStyle(.plain)
-                                .glassEffect(.regular, in: Circle())
-                                .contentShape(Circle())
+                                topTrailingToolbarControls
                             }
                             .sharedBackgroundVisibility(.hidden)
                         }
@@ -190,6 +194,20 @@ struct ChatTabView: View {
             if isEditingTitle {
                 cancelTitleRename()
             }
+        }
+        .confirmationDialog(
+            "Delete this chat?",
+            isPresented: $isDeleteDialogPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Chat", role: .destructive) {
+                onDeleteActiveSessionTap()
+            }
+            Button("Cancel", role: .cancel) {
+                isDeleteDialogPresented = false
+            }
+        } message: {
+            Text("This will permanently remove \"\(activeSessionTitle)\" and its recording.")
         }
     }
 
@@ -349,19 +367,47 @@ struct ChatTabView: View {
 
             Spacer()
 
-            Button(action: onExportTap) {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(width: 38, height: 38)
-            }
-            .buttonStyle(.plain)
-            .background(.ultraThinMaterial, in: Circle())
-            .overlay(
-                Circle()
-                    .stroke(.primary.opacity(0.14), lineWidth: 0.9)
-            )
-            .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 6)
+            topTrailingToolbarControls
         }
+    }
+
+    private var topTrailingToolbarControls: some View {
+        ControlGroup {
+            Button(action: onPlayFromStartTap) {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: topToolbarGroupedIconSize, height: topToolbarGroupedIconSize)
+            }
+            .disabled(!canPlaySessionFromStart)
+
+            Menu {
+                Button {
+                    onExportTap()
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+
+                Button {
+                    beginTitleRename()
+                } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+                .disabled(isDraftSession)
+
+                Button(role: .destructive) {
+                    isDeleteDialogPresented = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .disabled(isDraftSession)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: topToolbarGroupedIconSize, height: topToolbarGroupedIconSize)
+            }
+            .disabled(isDraftSession)
+        }
+        .controlSize(.regular)
     }
 
     private var sessionTitleControl: some View {
