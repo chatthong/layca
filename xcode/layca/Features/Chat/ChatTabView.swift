@@ -3,6 +3,8 @@ import SwiftUI
 struct ChatTabView: View {
     private let topToolbarControlSize: CGFloat = 44
     private let titleEditorMaxWidth: CGFloat = 456
+    private let titleDisplayWidthWithSidebar: CGFloat = 210
+    private let titleDisplayWidthWithoutSidebar: CGFloat = 250
 
     let isRecording: Bool
     let isTranscriptChunkPlaying: Bool
@@ -128,26 +130,27 @@ struct ChatTabView: View {
             chatContent
                 .toolbar {
                     if showsTopToolbar {
-                        if let onSidebarToggle, !isEditingTitle {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button(action: onSidebarToggle) {
-                                    Image(systemName: "line.3.horizontal")
-                                        .font(.system(size: 17, weight: .semibold))
-                                        .frame(width: topToolbarControlSize, height: topToolbarControlSize)
-                                }
-                                .buttonStyle(.plain)
-                                .glassEffect(.regular, in: Circle())
-                                .accessibilityLabel("Toggle Sidebar")
-                            }
-                            .sharedBackgroundVisibility(.hidden)
-                        }
                         ToolbarItem(placement: .topBarLeading) {
-                            if isEditingTitle {
-                                sessionTitleControl
-                                    .frame(maxWidth: titleEditorMaxWidth, alignment: .leading)
-                            } else {
-                                sessionTitleControl
-                                    .fixedSize()
+                            HStack(spacing: 10) {
+                                if let onSidebarToggle, !isEditingTitle {
+                                    Button(action: onSidebarToggle) {
+                                        Image(systemName: "line.3.horizontal")
+                                            .font(.system(size: 17, weight: .semibold))
+                                            .frame(width: topToolbarControlSize, height: topToolbarControlSize)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .glassEffect(.regular, in: Circle())
+                                    .accessibilityLabel("Toggle Sidebar")
+                                }
+
+                                if isEditingTitle {
+                                    sessionTitleControl
+                                        .frame(maxWidth: titleEditorMaxWidth, alignment: .leading)
+                                } else {
+                                    sessionTitleControl
+                                        .frame(width: resolvedTitleDisplayWidth, alignment: .leading)
+                                        .layoutPriority(1)
+                                }
                             }
                         }
                         .sharedBackgroundVisibility(.hidden)
@@ -412,7 +415,10 @@ struct ChatTabView: View {
                         Text(activeSessionTitle)
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
+                            .truncationMode(.tail)
+                            .layoutPriority(1)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
 #if os(macOS)
@@ -1013,6 +1019,15 @@ struct ChatTabView: View {
         }
         isTitleFieldFocused = false
     }
+
+    private var resolvedTitleDisplayWidth: CGFloat {
+#if os(iOS)
+        onSidebarToggle == nil ? titleDisplayWidthWithoutSidebar : titleDisplayWidthWithSidebar
+#else
+        titleDisplayWidthWithoutSidebar
+#endif
+    }
+
 }
 
 private struct ChatTranscriptViewportHeightPreferenceKey: PreferenceKey {

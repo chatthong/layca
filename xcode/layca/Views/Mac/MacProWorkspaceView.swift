@@ -231,6 +231,8 @@ struct MacWorkspaceSidebarView: View {
 }
 
 struct MacChatWorkspaceView: View {
+    private let toolbarTitleMaxWidth: CGFloat = 280
+
     let isRecording: Bool
     let isTranscriptChunkPlaying: Bool
     let isDraftSession: Bool
@@ -343,8 +345,10 @@ struct MacChatWorkspaceView: View {
                 Text(activeSessionTitle)
                     .font(.headline.weight(.semibold))
                     .lineLimit(1)
+                    .truncationMode(.tail)
 
             }
+            .frame(maxWidth: toolbarTitleMaxWidth, alignment: .leading)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(.ultraThinMaterial, in: Capsule(style: .continuous))
