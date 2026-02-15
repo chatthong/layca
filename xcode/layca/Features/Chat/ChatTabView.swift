@@ -5,6 +5,9 @@ struct ChatTabView: View {
     private let titleEditorMaxWidth: CGFloat = 456
     private let titleDisplayWidthWithSidebar: CGFloat = 210
     private let titleDisplayWidthWithoutSidebar: CGFloat = 250
+    private let titleDisplayMinWidth: CGFloat = 130
+    private let titleDisplayBaseWidth: CGFloat = 56
+    private let titleDisplayCharacterWidth: CGFloat = 9
 
     let isRecording: Bool
     let isTranscriptChunkPlaying: Bool
@@ -148,7 +151,6 @@ struct ChatTabView: View {
                                         .frame(maxWidth: titleEditorMaxWidth, alignment: .leading)
                                 } else {
                                     sessionTitleControl
-                                        .frame(width: resolvedTitleDisplayWidth, alignment: .leading)
                                         .layoutPriority(1)
                                 }
                             }
@@ -418,13 +420,13 @@ struct ChatTabView: View {
                             .truncationMode(.tail)
                             .layoutPriority(1)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
 #if os(macOS)
                     .background(.ultraThinMaterial, in: Capsule(style: .continuous))
                     .contentShape(Capsule(style: .continuous))
 #elseif os(iOS)
+                    .frame(width: resolvedTitleDisplayWidth, alignment: .leading)
                     .frame(height: topToolbarControlSize)
                     .glassEffect(.regular, in: Capsule(style: .continuous))
 #endif
@@ -1022,7 +1024,9 @@ struct ChatTabView: View {
 
     private var resolvedTitleDisplayWidth: CGFloat {
 #if os(iOS)
-        onSidebarToggle == nil ? titleDisplayWidthWithoutSidebar : titleDisplayWidthWithSidebar
+        let maxWidth = onSidebarToggle == nil ? titleDisplayWidthWithoutSidebar : titleDisplayWidthWithSidebar
+        let estimated = titleDisplayBaseWidth + (CGFloat(max(activeSessionTitle.count, 1)) * titleDisplayCharacterWidth)
+        return min(max(estimated, titleDisplayMinWidth), maxWidth)
 #else
         titleDisplayWidthWithoutSidebar
 #endif
