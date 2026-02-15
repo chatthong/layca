@@ -11,7 +11,7 @@
     - Whisper CoreML Encoder (toggle)
     - Model Switch (`Fast`, `Normal`, `Pro`)
 - On macOS, the same model-related settings are shown in the native settings workspace form.
-- macOS settings view is reachable from sidebar `Setting` and Chat toolbar `Info`.
+- macOS settings view is reachable from sidebar `Setting`.
 - Initial Advanced Zone values are auto-detected by device and persisted; users can override anytime.
 
 ## Current Runtime Assets

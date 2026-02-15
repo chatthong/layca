@@ -11,7 +11,7 @@
 ### `startNewChat() -> Void`
 - Resets selection to draft mode (`activeSessionID = nil`) and clears active transcript rows.
 - Does not create a persisted session immediately.
-- Used by iOS/iPadOS sidebar `New Chat` compose action, visionOS/tvOS `New Chat` tab action, and macOS `New Chat` actions.
+- Used by iOS/iPadOS sidebar `New Chat` compose action, visionOS/tvOS `New Chat` tab action, and macOS sidebar `New Chat` action.
 - Persisted session is created on first record tap from draft mode.
 
 ### `activateSession(_ session: ChatSession) -> Void`
@@ -24,10 +24,10 @@
 
 ### `renameActiveSessionTitle(_ newTitle: String) -> Void`
 - Renames active session title (used by Chat header inline rename).
-- Also used by macOS Chat-detail toolbar `Rename` flow (rename sheet -> commit).
+- Used by both iOS and macOS inline chat-title edit flows.
 
 ### `renameSession(_ session: ChatSession, to newTitle: String) -> Void`
-- Renames a specific session (used by Library/sidebar context-menu rename actions).
+- Renames a specific session (used by session-list context-menu rename actions in Library where present and sidebar `Recent Chats`).
 
 ### `deleteSession(_ session: ChatSession) -> Void`
 - Deletes a specific session from runtime store and filesystem storage.
@@ -35,17 +35,20 @@
 
 ### `shareText(for session: ChatSession) -> String`
 - Returns share-ready plain text for a session (title/date + transcript rows).
-- Used by Library/sidebar `Share this chat` action.
+- Used by session-list `Share this chat` actions (Library where present and sidebar `Recent Chats`).
 
 ## macOS Workspace UI Actions (View-level Wiring)
 - Chat-detail toolbar `Share` action presents export sheet (`isExportPresented`) from `ContentView`.
-- Chat-detail toolbar `Rename` action presents rename sheet, then calls `renameActiveSessionTitle(_:)`.
-- Chat-detail toolbar `New Chat` action calls `startNewChat()`.
-- Chat-detail toolbar `Info` action switches workspace to `Setting`.
+- Sidebar toolbar `New Chat` action calls `startNewChat()` (via `startNewChatAndReturnToChat` in `ContentView`).
+- Sidebar workspace `Setting` row switches workspace to settings.
 - Sidebar workspace `Layca Chat` action routes through draft-open behavior in `ContentView` (`openLaycaChatWorkspace`).
 - Chat header inline-rename UX (iOS + macOS):
   - entering edit mode hides non-title header actions
   - tapping outside edit context (content/sidebar/focus-loss path) cancels edit without applying changes
+- Recording transcript follow UX (iOS + macOS):
+  - incoming rows during recording show `New message` (no forced auto-follow by default)
+  - tapping `New message` jumps to bottom and enables follow mode
+  - follow mode disables when user scrolls away from bottom
 
 ### `toggleLanguageFocus(_ code: String) -> Void`
 - Adds/removes language code used to build pre-flight prompt.
@@ -194,7 +197,7 @@
 - Deletes session from in-memory store and removes `Documents/Sessions/{UUID}` directory.
 
 ### `snapshotSessions() -> [ChatSession]`
-- Returns session list for Library/sidebar UI.
+- Returns session list for Library or sidebar `Recent Chats` UI surfaces.
 - Ensures store is hydrated from disk before snapshotting.
 
 ### `transcriptRows(for:) -> [TranscriptRow]`

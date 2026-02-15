@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 struct ContentView: View {
     @StateObject private var backend = AppBackend()
@@ -128,7 +131,16 @@ private extension ContentView {
                 .offset(x: sidebarOffset)
             }
             .contentShape(Rectangle())
-            .gesture(iosSidebarDragGesture(width: sidebarWidth))
+            .overlay {
+                IOSGlobalPanCaptureInstaller(
+                    onChanged: { recognizer in
+                        handleIOSSidebarPanChanged(recognizer, width: sidebarWidth)
+                    },
+                    onEnded: { recognizer in
+                        handleIOSSidebarPanEnded(recognizer, width: sidebarWidth)
+                    }
+                )
+            }
             .onAppear {
                 if selectedTab == .newChat {
                     selectedTab = .chat
@@ -189,33 +201,51 @@ private extension ContentView {
         return min(0, max(-width, base + iosSidebarDragOffset))
     }
 
-    func iosSidebarDragGesture(width: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .global)
-            .onChanged { value in
-                if isIOSSidebarPresented {
-                    iosSidebarDragOffset = min(0, value.translation.width)
-                } else if value.startLocation.x <= 26 {
-                    iosSidebarDragOffset = max(0, value.translation.width)
-                }
-            }
-            .onEnded { value in
-                defer { iosSidebarDragOffset = 0 }
+    func isHorizontalSidebarPan(_ recognizer: UIPanGestureRecognizer) -> Bool {
+        let translation = recognizer.translation(in: recognizer.view)
+        return abs(translation.x) > abs(translation.y) * 1.1
+    }
 
-                if isIOSSidebarPresented {
-                    let shouldClose = value.predictedEndTranslation.width < -(width * 0.2)
-                        || value.translation.width < -(width * 0.28)
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                        isIOSSidebarPresented = !shouldClose
-                    }
-                } else {
-                    let shouldOpen = value.startLocation.x <= 26
-                        && (value.predictedEndTranslation.width > (width * 0.2)
-                            || value.translation.width > (width * 0.28))
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                        isIOSSidebarPresented = shouldOpen
-                    }
-                }
+    func predictedTranslationX(for recognizer: UIPanGestureRecognizer) -> CGFloat {
+        let translation = recognizer.translation(in: recognizer.view).x
+        let velocity = recognizer.velocity(in: recognizer.view).x
+        return translation + (velocity * 0.18)
+    }
+
+    func handleIOSSidebarPanChanged(_ recognizer: UIPanGestureRecognizer, width: CGFloat) {
+        let translationX = recognizer.translation(in: recognizer.view).x
+
+        if isIOSSidebarPresented {
+            iosSidebarDragOffset = min(0, translationX)
+        } else if isHorizontalSidebarPan(recognizer), translationX > 0 {
+            iosSidebarDragOffset = max(0, translationX)
+        }
+    }
+
+    func handleIOSSidebarPanEnded(_ recognizer: UIPanGestureRecognizer, width: CGFloat) {
+        let closeSwipeThreshold = width * 0.22
+        let closePredictedThreshold = width * 0.15
+        let openSwipeThreshold = max(24, width * 0.12)
+        let openPredictedThreshold = max(20, width * 0.09)
+        let translationX = recognizer.translation(in: recognizer.view).x
+        let predictedX = predictedTranslationX(for: recognizer)
+
+        defer { iosSidebarDragOffset = 0 }
+
+        if isIOSSidebarPresented {
+            let shouldClose = predictedX < -closePredictedThreshold || translationX < -closeSwipeThreshold
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                isIOSSidebarPresented = !shouldClose
             }
+            return
+        }
+
+        let shouldOpen = isHorizontalSidebarPan(recognizer)
+            && translationX > 0
+            && (predictedX > openPredictedThreshold || translationX > openSwipeThreshold)
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+            isIOSSidebarPresented = shouldOpen
+        }
     }
 #endif
 
@@ -239,6 +269,7 @@ private extension ContentView {
             .navigationSplitViewColumnWidth(min: 230, ideal: 280, max: 360)
         } detail: {
             macDetailScreen
+                .navigationSplitViewColumnWidth(min: 524, ideal: 920)
         }
         .navigationSplitViewStyle(.balanced)
         .onAppear {
@@ -667,6 +698,96 @@ private extension ContentView {
         ]
     }
 }
+
+#if os(iOS)
+private struct IOSGlobalPanCaptureInstaller: UIViewRepresentable {
+    let onChanged: (UIPanGestureRecognizer) -> Void
+    let onEnded: (UIPanGestureRecognizer) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onChanged: onChanged, onEnded: onEnded)
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+        context.coordinator.installIfNeeded(from: view)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.onChanged = onChanged
+        context.coordinator.onEnded = onEnded
+        context.coordinator.installIfNeeded(from: uiView)
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        coordinator.removeRecognizer()
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var onChanged: (UIPanGestureRecognizer) -> Void
+        var onEnded: (UIPanGestureRecognizer) -> Void
+
+        private weak var attachedView: UIView?
+        private var recognizer: UIPanGestureRecognizer?
+
+        init(
+            onChanged: @escaping (UIPanGestureRecognizer) -> Void,
+            onEnded: @escaping (UIPanGestureRecognizer) -> Void
+        ) {
+            self.onChanged = onChanged
+            self.onEnded = onEnded
+        }
+
+        func installIfNeeded(from hostView: UIView) {
+            guard let targetView = hostView.window else {
+                return
+            }
+            guard attachedView !== targetView else {
+                return
+            }
+
+            removeRecognizer()
+
+            let panRecognizer = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+            panRecognizer.cancelsTouchesInView = false
+            panRecognizer.delaysTouchesBegan = false
+            panRecognizer.delaysTouchesEnded = false
+            panRecognizer.delegate = self
+
+            targetView.addGestureRecognizer(panRecognizer)
+            recognizer = panRecognizer
+            attachedView = targetView
+        }
+
+        func removeRecognizer() {
+            if let recognizer, let attachedView {
+                attachedView.removeGestureRecognizer(recognizer)
+            }
+            recognizer = nil
+            attachedView = nil
+        }
+
+        @objc
+        private func handlePan(_ recognizer: UIPanGestureRecognizer) {
+            switch recognizer.state {
+            case .began, .changed:
+                onChanged(recognizer)
+            case .ended, .cancelled, .failed:
+                onEnded(recognizer)
+            default:
+                break
+            }
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            true
+        }
+    }
+}
+#endif
 
 private enum AppTab: Hashable {
     case chat

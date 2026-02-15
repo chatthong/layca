@@ -70,12 +70,12 @@ Documents/
 - **iOS/iPadOS shell:** custom swipeable drawer sidebar (`Layca Chat`, `Setting`, `Recent Chats`) with fixed top actions (`Search`, `New Chat`) and a chat-header sidebar toggle button.
 - **visionOS/tvOS shell:** `TabView` with `Layca Chat`, `Library`, `Setting`, plus a dedicated `New Chat` action tab.
 - **iOS-family visual style:** plain `systemBackground` chat/settings canvas + native material cards; iOS/iPadOS sidebar uses a dark workspace surface with material controls.
-- **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Layca Chat`, `Library`, `Setting`) and no top segmented workspace picker.
-- **Launch behavior:** app always opens in a fresh draft room on both iOS-family and macOS; existing saved chats remain available in Library/Recent Chats.
+- **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Layca Chat`, `Setting`) and a `Recent Chats` list.
+- **Launch behavior:** app always opens in a fresh draft room on both iOS-family and macOS; existing saved chats remain available in `Recent Chats` (and `Library` on visionOS/tvOS).
 - **Chat workspace:** Recorder card + live transcript bubbles.
-- **Header/session actions:** macOS chat detail toolbar uses native SwiftUI `ToolbarItem`/`ToolbarItemGroup` actions: `Share`, grouped `Rename` + `New Chat`, and `Info` (opens `Setting`).
+- **Header/session actions:** iOS chat header keeps sidebar toggle before chat title, with share on trailing side; macOS chat detail keeps inline title rename + trailing `Share`.
 - **Settings workspace:** Hours credit, language focus, context keywords, Advanced Zone (GPU/CoreML/model profile), iCloud toggle, purchase restore, and macOS microphone access controls.
-- **Library workspace:** Session switcher with long-press/right-click action group (`Rename`, `Share this chat`, `Delete`) on session rows.
+- **Library workspace:** Session switcher with long-press/right-click action group (`Rename`, `Share this chat`, `Delete`) on session rows (where Library is present).
 - **macOS recent chats sidebar:** Same long-press/right-click action group (`Rename`, `Share this chat`, `Delete`).
 - **Export:** Separate sheet; Notepad-style formatting is export-only.
 
@@ -165,13 +165,16 @@ Documents/
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
 - Chat bubble tap plays that message range from `session_full.m4a`.
 - iOS/iPadOS uses a custom drawer workspace shell; macOS uses dedicated split workspace views (sidebar/detail).
-- macOS chat detail toolbar uses native SwiftUI `ToolbarItem` + `ToolbarItemGroup` composition with `.toolbar(removing: .title)`.
+- macOS chat detail toolbar keeps inline title-rename + trailing `Share`; `New Chat` and `Setting` are sidebar actions.
 - iOS chat header uses leading controls with sidebar toggle before chat title and a trailing share action.
+- iOS drawer opens via right-swipe from anywhere on the screen (including over chat bubbles), not only from the left edge.
 - Inline chat-title edit mode on iOS and macOS hides non-title header controls and cancels on outside interaction (content/sidebar/tap-away focus loss).
+- During live recording, transcript updates do not force-scroll; a `New message` button appears. Tapping it jumps to bottom and enables follow mode until user scrolls away.
 - iOS-family cards and sheets use plain `systemBackground` + native material fills to follow automatic light/dark switching without custom liquid-glass wrappers.
 - Recorder accessory glass uses red-tinted style while recording (`.tint(.red.opacity(0.12))`) on chat controls.
 - Library rows now support long-press action menu: `Rename`, `Share this chat`, `Delete`.
 - macOS sidebar `Recent Chats` rows now support the same action menu: `Rename`, `Share this chat`, `Delete`.
+- macOS split detail uses a minimum width guard to prevent over-compressed chat layout.
 - macOS settings includes live microphone permission status and actions (`Allow Microphone Access` / `Open System Settings`).
 - macOS recorder error state provides direct deep-link action to System Settings when microphone permission is denied.
 - Chat bubble long-press opens actions for:

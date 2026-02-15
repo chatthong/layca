@@ -2,6 +2,20 @@
 
 ## Completed In This Chat
 
+### iOS Drawer Swipe Capture Reliability
+- `App/ContentView.swift`
+- Replaced edge-only/parent-only swipe dependency with global iOS pan capture wiring.
+- Sidebar can now open by right-swiping from anywhere in the app detail surface, including over chat bubble/dialog regions.
+- Keeps horizontal-intent filtering and existing close behavior (`drag left` / dimmed-area tap).
+
+### Chat Follow Mode + macOS Width Guard
+- `Features/Chat/ChatTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `App/ContentView.swift`
+- Live transcript updates during recording no longer force auto-scroll by default.
+- `New message` button appears for pending updates; tapping it scrolls to bottom and enables follow mode.
+- Follow mode remains active until user scrolls away from bottom.
+- macOS split detail column now enforces a minimum width guard to keep transcript layout readable during resize.
+- macOS chat-title edit form uses a compact width to prevent oversized toolbar capsules.
+
 ### Navigation + Draft Mode Behavior Alignment (iOS + macOS)
 - `App/ContentView.swift`, `App/AppBackend.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - Updated naming to `Layca Chat` in iOS/iPadOS workspace and macOS workspace.
@@ -16,7 +30,7 @@
 ### iOS Drawer Sidebar + Recording Glass Alignment
 - `App/ContentView.swift`, `Views/Components/IOSWorkspaceSidebarView.swift`, `Features/Chat/ChatTabView.swift`
 - Replaced iOS/iPadOS tab-first shell with a swipeable drawer sidebar.
-- Moved drawer trigger into chat header leading controls (before chat title) + kept edge-swipe gesture open/close behavior.
+- Moved drawer trigger into chat header leading controls (before chat title).
 - Sidebar top area (`Search` + `New Chat`) is fixed; `Workspace` + `Recent Chats` are scrollable.
 - `Recent Chats` rows use the same action group (`Rename`, `Share this chat`, `Delete`).
 - Recording accessory glass now switches to red tint while recording to match macOS behavior.
@@ -139,11 +153,8 @@
 ### macOS Toolbar Style Alignment (Native Composition)
 - `App/ContentView.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - Removed top toolbar segmented workspace picker from macOS root split view.
-- Moved top-right chat actions to Chat detail toolbar using native SwiftUI composition:
-  - `ToolbarItem` for `Share`
-  - `ToolbarItemGroup` for `Rename` + `New Chat`
-  - `ToolbarItem` for `Info` (switches to `Setting`)
-- Applied `.toolbar(removing: .title)` in Chat detail for a clean native toolbar layout.
+- Current native composition keeps inline chat-title rename + trailing `Share` in Chat detail.
+- `New Chat` and `Setting` are now sidebar-driven actions on macOS.
 
 ### Native Theme + Surface Simplification
 - `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`, `Features/Library/LibraryTabView.swift`, `Features/Settings/SettingsTabView.swift`, `Views/Components/TranscriptBubbleOptionButton.swift`, `Views/Shared/View+PlatformCompatibility.swift`

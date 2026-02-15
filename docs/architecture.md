@@ -40,13 +40,14 @@
 - Pipeline internals are production-style backend services.
 - Audio capture uses real `AVAudioEngine`.
 - App shell is platform-aware:
-  - iOS/iPadOS uses a custom drawer sidebar (`iosDrawerLayout`) with edge-swipe open/close and a chat-header sidebar toggle.
+  - iOS/iPadOS uses a custom drawer sidebar (`iosDrawerLayout`) with global right-swipe open/left-swipe close and a chat-header sidebar toggle.
+  - iOS sidebar swipe-open is recognized from anywhere on the detail surface, including transcript bubble regions.
   - iOS/iPadOS sidebar contains fixed top actions (`Search`, `New Chat`), workspace rows (`Layca Chat`, `Setting`), and a scrollable `Recent Chats` list.
   - visionOS/tvOS currently use `TabView`/`TabSection` fallback with a `New Chat` action tab.
   - iOS-family uses plain `systemBackground` for chat/settings surfaces with native material cards and automatic device light/dark appearance.
   - macOS uses `NavigationSplitView` with sidebar workspace sections and dedicated detail views.
-  - macOS sidebar workspace section label is `Layca Chat`.
-  - macOS Chat detail toolbar uses native `ToolbarItem` + `ToolbarItemGroup` controls (`Share`, grouped `Rename` + `New Chat`, and `Info` to open `Setting`).
+  - macOS sidebar workspace sections are `Layca Chat` and `Setting`, with `Recent Chats` below.
+  - macOS Chat detail toolbar uses inline title rename plus trailing `Share`.
 - VAD uses native CoreML Silero (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) with bundled offline model.
 - Speaker branch uses native CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) with bundled offline model.
 - Speaker fallback now uses a multi-feature signature (amplitude + zero-crossing-rate + RMS energy) with tunable threshold when CoreML speaker model is unavailable.
@@ -74,6 +75,8 @@
 - First recording from draft creates a new persisted session title (`chat N`).
 - iOS chat header keeps sidebar toggle before chat title and keeps share action on trailing side.
 - Inline chat-title editing on iOS/macOS hides other header actions and cancels on outside interaction (tap-away/focus loss/sidebar tap).
+- During active recording, transcript updates do not auto-follow by default; `New message` appears until user opts into follow mode by tapping it.
+- Follow mode stays active until user scrolls away from bottom, then returns to button-first behavior for later messages.
 - Recorder timer shows persisted accumulated duration for saved sessions, resumes from that offset when recording again, and shows `00:00:00` in draft mode.
 - Recorder accessory glass tint switches to red while recording (`.tint(.red.opacity(0.12))`).
 - "Transcribe Again" is a submenu (`Transcribe Auto`, plus `Transcribe in <Focus Language>` entries for selected focus languages).
@@ -82,8 +85,9 @@
 - Manual low-confidence retries keep existing text silently (no red warning banner).
 - `SessionStore` persists both `session.json` (session metadata) and `segments.json` (row snapshots) and reloads from disk at startup.
 - `AppSettingsStore` persists user setting values and compatibility metadata (`activeSessionID`, `chatCounter`) through relaunch; startup still forces draft mode.
-- Library session rows (iOS-family + macOS library workspace) support `Rename`, `Share this chat`, `Delete` via context menu.
+- Session rows support `Rename`, `Share this chat`, `Delete` via context menu (Library where present, and macOS `Recent Chats` sidebar).
 - macOS sidebar `Recent Chats` rows support the same context menu action group.
+- macOS detail pane keeps a minimum width guard to preserve chat readability when resizing.
 - macOS recording permission uses `AVAudioApplication.requestRecordPermission`.
 - macOS target is sandboxed and requires audio-input entitlement to appear in Privacy > Microphone settings.
 

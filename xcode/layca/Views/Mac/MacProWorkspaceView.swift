@@ -259,6 +259,7 @@ struct MacChatWorkspaceView: View {
     @State private var isTranscriptNearBottom = true
     @State private var isTitleHovered = false
     @State private var hasPendingNewMessage = false
+    @State private var isAutoScrollModeEnabled = false
 
     private let transcriptBottomAnchorID = "layca.mac.transcript.bottom"
     private let recordingSpectrumRowID = "layca.mac.recording.spectrum.row"
@@ -398,7 +399,7 @@ struct MacChatWorkspaceView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .frame(minWidth: 320, idealWidth: 420, maxWidth: 520, alignment: .leading)
+        .frame(minWidth: 320, idealWidth: 320, maxWidth: 320, alignment: .leading)
     }
 
     private var recorderBottomBar: some View {
@@ -540,9 +541,10 @@ struct MacChatWorkspaceView: View {
                     }
                 }
 
-                if hasPendingNewMessage && !isTranscriptNearBottom {
+                if hasPendingNewMessage {
                     Button {
                         scrollToTranscriptBottom(using: proxy, animated: true)
+                        isAutoScrollModeEnabled = true
                         hasPendingNewMessage = false
                     } label: {
                         Label("New message", systemImage: "arrow.down.circle.fill")
@@ -565,21 +567,13 @@ struct MacChatWorkspaceView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .animation(.easeInOut(duration: 0.18), value: hasPendingNewMessage && !isTranscriptNearBottom)
-            .onAppear {
-                guard isRecording else {
-                    return
-                }
-                DispatchQueue.main.async {
-                    scrollToTranscriptBottom(using: proxy, animated: false)
-                }
-            }
+            .animation(.easeInOut(duration: 0.18), value: hasPendingNewMessage)
             .onChange(of: transcriptUpdateSignature) { _, _ in
                 handleTranscriptUpdate(using: proxy)
             }
             .onChange(of: isTranscriptNearBottom) { _, nearBottom in
-                if nearBottom {
-                    hasPendingNewMessage = false
+                if !nearBottom {
+                    isAutoScrollModeEnabled = false
                 }
             }
         }
@@ -725,10 +719,11 @@ struct MacChatWorkspaceView: View {
     private func handleTranscriptUpdate(using proxy: ScrollViewProxy) {
         guard isRecording else {
             hasPendingNewMessage = false
+            isAutoScrollModeEnabled = false
             return
         }
 
-        if isTranscriptNearBottom {
+        if isAutoScrollModeEnabled {
             scrollToTranscriptBottom(using: proxy, animated: true)
             hasPendingNewMessage = false
         } else {

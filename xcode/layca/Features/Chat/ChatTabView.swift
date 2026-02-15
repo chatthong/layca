@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ChatTabView: View {
     private let topToolbarControlSize: CGFloat = 44
+    private let titleEditorMaxWidth: CGFloat = 456
 
     let isRecording: Bool
     let recordingTimeText: String
@@ -35,6 +36,7 @@ struct ChatTabView: View {
     @FocusState private var isTitleFieldFocused: Bool
     @State private var isUserNearBottom = true
     @State private var hasPendingNewMessage = false
+    @State private var isAutoScrollModeEnabled = false
     @State private var scrollViewportHeight: CGFloat = 0
     @State private var scrollContentBottom: CGFloat = 0
 
@@ -133,7 +135,7 @@ struct ChatTabView: View {
                         ToolbarItem(placement: .topBarLeading) {
                             if isEditingTitle {
                                 sessionTitleControl
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .frame(maxWidth: titleEditorMaxWidth, alignment: .leading)
                             } else {
                                 sessionTitleControl
                                     .fixedSize()
@@ -203,9 +205,10 @@ struct ChatTabView: View {
                     transcriptScrollView
                 }
 
-                if hasPendingNewMessage && !isUserNearBottom {
+                if hasPendingNewMessage {
                     newMessageButton {
                         scrollToTranscriptBottom(using: proxy, animated: true)
+                        isAutoScrollModeEnabled = true
                         hasPendingNewMessage = false
                     }
                     .padding(.trailing, 20)
@@ -221,21 +224,13 @@ struct ChatTabView: View {
                         }
                 }
             }
-            .animation(.easeInOut(duration: 0.18), value: hasPendingNewMessage && !isUserNearBottom)
-            .onAppear {
-                guard isRecording else {
-                    return
-                }
-                DispatchQueue.main.async {
-                    scrollToTranscriptBottom(using: proxy, animated: false)
-                }
-            }
+            .animation(.easeInOut(duration: 0.18), value: hasPendingNewMessage)
             .onChange(of: transcriptUpdateSignature) { _, _ in
                 handleTranscriptUpdate(using: proxy)
             }
             .onChange(of: isUserNearBottom) { _, nearBottom in
-                if nearBottom {
-                    hasPendingNewMessage = false
+                if !nearBottom {
+                    isAutoScrollModeEnabled = false
                 }
             }
             .onPreferenceChange(ChatTranscriptViewportHeightPreferenceKey.self) { height in
@@ -394,7 +389,7 @@ struct ChatTabView: View {
 #if os(macOS)
                 .background(.thinMaterial, in: Capsule(style: .continuous))
 #elseif os(iOS)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: titleEditorMaxWidth, alignment: .leading)
                 .frame(height: topToolbarControlSize)
                 .glassEffect(.regular, in: Capsule(style: .continuous))
 #endif
@@ -886,10 +881,11 @@ struct ChatTabView: View {
     private func handleTranscriptUpdate(using proxy: ScrollViewProxy) {
         guard isRecording else {
             hasPendingNewMessage = false
+            isAutoScrollModeEnabled = false
             return
         }
 
-        if isUserNearBottom {
+        if isAutoScrollModeEnabled {
             scrollToTranscriptBottom(using: proxy, animated: true)
             hasPendingNewMessage = false
         } else {

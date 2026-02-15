@@ -7,7 +7,7 @@
 ## iOS/iPadOS Layout
 - App shell uses a custom drawer sidebar overlay (`iosDrawerLayout`) instead of bottom tabs.
 - Sidebar open/close interactions:
-  - swipe from left edge to open
+  - swipe right from anywhere in detail content to open (including over chat bubbles)
   - drag left to close
   - tap dimmed detail area to close
   - chat-header sidebar toggle button opens/closes the drawer (positioned before chat title)
@@ -29,6 +29,7 @@
 - Drawer state is controlled by:
   - `isIOSSidebarPresented`
   - `iosSidebarDragOffset`
+- Drawer pan capture uses an iOS `UIPanGestureRecognizer` installer so swipe-open is recognized across subviews (including bubble/button-heavy chat content).
 - Launch behavior opens draft mode by default (`activeSessionID == nil`).
 - `New Chat` action in sidebar resets UI to draft and keeps focus on `Layca Chat`.
 
@@ -45,7 +46,6 @@
 - App shell uses `NavigationSplitView`.
 - Sidebar has workspace sections:
   - `Layca Chat`
-  - `Library`
   - `Setting`
 - Sidebar also contains:
   - `Recent Chats` list
@@ -54,10 +54,9 @@
   - `Rename`
   - `Share this chat`
   - `Delete`
-- Toolbar uses native SwiftUI toolbar items on Chat detail:
-  - `Share` (`ToolbarItem`)
-  - grouped `Rename` + `New Chat` (`ToolbarItemGroup`)
-  - `Info` (`ToolbarItem`, opens `Setting`)
+- Chat detail toolbar keeps:
+  - inline chat-title badge (tap to rename)
+  - trailing `Share` action
 
 ## Cross-platform UX Notes
 - App launch starts in draft mode on both iOS-family and macOS.
@@ -66,7 +65,7 @@
   - returns focus to `Layca Chat`
   - persisted session is created only when recording starts from draft
 - iOS/iPadOS uses `Recent Chats` in the drawer as the primary session switcher.
-- macOS keeps both workspace `Library` and `Recent Chats` in sidebar.
+- macOS uses `Recent Chats` in sidebar as the saved-session switcher (no separate Library workspace).
 - `Setting` currently contains:
   - Hours credit
   - Language focus
@@ -86,13 +85,16 @@
 - While chat-title editing is active (iOS + macOS):
   - non-title header actions are hidden
   - tapping outside the edit form (content/sidebar/toolbar focus-loss path) cancels editing
-- Renaming from Library/sidebar context menu updates the same persisted session title used by Chat header.
+- Renaming from session context menu (Library where available or sidebar `Recent Chats`) updates the same persisted session title used by Chat header.
 - `Export` opens from a header/toolbar action instead of a tab.
 - Recorder timer behavior:
   - draft mode shows `00:00:00`
   - saved chats show accumulated prior recorded duration
   - continuing recording on a saved chat resumes from previous duration
 - Recorder accessory glass tint switches to red while recording (`.tint(.red.opacity(0.12))`).
+- During active recording, new transcript updates do not auto-scroll by default.
+- `New message` button appears for pending updates; tapping it jumps to bottom and enables follow mode.
+- Follow mode stays enabled until user scrolls away from bottom.
 - Transcript bubbles are tappable for per-message playback only when recording is stopped.
 - During live recording, new rows may temporarily show `Message queued for automatic transcription...` until queue processing finishes.
 - Long-press on a transcript bubble opens actions for:
@@ -106,6 +108,7 @@
 - Forced `TH` / `EN` retries validate script output and retry once without prompt before keeping existing text.
 - `Transcribe Again` execution is currently gated while recording and shows `Stop recording before running Transcribe Again.`.
 - Chunk transcription runs automatically in queue order and keeps original spoken language (auto-detect + no translation).
+- macOS detail pane has a minimum width guard to keep chat layout readable while resizing.
 
 ## Why This Design
 - Preserves native behavior and consistency with Apple navigation guidance on each platform.
