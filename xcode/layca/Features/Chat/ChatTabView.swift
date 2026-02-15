@@ -149,7 +149,7 @@ struct ChatTabView: View {
                                 if let onSidebarToggle, !isEditingTitle {
                                     Button(action: onSidebarToggle) {
                                         Image(systemName: "line.3.horizontal")
-                                            .font(.system(size: 14, weight: .semibold))
+                                            .font(.system(size: 16, weight: .semibold))
                                             .frame(width: topToolbarGroupedIconSize - 4, height: topToolbarGroupedIconSize - 4)
                                     }
                                     .buttonStyle(.glass)
@@ -376,7 +376,7 @@ struct ChatTabView: View {
     private var topTrailingToolbarControls: some View {
         ControlGroup {
             Button(action: onPlayFromStartTap) {
-                Image(systemName: "play.fill")
+                Label("Play", systemImage: "play.fill")
                     .font(.system(size: 16, weight: .semibold))
                     .frame(width: topToolbarGroupedIconSize - 4, height: topToolbarGroupedIconSize - 4)
             }
@@ -385,11 +385,13 @@ struct ChatTabView: View {
             Menu {
                 topTrailingMenuActions
             } label: {
-                Image(systemName: "ellipsis")
+                Label("More", systemImage: "ellipsis")
                     .font(.system(size: 16, weight: .semibold))
                     .frame(width: topToolbarGroupedIconSize - 4, height: topToolbarGroupedIconSize - 4)
             }
-            .disabled(isDraftSession)
+        } label: {
+            Label("More", systemImage: "ellipsis")
+                .labelStyle(.iconOnly)
         }
         .controlSize(.regular)
     }
