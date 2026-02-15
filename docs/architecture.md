@@ -47,7 +47,7 @@
   - iOS-family uses plain `systemBackground` for chat/settings surfaces with native material cards and automatic device light/dark appearance.
   - macOS uses `NavigationSplitView` with sidebar workspace sections and dedicated detail views.
   - macOS sidebar workspace sections are `Layca Chat` and `Setting`, with `Recent Chats` below.
-  - macOS Chat detail toolbar uses inline title rename plus trailing `Share`.
+  - macOS Chat detail toolbar uses inline title rename plus a trailing native control group (`Play` + `More`).
 - VAD uses native CoreML Silero (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) with bundled offline model.
 - Speaker branch uses native CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) with bundled offline model.
 - Speaker fallback now uses a multi-feature signature (amplitude + zero-crossing-rate + RMS energy) with tunable threshold when CoreML speaker model is unavailable.
@@ -74,7 +74,7 @@
 - Chunk playback is gated off while recording to avoid audio-session conflicts.
 - `startNewChat()` is draft-reset behavior (does not create a persisted session until recording starts).
 - First recording from draft creates a new persisted session title (`chat N`).
-- iOS chat header keeps sidebar toggle before chat title and keeps share action on trailing side.
+- iOS chat header keeps sidebar toggle before chat title and uses a trailing native control group (`Play` + `More`).
 - iOS non-edit chat-title pill width is content-aware (auto-size by title length within safe min/max bounds) and uses tail truncation only for long titles.
 - Inline chat-title editing on iOS/macOS hides other header actions and cancels on outside interaction (tap-away/focus loss/sidebar tap).
 - During active recording, transcript updates do not auto-follow by default; `New message` appears until user opts into follow mode by tapping it.

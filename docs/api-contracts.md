@@ -47,7 +47,7 @@
 - Used by session-list `Share this chat` actions (Library where present and sidebar `Recent Chats`).
 
 ## macOS Workspace UI Actions (View-level Wiring)
-- Chat-detail toolbar `Share` action presents export sheet (`isExportPresented`) from `ContentView`.
+- Chat-detail toolbar `More` menu `Share` action presents export sheet (`isExportPresented`) from `ContentView`.
 - Sidebar toolbar `New Chat` action calls `startNewChat()` (via `startNewChatAndReturnToChat` in `ContentView`).
 - Sidebar workspace `Setting` row switches workspace to settings.
 - Sidebar workspace `Layca Chat` action routes through draft-open behavior in `ContentView` (`openLaycaChatWorkspace`).

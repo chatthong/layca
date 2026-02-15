@@ -58,7 +58,7 @@
 
 ### Chat Header Rename UX Hardening
 - `Features/Chat/ChatTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`, `Views/Components/IOSWorkspaceSidebarView.swift`
-- iOS chat header control order is aligned as sidebar toggle first, then chat title, with share on trailing side.
+- iOS chat header control order is aligned as sidebar toggle first, then chat title, with a trailing native control group (`Play` + `More`).
 - During chat-title inline edit, non-title header controls are hidden to avoid toolbar collapse/overlap.
 - Tapping outside the title edit form now cancels editing on both iOS and macOS (content area, sidebar interactions, and focus-loss path).
 
@@ -175,7 +175,7 @@
 ### macOS Toolbar Style Alignment (Native Composition)
 - `App/ContentView.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - Removed top toolbar segmented workspace picker from macOS root split view.
-- Current native composition keeps inline chat-title rename + trailing `Share` in Chat detail.
+- Current native composition keeps inline chat-title rename + trailing native control group (`Play` + `More`) in Chat detail.
 - `New Chat` and `Setting` are now sidebar-driven actions on macOS.
 
 ### Native Theme + Surface Simplification

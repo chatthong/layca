@@ -3,9 +3,9 @@ import SwiftUI
 struct ChatTabView: View {
     private let topToolbarControlSize: CGFloat = 44
     private let titleEditorMaxWidth: CGFloat = 456
-    private let titleDisplayWidthWithSidebar: CGFloat = 210
-    private let titleDisplayWidthWithoutSidebar: CGFloat = 250
-    private let titleDisplayMinWidth: CGFloat = 130
+    private let titleDisplayWidthWithSidebar: CGFloat = 198
+    private let titleDisplayWidthWithoutSidebar: CGFloat = 238
+    private let titleDisplayMinWidth: CGFloat = 116
     private let titleDisplayBaseWidth: CGFloat = 56
     private let titleDisplayCharacterWidth: CGFloat = 9
     private let topToolbarGroupedIconSize: CGFloat = 36
@@ -145,15 +145,15 @@ struct ChatTabView: View {
                 .toolbar {
                     if showsTopToolbar {
                         ToolbarItem(placement: .topBarLeading) {
-                            HStack(spacing: 10) {
+                            HStack(spacing: 4) {
                                 if let onSidebarToggle, !isEditingTitle {
                                     Button(action: onSidebarToggle) {
                                         Image(systemName: "line.3.horizontal")
-                                            .font(.system(size: 17, weight: .semibold))
-                                            .frame(width: topToolbarControlSize, height: topToolbarControlSize)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .frame(width: topToolbarGroupedIconSize - 4, height: topToolbarGroupedIconSize - 4)
                                     }
-                                    .buttonStyle(.plain)
-                                    .glassEffect(.regular, in: Circle())
+                                    .buttonStyle(.glass)
+                                    .buttonBorderShape(.circle)
                                     .accessibilityLabel("Toggle Sidebar")
                                 }
 
@@ -165,11 +165,13 @@ struct ChatTabView: View {
                                         .layoutPriority(1)
                                 }
                             }
+                            .padding(.leading, -6)
                         }
                         .sharedBackgroundVisibility(.hidden)
                         if !isEditingTitle {
                             ToolbarItem(placement: .topBarTrailing) {
                                 topTrailingToolbarControls
+                                    .padding(.trailing, -6)
                             }
                             .sharedBackgroundVisibility(.hidden)
                         }
@@ -376,38 +378,44 @@ struct ChatTabView: View {
             Button(action: onPlayFromStartTap) {
                 Image(systemName: "play.fill")
                     .font(.system(size: 16, weight: .semibold))
-                    .frame(width: topToolbarGroupedIconSize, height: topToolbarGroupedIconSize)
+                    .frame(width: topToolbarGroupedIconSize - 4, height: topToolbarGroupedIconSize - 4)
             }
             .disabled(!canPlaySessionFromStart)
 
             Menu {
-                Button {
-                    onExportTap()
-                } label: {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-
-                Button {
-                    beginTitleRename()
-                } label: {
-                    Label("Rename", systemImage: "pencil")
-                }
-                .disabled(isDraftSession)
-
-                Button(role: .destructive) {
-                    isDeleteDialogPresented = true
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-                .disabled(isDraftSession)
+                topTrailingMenuActions
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 16, weight: .semibold))
-                    .frame(width: topToolbarGroupedIconSize, height: topToolbarGroupedIconSize)
+                    .frame(width: topToolbarGroupedIconSize - 4, height: topToolbarGroupedIconSize - 4)
             }
             .disabled(isDraftSession)
         }
         .controlSize(.regular)
+    }
+
+    @ViewBuilder
+    private var topTrailingMenuActions: some View {
+        Button {
+            onExportTap()
+        } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+        .disabled(isDraftSession)
+
+        Button {
+            beginTitleRename()
+        } label: {
+            Label("Rename", systemImage: "pencil")
+        }
+        .disabled(isDraftSession)
+
+        Button(role: .destructive) {
+            isDeleteDialogPresented = true
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+        .disabled(isDraftSession)
     }
 
     private var sessionTitleControl: some View {
@@ -466,18 +474,27 @@ struct ChatTabView: View {
                             .truncationMode(.tail)
                             .layoutPriority(1)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+#if os(macOS)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+#elseif os(iOS)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+#endif
 #if os(macOS)
                     .background(.ultraThinMaterial, in: Capsule(style: .continuous))
                     .contentShape(Capsule(style: .continuous))
 #elseif os(iOS)
                     .frame(width: resolvedTitleDisplayWidth, alignment: .leading)
-                    .frame(height: topToolbarControlSize)
-                    .glassEffect(.regular, in: Capsule(style: .continuous))
+                    .frame(height: topToolbarGroupedIconSize - 5)
 #endif
                 }
+#if os(macOS)
                 .buttonStyle(ScaleButtonStyle())
+#elseif os(iOS)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+#endif
             }
         }
         .font(.subheadline)

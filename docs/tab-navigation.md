@@ -56,7 +56,7 @@
   - `Delete`
 - Chat detail toolbar keeps:
   - inline chat-title badge (tap to rename)
-  - trailing `Share` action
+  - trailing native control group (`Play` + `More`, where `More` includes `Share`, `Rename`, `Delete`)
 
 ## Cross-platform UX Notes
 - App launch starts in draft mode on both iOS-family and macOS.

@@ -8,7 +8,7 @@
 - Applies only to transcript export output.
 - Does not add an in-app Notepad tab or editor mode.
 - Available from chat header/toolbar export action on both iOS-family and macOS layouts.
-- On macOS, export is triggered from the Chat-detail top-right `Share` toolbar control.
+- On macOS, export is triggered from the Chat-detail top-right `More` menu (`Share` action).
 
 ## Style Presets
 1. `notepadMinutes`
