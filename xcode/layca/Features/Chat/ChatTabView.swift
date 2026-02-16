@@ -169,25 +169,11 @@ struct ChatTabView: View {
                         }
                         .sharedBackgroundVisibility(.hidden)
                         if !isEditingTitle {
-#if os(iOS)
-                            ToolbarItem(placement: .topBarTrailing) {
-                                topTrailingPlayToolbarControl
-                                    .padding(.trailing, -2)
-                            }
-                            .sharedBackgroundVisibility(.hidden)
-
-                            ToolbarItem(placement: .topBarTrailing) {
-                                topTrailingSessionActionsToolbarControl
-                                    .padding(.trailing, -6)
-                            }
-                            .sharedBackgroundVisibility(.hidden)
-#else
                             ToolbarItem(placement: .topBarTrailing) {
                                 topTrailingToolbarControls
                                     .padding(.trailing, -6)
                             }
                             .sharedBackgroundVisibility(.hidden)
-#endif
                         }
                     }
                 }
@@ -389,10 +375,20 @@ struct ChatTabView: View {
 
     private var topTrailingToolbarControls: some View {
 #if os(iOS)
-        HStack(spacing: 6) {
-            topTrailingPlayToolbarControl
-            topTrailingSessionActionsToolbarControl
+        ControlGroup {
+            Button(action: onPlayFromStartTap) {
+                topToolbarPlayIconLabel
+            }
+            .disabled(!canPlaySessionFromStart)
+
+            Menu {
+                topTrailingMenuActions
+            } label: {
+                topToolbarMoreMenuIconLabel
+            }
+            .menuIndicator(.hidden)
         }
+        .controlSize(.regular)
         .fixedSize(horizontal: true, vertical: false)
 #else
         ControlGroup {
