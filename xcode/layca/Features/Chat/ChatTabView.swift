@@ -169,11 +169,25 @@ struct ChatTabView: View {
                         }
                         .sharedBackgroundVisibility(.hidden)
                         if !isEditingTitle {
+#if os(iOS)
+                            ToolbarItem(placement: .topBarTrailing) {
+                                topTrailingPlayToolbarControl
+                                    .padding(.trailing, -2)
+                            }
+                            .sharedBackgroundVisibility(.hidden)
+
+                            ToolbarItem(placement: .topBarTrailing) {
+                                topTrailingSessionActionsToolbarControl
+                                    .padding(.trailing, -6)
+                            }
+                            .sharedBackgroundVisibility(.hidden)
+#else
                             ToolbarItem(placement: .topBarTrailing) {
                                 topTrailingToolbarControls
                                     .padding(.trailing, -6)
                             }
                             .sharedBackgroundVisibility(.hidden)
+#endif
                         }
                     }
                 }
@@ -374,6 +388,13 @@ struct ChatTabView: View {
     }
 
     private var topTrailingToolbarControls: some View {
+#if os(iOS)
+        HStack(spacing: 6) {
+            topTrailingPlayToolbarControl
+            topTrailingSessionActionsToolbarControl
+        }
+        .fixedSize(horizontal: true, vertical: false)
+#else
         ControlGroup {
             Button(action: onPlayFromStartTap) {
                 topToolbarPlayIconLabel
@@ -390,13 +411,61 @@ struct ChatTabView: View {
             topToolbarMergedMoreIconLabel
         }
         .controlSize(.regular)
-#if os(iOS)
-        .fixedSize(horizontal: true, vertical: false)
 #endif
+    }
+
+    private var topTrailingPlayToolbarControl: some View {
+        ControlGroup {
+            Button(action: onPlayFromStartTap) {
+                topToolbarPlayIconLabel
+            }
+            .disabled(!canPlaySessionFromStart)
+        }
+        .controlSize(.regular)
+    }
+
+    private var topTrailingSessionActionsToolbarControl: some View {
+        ControlGroup {
+            Button(action: onExportTap) {
+                topToolbarShareIconLabel
+            }
+            .disabled(isDraftSession)
+
+            Button(action: beginTitleRename) {
+                topToolbarRenameIconLabel
+            }
+            .disabled(isDraftSession)
+
+            Button {
+                isDeleteDialogPresented = true
+            } label: {
+                topToolbarDeleteIconLabel
+            }
+            .disabled(isDraftSession)
+        }
+        .controlSize(.regular)
     }
 
     private var topToolbarPlayIconLabel: some View {
         Label("Play", systemImage: "play.fill")
+            .labelStyle(.iconOnly)
+            .font(.system(size: 12, weight: .semibold))
+    }
+
+    private var topToolbarShareIconLabel: some View {
+        Label("Share", systemImage: "square.and.arrow.up")
+            .labelStyle(.iconOnly)
+            .font(.system(size: 12, weight: .semibold))
+    }
+
+    private var topToolbarRenameIconLabel: some View {
+        Label("Rename", systemImage: "pencil")
+            .labelStyle(.iconOnly)
+            .font(.system(size: 12, weight: .semibold))
+    }
+
+    private var topToolbarDeleteIconLabel: some View {
+        Label("Delete", systemImage: "trash")
             .labelStyle(.iconOnly)
             .font(.system(size: 12, weight: .semibold))
     }
