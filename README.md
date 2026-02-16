@@ -73,7 +73,7 @@ Documents/
 - **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Layca Chat`, `Setting`) and a `Recent Chats` list.
 - **Launch behavior:** app always opens in a fresh draft room on both iOS-family and macOS; existing saved chats remain available in `Recent Chats` (and `Library` on visionOS/tvOS).
 - **Chat workspace:** Recorder card + live transcript bubbles.
-- **Header/session actions:** iOS chat header keeps sidebar toggle before chat title; both iOS and macOS use a trailing native control group (`Play` + `More`). The `More` menu includes `Share`, `Rename`, and `Delete`.
+- **Header/session actions:** iOS chat header keeps sidebar toggle before chat title; both iOS and macOS use a trailing native control group (`Play` + `More`). The `More` menu includes `Share`, `Rename`, and `Delete`. On compact iOS toolbar widths (for example long titles), the group collapses into a single overflow button with an explicit ellipsis icon while preserving the same actions.
 - **Settings workspace:** Hours credit, language focus, context keywords, Advanced Zone (GPU/CoreML/model profile + main timer `Time Display`), iCloud toggle, purchase restore, and macOS microphone access controls.
 - **Library workspace:** Session switcher with long-press/right-click action group (`Rename`, `Share this chat`, `Delete`) on session rows (where Library is present).
 - **macOS recent chats sidebar:** Same long-press/right-click action group (`Rename`, `Share this chat`, `Delete`).
@@ -175,6 +175,7 @@ Documents/
 - iOS/iPadOS uses a custom drawer workspace shell; macOS uses dedicated split workspace views (sidebar/detail).
 - macOS chat detail toolbar keeps inline title-rename plus a trailing native control group (`Play` + `More`); `New Chat` and `Setting` are sidebar actions.
 - iOS chat header uses leading controls with sidebar toggle before chat title and the same trailing native control group (`Play` + `More`).
+- On compact iOS toolbar widths, that trailing control group auto-collapses into one ellipsis overflow control (icon stays visible) that still exposes the same header actions.
 - iOS non-edit chat-title pill auto-sizes with title length (bounded min/max to prevent toolbar overflow) and uses tail truncation only when needed.
 - iOS drawer opens via right-swipe from anywhere on the screen (including over chat bubbles), not only from the left edge.
 - Inline chat-title edit mode on iOS and macOS hides non-title header controls and cancels on outside interaction (content/sidebar/tap-away focus loss).

@@ -2,6 +2,12 @@
 
 ## Completed In This Chat
 
+### iOS Compact Toolbar Overflow Icon Fix
+- `Features/Chat/ChatTabView.swift`
+- iOS top-right header actions remain a native grouped control (`Play` + `More`) when space is available.
+- In compact toolbar width (for example long chat title), the grouped control now collapses into a single visible ellipsis overflow control instead of appearing as an empty button.
+- Action/menu behavior is unchanged (`Play`, `Share`, `Rename`, `Delete`).
+
 ### iOS Chat-Title Pill Sizing + Truncation Tuning
 - `Features/Chat/ChatTabView.swift`
 - Kept chat title in leading header position on iOS (not center placement).

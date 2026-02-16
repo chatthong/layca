@@ -75,6 +75,7 @@
 - `startNewChat()` is draft-reset behavior (does not create a persisted session until recording starts).
 - First recording from draft creates a new persisted session title (`chat N`).
 - iOS chat header keeps sidebar toggle before chat title and uses a trailing native control group (`Play` + `More`).
+- On compact iOS toolbar widths, this group collapses into a single ellipsis overflow control while preserving the same actions.
 - iOS non-edit chat-title pill width is content-aware (auto-size by title length within safe min/max bounds) and uses tail truncation only for long titles.
 - Inline chat-title editing on iOS/macOS hides other header actions and cancels on outside interaction (tap-away/focus loss/sidebar tap).
 - During active recording, transcript updates do not auto-follow by default; `New message` appears until user opts into follow mode by tapping it.

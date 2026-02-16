@@ -57,6 +57,7 @@
 - iOS non-edit chat-title pill:
   - width auto-sizes from title text with min/max bounds
   - applies tail truncation only when the max width limit is reached
+- iOS trailing chat-header control group (`Play` + `More`) uses an explicit ellipsis overflow label in compact toolbar width so the collapsed control remains visibly tappable.
 - Recording transcript follow UX (iOS + macOS):
   - incoming rows during recording show `New message` (no forced auto-follow by default)
   - tapping `New message` jumps to bottom and enables follow mode

@@ -57,6 +57,7 @@
 - Chat detail toolbar keeps:
   - inline chat-title badge (tap to rename)
   - trailing native control group (`Play` + `More`, where `More` includes `Share`, `Rename`, `Delete`)
+  - on compact iOS widths, the trailing control group collapses into a single ellipsis overflow button with the same actions
 
 ## Cross-platform UX Notes
 - App launch starts in draft mode on both iOS-family and macOS.
