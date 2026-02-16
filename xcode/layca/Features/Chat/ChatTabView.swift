@@ -387,6 +387,8 @@ struct ChatTabView: View {
                 topToolbarMoreMenuIconLabel
             }
             .menuIndicator(.hidden)
+        } label: {
+            topToolbarMergedMoreIconLabel
         }
         .controlSize(.regular)
         .fixedSize(horizontal: true, vertical: false)
