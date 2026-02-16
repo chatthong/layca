@@ -19,7 +19,7 @@ enum MacWorkspaceSection: String, CaseIterable, Identifiable {
         case .chat:
             return "Layca Chat"
         case .setting:
-            return "Setting"
+            return "Settings"
         }
     }
 
@@ -1071,147 +1071,32 @@ struct MacSettingsWorkspaceView: View {
     let onRestorePurchases: () -> Void
     @State private var microphonePermission: AVAudioApplication.recordPermission = .undetermined
 
-    private var remainingHours: Double {
-        max(totalHours - usedHours, 0)
-    }
-
     var body: some View {
-        Form {
-            Section("Credits") {
-                LabeledContent("Remaining") {
-                    Text("\(remainingHours, specifier: "%.1f")h")
-                        .fontWeight(.semibold)
-                }
-                ProgressView(value: usedHours, total: totalHours)
-                HStack {
-                    Text("\(usedHours, specifier: "%.1f")h used")
-                    Spacer()
-                    Text("Total \(totalHours, specifier: "%.1f")h")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            Section("Microphone Access") {
-                HStack(spacing: 8) {
-                    Image(systemName: microphonePermissionStatusSymbol)
-                        .foregroundStyle(microphonePermissionStatusColor)
-                    Text(microphonePermissionStatusTitle)
-                        .font(.subheadline.weight(.semibold))
-                }
-
-                Text(microphonePermissionHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                switch microphonePermission {
-                case .granted:
-                    Button("Open System Settings") {
-                        _ = MacMicrophonePermissionSupport.openMicrophoneSettings()
-                    }
-                case .undetermined:
-                    Button("Allow Microphone Access") {
-                        requestMicrophoneAccess()
-                    }
-                    .buttonStyle(.borderedProminent)
-                case .denied:
-                    Button("Open System Settings") {
-                        _ = MacMicrophonePermissionSupport.openMicrophoneSettings()
-                    }
-                    .buttonStyle(.borderedProminent)
-                @unknown default:
-                    Button("Open System Settings") {
-                        _ = MacMicrophonePermissionSupport.openMicrophoneSettings()
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            }
-
-            Section("Language Focus") {
-                TextField("Search language (en, th, japanese...)", text: $languageSearchText)
-                    .textFieldStyle(.roundedBorder)
-                    .multilineTextAlignment(.leading)
-
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(groupedFocusLanguages) { group in
-                            Text(group.region.rawValue)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 4)
-
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 8)], spacing: 8) {
-                                ForEach(group.languages, id: \.id) { language in
-                                    languageChip(for: language)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                .frame(maxHeight: 300)
-            }
-
-            Section("Cloud & Purchases") {
-                Toggle("Sync via iCloud", isOn: $isICloudSyncEnabled)
-
-                Button(action: onRestorePurchases) {
-                    HStack(spacing: 8) {
-                        if isRestoringPurchases {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        Text(isRestoringPurchases ? "Restoring..." : "Restore Purchases")
-                    }
-                }
-                .disabled(isRestoringPurchases)
-
-                if let restoreStatusMessage {
-                    Text(restoreStatusMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section("Advanced Zone") {
-                Text("Initial values are auto-detected for this device. You can override them anytime.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Toggle("Whisper ggml GPU Decode", isOn: $whisperGGMLGPUDecodeEnabled)
-                Text(whisperGGMLGPUDecodeRecommendationText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Toggle("Whisper CoreML Encoder", isOn: $whisperCoreMLEncoderEnabled)
-                Text(whisperCoreMLEncoderRecommendationText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Picker("Time Display", selection: $mainTimerDisplayStyle) {
-                    ForEach(MainTimerDisplayStyle.allCases, id: \.self) { style in
-                        Text(style.title).tag(style)
-                    }
-                }
-                Text("Main timer only: \(mainTimerDisplayStyle.sampleText)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Picker("Model Switch", selection: $whisperModelProfile) {
-                    ForEach(WhisperModelProfile.allCases, id: \.self) { profile in
-                        Text(profile.title).tag(profile)
-                    }
-                }
-                Text(whisperModelRecommendationText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(whisperModelProfile.detailText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-        .navigationTitle("Setting")
+        SettingsSheetFlowView(
+            totalHours: totalHours,
+            usedHours: usedHours,
+            selectedLanguageCodes: $selectedLanguageCodes,
+            languageSearchText: $languageSearchText,
+            filteredFocusLanguages: filteredFocusLanguages,
+            groupedFocusLanguages: groupedFocusLanguages,
+            isICloudSyncEnabled: $isICloudSyncEnabled,
+            whisperCoreMLEncoderEnabled: $whisperCoreMLEncoderEnabled,
+            whisperGGMLGPUDecodeEnabled: $whisperGGMLGPUDecodeEnabled,
+            whisperModelProfile: $whisperModelProfile,
+            mainTimerDisplayStyle: $mainTimerDisplayStyle,
+            whisperCoreMLEncoderRecommendationText: whisperCoreMLEncoderRecommendationText,
+            whisperGGMLGPUDecodeRecommendationText: whisperGGMLGPUDecodeRecommendationText,
+            whisperModelRecommendationText: whisperModelRecommendationText,
+            isRestoringPurchases: isRestoringPurchases,
+            restoreStatusMessage: restoreStatusMessage,
+            onToggleLanguage: onToggleLanguage,
+            onRestorePurchases: onRestorePurchases,
+            showsMicrophoneMenu: true,
+            microphonePermissionState: microphonePermissionState,
+            onRequestMicrophoneAccess: requestMicrophoneAccess,
+            onOpenMicrophoneSettings: { _ = MacMicrophonePermissionSupport.openMicrophoneSettings() }
+        )
+        .navigationTitle("Settings")
         .onAppear {
             refreshMicrophonePermission()
         }
@@ -1220,90 +1105,16 @@ struct MacSettingsWorkspaceView: View {
         }
     }
 
-    @ViewBuilder
-    private func languageChip(for language: FocusLanguage) -> some View {
-        let isSelected = selectedLanguageCodes.contains(language.code)
-
-        if isSelected {
-            Button {
-                onToggleLanguage(language.code)
-            } label: {
-                languageChipLabel(for: language)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-        } else {
-            Button {
-                onToggleLanguage(language.code)
-            } label: {
-                languageChipLabel(for: language)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        }
-    }
-
-    private func languageChipLabel(for language: FocusLanguage) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(language.name)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-            Text(language.hello)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var microphonePermissionStatusTitle: String {
+    private var microphonePermissionState: SettingsMicrophonePermissionState {
         switch microphonePermission {
         case .granted:
-            return "Microphone access granted"
+            return .granted
         case .undetermined:
-            return "Microphone access not requested yet"
+            return .undetermined
         case .denied:
-            return "Microphone access denied"
+            return .denied
         @unknown default:
-            return "Microphone access status unknown"
-        }
-    }
-
-    private var microphonePermissionHint: String {
-        switch microphonePermission {
-        case .granted:
-            return "Layca can record normally."
-        case .undetermined:
-            return "Allow access once to start recording."
-        case .denied:
-            return "macOS blocks recording until you enable Layca in Privacy & Security > Microphone."
-        @unknown default:
-            return "Open System Settings to verify microphone access."
-        }
-    }
-
-    private var microphonePermissionStatusSymbol: String {
-        switch microphonePermission {
-        case .granted:
-            return "checkmark.circle.fill"
-        case .undetermined:
-            return "questionmark.circle"
-        case .denied:
-            return "xmark.circle.fill"
-        @unknown default:
-            return "exclamationmark.circle"
-        }
-    }
-
-    private var microphonePermissionStatusColor: Color {
-        switch microphonePermission {
-        case .granted:
-            return .green
-        case .undetermined:
-            return .orange
-        case .denied:
-            return .red
-        @unknown default:
-            return .secondary
+            return .unknown
         }
     }
 

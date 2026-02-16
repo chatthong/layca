@@ -1,5 +1,21 @@
 import SwiftUI
 
+enum SettingsMicrophonePermissionState: Sendable {
+    case granted
+    case undetermined
+    case denied
+    case unknown
+}
+
+private enum SettingsStep: Hashable {
+    case credits
+    case languageFocus
+    case languageRegion(LanguageRegion)
+    case advancedZone
+    case cloudAndPurchases
+    case microphoneAccess
+}
+
 struct SettingsTabView: View {
     let totalHours: Double
     let usedHours: Double
@@ -25,264 +41,396 @@ struct SettingsTabView: View {
     let onRestorePurchases: () -> Void
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                backgroundFill
+        SettingsSheetFlowView(
+            totalHours: totalHours,
+            usedHours: usedHours,
+            selectedLanguageCodes: $selectedLanguageCodes,
+            languageSearchText: $languageSearchText,
+            filteredFocusLanguages: filteredFocusLanguages,
+            groupedFocusLanguages: groupedFocusLanguages,
+            isICloudSyncEnabled: $isICloudSyncEnabled,
+            whisperCoreMLEncoderEnabled: $whisperCoreMLEncoderEnabled,
+            whisperGGMLGPUDecodeEnabled: $whisperGGMLGPUDecodeEnabled,
+            whisperModelProfile: $whisperModelProfile,
+            mainTimerDisplayStyle: $mainTimerDisplayStyle,
+            whisperCoreMLEncoderRecommendationText: whisperCoreMLEncoderRecommendationText,
+            whisperGGMLGPUDecodeRecommendationText: whisperGGMLGPUDecodeRecommendationText,
+            whisperModelRecommendationText: whisperModelRecommendationText,
+            isRestoringPurchases: isRestoringPurchases,
+            restoreStatusMessage: restoreStatusMessage,
+            onToggleLanguage: onToggleLanguage,
+            onRestorePurchases: onRestorePurchases,
+            showsMicrophoneMenu: false,
+            microphonePermissionState: .unknown,
+            onRequestMicrophoneAccess: {},
+            onOpenMicrophoneSettings: {}
+        )
+    }
+}
 
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 14) {
-                        settingsHeader
-                        hoursCreditCard
-                        languageFocusCard
-                        advancedZoneCard
-                        iCloudAndPurchaseCard
+struct SettingsSheetFlowView: View {
+    let totalHours: Double
+    let usedHours: Double
+
+    @Binding var selectedLanguageCodes: Set<String>
+    @Binding var languageSearchText: String
+
+    let filteredFocusLanguages: [FocusLanguage]
+    let groupedFocusLanguages: [LanguageRegionGroup]
+
+    @Binding var isICloudSyncEnabled: Bool
+    @Binding var whisperCoreMLEncoderEnabled: Bool
+    @Binding var whisperGGMLGPUDecodeEnabled: Bool
+    @Binding var whisperModelProfile: WhisperModelProfile
+    @Binding var mainTimerDisplayStyle: MainTimerDisplayStyle
+    let whisperCoreMLEncoderRecommendationText: String
+    let whisperGGMLGPUDecodeRecommendationText: String
+    let whisperModelRecommendationText: String
+    let isRestoringPurchases: Bool
+    let restoreStatusMessage: String?
+
+    let onToggleLanguage: (String) -> Void
+    let onRestorePurchases: () -> Void
+    let showsMicrophoneMenu: Bool
+    let microphonePermissionState: SettingsMicrophonePermissionState
+    let onRequestMicrophoneAccess: () -> Void
+    let onOpenMicrophoneSettings: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var path: [SettingsStep] = []
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            rootList
+                .navigationTitle("Settings")
+                .applyRootTitleDisplayMode()
+                .navigationDestination(for: SettingsStep.self) { step in
+                    switch step {
+                    case .credits:
+                        SettingsCreditsStepView(totalHours: totalHours, usedHours: usedHours)
+                    case .languageFocus:
+                        SettingsLanguageFocusStepView(
+                            selectedLanguageCodes: $selectedLanguageCodes,
+                            languageSearchText: $languageSearchText,
+                            filteredFocusLanguages: filteredFocusLanguages,
+                            groupedFocusLanguages: groupedFocusLanguages
+                        )
+                    case .languageRegion(let region):
+                        SettingsLanguageRegionStepView(
+                            region: region,
+                            groupedFocusLanguages: groupedFocusLanguages,
+                            selectedLanguageCodes: $selectedLanguageCodes,
+                            onToggleLanguage: onToggleLanguage
+                        )
+                    case .advancedZone:
+                        SettingsAdvancedZoneStepView(
+                            whisperCoreMLEncoderEnabled: $whisperCoreMLEncoderEnabled,
+                            whisperGGMLGPUDecodeEnabled: $whisperGGMLGPUDecodeEnabled,
+                            whisperModelProfile: $whisperModelProfile,
+                            whisperCoreMLEncoderRecommendationText: whisperCoreMLEncoderRecommendationText,
+                            whisperGGMLGPUDecodeRecommendationText: whisperGGMLGPUDecodeRecommendationText,
+                            whisperModelRecommendationText: whisperModelRecommendationText
+                        )
+                    case .cloudAndPurchases:
+                        SettingsCloudAndPurchasesStepView(
+                            isICloudSyncEnabled: $isICloudSyncEnabled,
+                            isRestoringPurchases: isRestoringPurchases,
+                            restoreStatusMessage: restoreStatusMessage,
+                            onRestorePurchases: onRestorePurchases
+                        )
+                    case .microphoneAccess:
+                        SettingsMicrophoneAccessStepView(
+                            permissionState: microphonePermissionState,
+                            onRequestMicrophoneAccess: onRequestMicrophoneAccess,
+                            onOpenMicrophoneSettings: onOpenMicrophoneSettings
+                        )
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 18)
-                    .padding(.bottom, 30)
                 }
-            }
-            .laycaHideNavigationBar()
+#if os(iOS)
+                .toolbar {
+                    ToolbarItem(placement: path.isEmpty ? .topBarLeading : .topBarTrailing) {
+                        Button(action: { dismiss() }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .semibold))
+                                .frame(width: 32, height: 32)
+                                .background(.regularMaterial, in: Circle())
+                        }
+                        .accessibilityLabel("Cancel")
+                    }
+                }
+#endif
+        }
+        .applySettingsSheetCloseControl {
+            dismiss()
         }
     }
+
+    private var rootList: some View {
+        List {
+            Section("General") {
+                NavigationLink(value: SettingsStep.credits) {
+                    settingsRowLabel(
+                        title: "Hours Credit",
+                        subtitle: "Usage and balance",
+                        symbol: "clock.badge.checkmark"
+                    )
+                }
+
+                NavigationLink(value: SettingsStep.languageFocus) {
+                    settingsRowLabel(
+                        title: "Language Focus",
+                        subtitle: "Priority recognition languages",
+                        symbol: "globe"
+                    )
+                }
+
+                if showsMicrophoneMenu {
+                    NavigationLink(value: SettingsStep.microphoneAccess) {
+                        settingsRowLabel(
+                            title: "Microphone Access",
+                            subtitle: "Permission status and actions",
+                            symbol: "mic"
+                        )
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Time Display")
+                        .font(.subheadline.weight(.semibold))
+
+                    Picker("Time Display", selection: $mainTimerDisplayStyle) {
+                        ForEach(MainTimerDisplayStyle.allCases, id: \.self) { style in
+                            Text(style.title).tag(style)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+
+                    Text("Main timer only: \(mainTimerDisplayStyle.sampleText)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section("Runtime") {
+                NavigationLink(value: SettingsStep.advancedZone) {
+                    settingsRowLabel(
+                        title: "Advanced Zone",
+                        subtitle: "Runtime and model behavior",
+                        symbol: "gearshape.2"
+                    )
+                }
+            }
+
+            Section("Account") {
+                NavigationLink(value: SettingsStep.cloudAndPurchases) {
+                    settingsRowLabel(
+                        title: "Cloud and Purchases",
+                        subtitle: "iCloud sync and restore",
+                        symbol: "icloud"
+                    )
+                }
+            }
+        }
+        .applySettingsListStyle()
+    }
+
+    private func settingsRowLabel(title: String, subtitle: String, symbol: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.body.weight(.semibold))
+                .frame(width: 20, height: 20)
+                .foregroundStyle(Color.accentColor)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct SettingsCreditsStepView: View {
+    let totalHours: Double
+    let usedHours: Double
 
     private var remainingHours: Double {
         max(totalHours - usedHours, 0)
     }
 
-    @ViewBuilder
-    private var backgroundFill: some View {
-#if os(macOS)
-        LinearGradient(
-            colors: [
-                Color(red: 0.91, green: 0.94, blue: 0.98),
-                Color(red: 0.95, green: 0.96, blue: 0.99),
-                Color(red: 0.90, green: 0.94, blue: 0.96)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
-#else
-        Color(uiColor: .systemBackground)
-            .ignoresSafeArea()
-#endif
-    }
+    var body: some View {
+        SettingsStepContainer {
+            Section {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Remaining")
+                    Spacer()
+                    Text("\(remainingHours, specifier: "%.1f")h")
+                        .font(.title3.weight(.semibold))
+                }
 
-    private var settingsHeader: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Setting")
-                .font(.system(size: 36, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
-            Text("Language focus and account sync")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                ProgressView(value: usedHours, total: totalHours)
+
+                HStack {
+                    Text("\(usedHours, specifier: "%.1f")h used")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("Total \(totalHours, specifier: "%.1f")h")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.caption)
+            } footer: {
+                Text("Refill hours before balance runs low to keep continuous transcription.")
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .navigationTitle("Hours Credit")
+        .applyStepTitleDisplayMode()
     }
+}
 
-    private var hoursCreditCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Hours Credit")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                Spacer()
-                Text("\(remainingHours, specifier: "%.1f")h left")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.primary)
-            }
+private struct SettingsLanguageFocusStepView: View {
+    @Binding var selectedLanguageCodes: Set<String>
+    @Binding var languageSearchText: String
+    let filteredFocusLanguages: [FocusLanguage]
+    let groupedFocusLanguages: [LanguageRegionGroup]
 
-            ProgressView(value: usedHours, total: totalHours)
-                .tint(.accentColor)
-
-            HStack {
-                Text("\(usedHours, specifier: "%.1f")h used")
-                Spacer()
-                Text("Total \(totalHours, specifier: "%.0f")h")
-            }
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-
-            Text("Refill hours before balance runs low to keep continuous transcription.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.regularMaterial)
-        )
-    }
-
-    private var languageFocusCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Language Focus")
-                .font(.headline)
-                .foregroundStyle(.primary)
-            Text("Select multiple priority languages for faster and cleaner recognition.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            HStack {
-                Text("\(selectedLanguageCodes.count) selected")
-                    .font(.caption.weight(.semibold))
+    var body: some View {
+        SettingsStepContainer {
+            Section {
+                Text("Choose focus languages by region for a cleaner multi-step flow.")
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
-                Spacer()
-                Text("\(filteredFocusLanguages.count) shown")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+
+                HStack {
+                    Text("Selected")
+                    Spacer()
+                    Text("\(selectedLanguageCodes.count)")
+                        .fontWeight(.semibold)
+                }
+
+                HStack {
+                    Text("Shown")
+                    Spacer()
+                    Text("\(filteredFocusLanguages.count)")
+                        .fontWeight(.semibold)
+                }
             }
 
-            TextField("Search name / code (en, eng)", text: $languageSearchText)
-                .laycaApplyTextInputAutocorrectionPolicy()
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.regularMaterial)
-                )
+            Section("Search") {
+                TextField("Search name / code (en, eng)", text: $languageSearchText)
+                    .laycaApplyTextInputAutocorrectionPolicy()
+            }
 
-            ScrollView(showsIndicators: true) {
-                LazyVStack(alignment: .leading, spacing: 12) {
+            Section("Regions") {
+                if groupedFocusLanguages.isEmpty {
+                    Text("No languages match your current search.")
+                        .foregroundStyle(.secondary)
+                } else {
                     ForEach(groupedFocusLanguages) { group in
-                        Text(group.region.rawValue)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 4)
-
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
-                            ForEach(group.languages) { language in
-                                Button {
-                                    onToggleLanguage(language.code)
-                                } label: {
-                                    LanguageChip(
-                                        language: language,
-                                        isSelected: selectedLanguageCodes.contains(language.code)
-                                    )
+                        NavigationLink(value: SettingsStep.languageRegion(group.region)) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(group.region.rawValue)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text("\(group.languages.count) languages")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                 }
-                                .buttonStyle(.plain)
+                                Spacer()
                             }
                         }
                     }
                 }
             }
-            .frame(maxHeight: 280)
         }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.regularMaterial)
-        )
+        .navigationTitle("Language Focus")
+        .applyStepTitleDisplayMode()
+    }
+}
+
+private struct SettingsLanguageRegionStepView: View {
+    let region: LanguageRegion
+    let groupedFocusLanguages: [LanguageRegionGroup]
+    @Binding var selectedLanguageCodes: Set<String>
+    let onToggleLanguage: (String) -> Void
+
+    private var languagesInRegion: [FocusLanguage] {
+        groupedFocusLanguages.first(where: { $0.region == region })?.languages ?? []
     }
 
-    private var iCloudAndPurchaseCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("iCloud & Purchases")
-                .font(.headline)
-                .foregroundStyle(.primary)
-
-            HStack(spacing: 10) {
-                Image(systemName: "person.crop.circle.badge.checkmark")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("iCloud Account")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    Text("Connected and ready to sync chat sessions")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Toggle("Sync sessions via iCloud", isOn: $isICloudSyncEnabled)
-                .tint(.accentColor)
-
-            Button(action: onRestorePurchases) {
-                HStack {
-                    if isRestoringPurchases {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                            .tint(.accentColor)
-                    } else {
-                        Image(systemName: "arrow.clockwise.circle.fill")
-                            .font(.body.weight(.semibold))
-                    }
-                    Text(isRestoringPurchases ? "Restoring..." : "Restore Purchases")
-                        .fontWeight(.semibold)
-                }
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 11)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.regularMaterial)
+    var body: some View {
+        List {
+            if languagesInRegion.isEmpty {
+                ContentUnavailableView(
+                    "No Matches",
+                    systemImage: "magnifyingglass",
+                    description: Text("Adjust search to see languages in this region.")
                 )
-            }
-            .buttonStyle(.plain)
-
-            if let restoreStatusMessage {
-                Text(restoreStatusMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .listRowBackground(Color.clear)
+            } else {
+                ForEach(Array(languagesInRegion), id: \.id) { (language: FocusLanguage) in
+                    Button {
+                        onToggleLanguage(language.code)
+                    } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(language.name)
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                Text("\(language.hello) (\(language.code))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if selectedLanguageCodes.contains(language.code) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.regularMaterial)
-        )
+        .applySettingsListStyle()
+        .navigationTitle(region.rawValue)
+        .applyStepTitleDisplayMode()
     }
+}
 
-    private var advancedZoneCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Advanced Zone")
-                .font(.headline)
-                .foregroundStyle(.primary)
+private struct SettingsAdvancedZoneStepView: View {
+    @Binding var whisperCoreMLEncoderEnabled: Bool
+    @Binding var whisperGGMLGPUDecodeEnabled: Bool
+    @Binding var whisperModelProfile: WhisperModelProfile
+    let whisperCoreMLEncoderRecommendationText: String
+    let whisperGGMLGPUDecodeRecommendationText: String
+    let whisperModelRecommendationText: String
 
-            Text("Initial values are auto-detected for this device. You can override them anytime.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+    var body: some View {
+        SettingsStepContainer {
+            Section {
+                Text("Initial values are auto-detected for this device. You can override them anytime.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
-            VStack(alignment: .leading, spacing: 6) {
+            Section("Acceleration") {
                 Toggle("Whisper ggml GPU Decode", isOn: $whisperGGMLGPUDecodeEnabled)
-                    .tint(.accentColor)
                 Text(whisperGGMLGPUDecodeRecommendationText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
 
-            VStack(alignment: .leading, spacing: 6) {
                 Toggle("Whisper CoreML Encoder", isOn: $whisperCoreMLEncoderEnabled)
-                    .tint(.accentColor)
                 Text(whisperCoreMLEncoderRecommendationText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Time Display")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-
-                Picker("Time Display", selection: $mainTimerDisplayStyle) {
-                    ForEach(MainTimerDisplayStyle.allCases, id: \.self) { style in
-                        Text(style.title).tag(style)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Text("Main timer only: \(mainTimerDisplayStyle.sampleText)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Model Switch")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-
+            Section("Model Switch") {
                 Picker("Model Switch", selection: $whisperModelProfile) {
                     ForEach(WhisperModelProfile.allCases, id: \.self) { profile in
                         Text(profile.title).tag(profile)
@@ -298,44 +446,210 @@ struct SettingsTabView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(.regularMaterial)
-        )
+        .navigationTitle("Advanced Zone")
+        .applyStepTitleDisplayMode()
     }
 }
 
-private struct LanguageChip: View {
-    let language: FocusLanguage
-    let isSelected: Bool
+private struct SettingsCloudAndPurchasesStepView: View {
+    @Binding var isICloudSyncEnabled: Bool
+    let isRestoringPurchases: Bool
+    let restoreStatusMessage: String?
+    let onRestorePurchases: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(language.name)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(language.hello)
-                .font(.caption2)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        SettingsStepContainer {
+            Section("iCloud") {
+                Toggle("Sync sessions via iCloud", isOn: $isICloudSyncEnabled)
+            }
+
+            Section("Purchases") {
+                Button(action: onRestorePurchases) {
+                    HStack(spacing: 8) {
+                        if isRestoringPurchases {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(isRestoringPurchases ? "Restoring..." : "Restore Purchases")
+                    }
+                }
+                .disabled(isRestoringPurchases)
+
+                if let restoreStatusMessage {
+                    Text(restoreStatusMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
-        .foregroundStyle(isSelected ? .white : .primary)
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(isSelected ? Color.accentColor : unselectedBackgroundColor)
-        )
+        .navigationTitle("Cloud and Purchases")
+        .applyStepTitleDisplayMode()
+    }
+}
+
+private struct SettingsMicrophoneAccessStepView: View {
+    let permissionState: SettingsMicrophonePermissionState
+    let onRequestMicrophoneAccess: () -> Void
+    let onOpenMicrophoneSettings: () -> Void
+
+    var body: some View {
+        SettingsStepContainer {
+            Section {
+                HStack(spacing: 8) {
+                    Image(systemName: permissionState.symbol)
+                        .foregroundStyle(permissionState.color)
+                    Text(permissionState.title)
+                        .font(.subheadline.weight(.semibold))
+                }
+
+                Text(permissionState.hint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Actions") {
+                switch permissionState {
+                case .granted, .denied, .unknown:
+                    Button("Open System Settings", action: onOpenMicrophoneSettings)
+                case .undetermined:
+                    Button("Allow Microphone Access", action: onRequestMicrophoneAccess)
+                }
+            }
+        }
+        .navigationTitle("Microphone Access")
+        .applyStepTitleDisplayMode()
+    }
+}
+
+private struct SettingsStepContainer<Content: View>: View {
+    @ViewBuilder private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
     }
 
-    private var unselectedBackgroundColor: Color {
+    var body: some View {
 #if os(macOS)
-        Color.white.opacity(0.45)
+        List {
+            content
+        }
+        .listStyle(.inset)
 #else
-        Color(uiColor: .secondarySystemBackground)
+        Form {
+            content
+        }
 #endif
+    }
+}
+
+private struct SettingsSheetCloseControlModifier: ViewModifier {
+    let onClose: () -> Void
+
+    func body(content: Content) -> some View {
+#if os(macOS)
+        content
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                HStack {
+                    Spacer()
+                    Button("Cancel", action: onClose)
+                        .keyboardShortcut(.cancelAction)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+                .background(.regularMaterial)
+                .overlay(alignment: .top) {
+                    Divider()
+                }
+            }
+#else
+        content
+#endif
+    }
+}
+
+private extension View {
+    func applySettingsSheetCloseControl(onClose: @escaping () -> Void) -> some View {
+        modifier(SettingsSheetCloseControlModifier(onClose: onClose))
+    }
+
+    @ViewBuilder
+    func applyRootTitleDisplayMode() -> some View {
+#if os(iOS)
+        navigationBarTitleDisplayMode(.inline)
+#else
+        self
+#endif
+    }
+
+    @ViewBuilder
+    func applyStepTitleDisplayMode() -> some View {
+#if os(iOS)
+        navigationBarTitleDisplayMode(.inline)
+#else
+        self
+#endif
+    }
+
+    @ViewBuilder
+    func applySettingsListStyle() -> some View {
+#if os(macOS)
+        listStyle(.inset)
+#else
+        listStyle(.insetGrouped)
+#endif
+    }
+}
+
+private extension SettingsMicrophonePermissionState {
+    var title: String {
+        switch self {
+        case .granted:
+            return "Microphone access granted"
+        case .undetermined:
+            return "Microphone access not requested yet"
+        case .denied:
+            return "Microphone access denied"
+        case .unknown:
+            return "Microphone access status unknown"
+        }
+    }
+
+    var hint: String {
+        switch self {
+        case .granted:
+            return "Layca can record normally."
+        case .undetermined:
+            return "Allow access once to start recording."
+        case .denied:
+            return "Recording is blocked until access is enabled in System Settings."
+        case .unknown:
+            return "Open System Settings to verify microphone access."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .granted:
+            return "checkmark.circle.fill"
+        case .undetermined:
+            return "questionmark.circle"
+        case .denied:
+            return "xmark.circle.fill"
+        case .unknown:
+            return "exclamationmark.circle"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .granted:
+            return .green
+        case .undetermined:
+            return .orange
+        case .denied:
+            return .red
+        case .unknown:
+            return .secondary
+        }
     }
 }

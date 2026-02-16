@@ -15,7 +15,7 @@
   - search pill (visual shell)
   - `New Chat` compose button
 - Sidebar scroll area contains:
-  - `Workspace` rows: `Layca Chat`, `Setting`
+  - `Workspace` rows: `Layca Chat`, `Settings`
   - `Recent Chats` list (session switcher)
 - `Recent Chats` rows support context menu actions:
   - `Rename`
@@ -32,13 +32,14 @@
 - Drawer pan capture uses an iOS `UIPanGestureRecognizer` installer so swipe-open is recognized across subviews (including bubble/button-heavy chat content).
 - Launch behavior opens draft mode by default (`activeSessionID == nil`).
 - `New Chat` action in sidebar resets UI to draft and keeps focus on `Layca Chat`.
+- `Settings` action opens a single modal settings sheet with multi-step navigation (instead of switching the detail workspace).
 
 ## visionOS/tvOS Layout (Current Fallback)
 - Uses `TabView` with `TabSection`.
 - Primary tabs:
   - `Layca Chat`
   - `Library`
-  - `Setting`
+  - `Settings`
 - Dedicated action tab:
   - `New Chat`
 
@@ -46,7 +47,7 @@
 - App shell uses `NavigationSplitView`.
 - Sidebar has workspace sections:
   - `Layca Chat`
-  - `Setting`
+  - `Settings`
 - Sidebar also contains:
   - `Recent Chats` list
   - `New Chat` action button
@@ -67,17 +68,16 @@
   - persisted session is created only when recording starts from draft
 - iOS/iPadOS uses `Recent Chats` in the drawer as the primary session switcher.
 - macOS uses `Recent Chats` in sidebar as the saved-session switcher (no separate Library workspace).
-- `Setting` currently contains:
+- `Settings` sheet currently contains:
   - Hours credit
   - Language focus
-  - Context keywords (for Whisper prompt context)
+  - Time Display (`Friendly` / `Hybrid` / `Professional`) for main timer only
   - Advanced Zone:
     - Whisper ggml GPU Decode toggle
     - Whisper CoreML Encoder toggle
-    - Time Display (`Friendly` / `Hybrid` / `Professional`) for main timer only
     - Model Switch (`Fast` / `Normal` / `Pro`)
   - iCloud sync + restore purchases
-- macOS `Setting` additionally includes:
+- macOS `Settings` additionally includes:
   - microphone permission status
   - request permission action
   - System Settings deep-link action

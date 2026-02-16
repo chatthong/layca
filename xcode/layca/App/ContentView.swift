@@ -13,6 +13,7 @@ import UIKit
 struct ContentView: View {
     @StateObject private var backend = AppBackend()
     @State private var isExportPresented = false
+    @State private var isSettingsPresented = false
 
     @State private var selectedTab: AppTab = .chat
 #if os(iOS)
@@ -24,6 +25,9 @@ struct ContentView: View {
         rootLayout
         .sheet(isPresented: $isExportPresented) {
             exportScreen
+        }
+        .sheet(isPresented: $isSettingsPresented) {
+            settingsSheetScreen
         }
     }
 }
@@ -56,7 +60,7 @@ private extension ContentView {
                     libraryScreen
                 }
 
-                Tab("Setting", systemImage: "square.stack.3d.up", value: AppTab.setting) {
+                Tab("Settings", systemImage: "square.stack.3d.up", value: AppTab.setting) {
                     settingScreen
                 }
             }
@@ -142,7 +146,7 @@ private extension ContentView {
                 )
             }
             .onAppear {
-                if selectedTab == .newChat {
+                if selectedTab == .newChat || selectedTab == .setting {
                     selectedTab = .chat
                 }
             }
@@ -162,17 +166,20 @@ private extension ContentView {
         case .library:
             libraryScreen
         case .setting:
-            settingScreen
+            chatScreen(
+                showsTopToolbar: true,
+                onSidebarToggle: {
+                    setIOSSidebarPresented(!isIOSSidebarPresented)
+                }
+            )
         }
     }
 
     var iosSection: IOSWorkspaceSection {
-        switch selectedTab {
-        case .setting:
+        if isSettingsPresented {
             return .setting
-        case .chat, .library, .newChat:
-            return .chat
         }
+        return .chat
     }
 
     var iosSectionBinding: Binding<IOSWorkspaceSection> {
@@ -183,7 +190,8 @@ private extension ContentView {
                 case .chat:
                     selectedTab = .chat
                 case .setting:
-                    selectedTab = .setting
+                    presentSettingsSheet()
+                    setIOSSidebarPresented(false)
                 }
             }
         )
@@ -273,7 +281,7 @@ private extension ContentView {
         }
         .navigationSplitViewStyle(.balanced)
         .onAppear {
-            if selectedTab == .newChat || selectedTab == .library {
+            if selectedTab == .newChat || selectedTab == .library || selectedTab == .setting {
                 selectedTab = .chat
             }
         }
@@ -285,18 +293,22 @@ private extension ContentView {
         case .chat:
             macChatScreen
         case .setting:
-            macSettingScreen
+            macChatScreen
         }
     }
 
     var macSection: MacWorkspaceSection {
+        if isSettingsPresented {
+            return .setting
+        }
+
         switch selectedTab {
         case .chat:
             return .chat
         case .library:
             return .chat
         case .setting:
-            return .setting
+            return .chat
         case .newChat:
             return .chat
         }
@@ -310,7 +322,7 @@ private extension ContentView {
                 case .chat:
                     selectedTab = .chat
                 case .setting:
-                    selectedTab = .setting
+                    presentSettingsSheet()
                 }
             }
         )
@@ -348,7 +360,7 @@ private extension ContentView {
             onDeleteActiveSessionTap: backend.deleteActiveSession,
             onRenameSessionTitle: backend.renameActiveSessionTitle,
             onOpenSettingsTap: {
-                selectedTab = .setting
+                presentSettingsSheet()
             }
         )
     }
@@ -455,9 +467,28 @@ private extension ContentView {
         )
     }
 
+    @ViewBuilder
+    var settingsSheetScreen: some View {
+#if os(macOS)
+        NavigationStack {
+            macSettingScreen
+        }
+        .frame(minWidth: 620, minHeight: 640)
+#else
+        settingScreen
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+#endif
+    }
+
     func startNewChatAndReturnToChat() {
         backend.startNewChat()
         selectedTab = .chat
+    }
+
+    func presentSettingsSheet() {
+        selectedTab = .chat
+        isSettingsPresented = true
     }
 
     func openLaycaChatWorkspace() {

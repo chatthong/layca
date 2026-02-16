@@ -2,6 +2,24 @@
 
 ## Completed In This Chat
 
+### Settings Sheet Flow Refresh (iOS + macOS)
+- `App/ContentView.swift`, `Features/Settings/SettingsTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`
+- `Settings` now opens as a single modal sheet from app shell actions (instead of switching to a dedicated settings detail workspace).
+- Settings navigation is now a single internal multi-step flow using one navigation stack (no nested settings sub-sheets).
+- iOS dismiss/back control placement follows multi-step sheet guidance:
+  - root step: dismiss (`x`) on leading side
+  - deeper steps: back on leading side, dismiss (`x`) on trailing side
+- macOS step pages were updated to a native list-based container to avoid broken multi-column `Form` rendering on second-level pages.
+
+### Settings Information Architecture Tuning
+- `Features/Settings/SettingsTabView.swift`
+- Removed `Model and Display` sub-step.
+- Moved `Time Display` to main settings sheet `General` section.
+- `Advanced Zone` now contains:
+  - `Whisper ggml GPU Decode`
+  - `Whisper CoreML Encoder`
+  - `Model Switch`
+
 ### iOS Compact Toolbar Overflow Icon Fix
 - `Features/Chat/ChatTabView.swift`
 - iOS top-right header actions remain a native grouped control (`Play` + `More`) when space is available.
@@ -182,7 +200,7 @@
 - `App/ContentView.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - Removed top toolbar segmented workspace picker from macOS root split view.
 - Current native composition keeps inline chat-title rename + trailing native control group (`Play` + `More`) in Chat detail.
-- `New Chat` and `Setting` are now sidebar-driven actions on macOS.
+- `New Chat` and `Settings` are now sidebar-driven actions on macOS.
 
 ### Native Theme + Surface Simplification
 - `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`, `Features/Library/LibraryTabView.swift`, `Features/Settings/SettingsTabView.swift`, `Views/Components/TranscriptBubbleOptionButton.swift`, `Views/Shared/View+PlatformCompatibility.swift`

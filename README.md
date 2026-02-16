@@ -67,14 +67,15 @@ Documents/
 
 ## 3. UI/UX Strategy: Chat-First 💬
 
-- **iOS/iPadOS shell:** custom swipeable drawer sidebar (`Layca Chat`, `Setting`, `Recent Chats`) with fixed top actions (`Search`, `New Chat`) and a chat-header sidebar toggle button.
-- **visionOS/tvOS shell:** `TabView` with `Layca Chat`, `Library`, `Setting`, plus a dedicated `New Chat` action tab.
+- **iOS/iPadOS shell:** custom swipeable drawer sidebar (`Layca Chat`, `Settings`, `Recent Chats`) with fixed top actions (`Search`, `New Chat`) and a chat-header sidebar toggle button.
+- **visionOS/tvOS shell:** `TabView` with `Layca Chat`, `Library`, `Settings`, plus a dedicated `New Chat` action tab.
 - **iOS-family visual style:** plain `systemBackground` chat/settings canvas + native material cards; iOS/iPadOS sidebar uses a dark workspace surface with material controls.
-- **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Layca Chat`, `Setting`) and a `Recent Chats` list.
+- **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Layca Chat`, `Settings`) and a `Recent Chats` list.
 - **Launch behavior:** app always opens in a fresh draft room on both iOS-family and macOS; existing saved chats remain available in `Recent Chats` (and `Library` on visionOS/tvOS).
 - **Chat workspace:** Recorder card + live transcript bubbles.
 - **Header/session actions:** iOS chat header keeps sidebar toggle before chat title; both iOS and macOS use a trailing native control group (`Play` + `More`). The `More` menu includes `Share`, `Rename`, and `Delete`. On compact iOS toolbar widths (for example long titles), the group collapses into a single overflow button with an explicit ellipsis icon while preserving the same actions.
-- **Settings workspace:** Hours credit, language focus, context keywords, Advanced Zone (GPU/CoreML/model profile + main timer `Time Display`), iCloud toggle, purchase restore, and macOS microphone access controls.
+- **Settings sheet:** single modal sheet with multi-step navigation on iOS/macOS.  
+  General: hours credit, language focus, main timer `Time Display`; Runtime: Advanced Zone (GPU/CoreML/model profile); Account: iCloud toggle + restore purchases; macOS adds microphone access controls.
 - **Library workspace:** Session switcher with long-press/right-click action group (`Rename`, `Share this chat`, `Delete`) on session rows (where Library is present).
 - **macOS recent chats sidebar:** Same long-press/right-click action group (`Rename`, `Share this chat`, `Delete`).
 - **Export:** Separate sheet; Notepad-style formatting is export-only.
@@ -173,7 +174,7 @@ Documents/
   - main timer shows remaining playback time (countdown)
   - subtitle shows segment range (`mm:ss → mm:ss`)
 - iOS/iPadOS uses a custom drawer workspace shell; macOS uses dedicated split workspace views (sidebar/detail).
-- macOS chat detail toolbar keeps inline title-rename plus a trailing native control group (`Play` + `More`); `New Chat` and `Setting` are sidebar actions.
+- macOS chat detail toolbar keeps inline title-rename plus a trailing native control group (`Play` + `More`); `New Chat` and `Settings` are sidebar actions.
 - iOS chat header uses leading controls with sidebar toggle before chat title and the same trailing native control group (`Play` + `More`).
 - On compact iOS toolbar widths, that trailing control group auto-collapses into one ellipsis overflow control (icon stays visible) that still exposes the same header actions.
 - iOS non-edit chat-title pill auto-sizes with title length (bounded min/max to prevent toolbar overflow) and uses tail truncation only when needed.

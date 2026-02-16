@@ -2,7 +2,7 @@
 
 ## Goals
 - Offline-first meeting assistant with local-first processing.
-- Dynamic configuration from Settings (language focus + context keywords + sync toggle + Whisper Advanced Zone controls).
+- Dynamic configuration from Settings (language focus + main timer display + sync toggle + Whisper Advanced Zone controls).
 - Reactive chat UI driven by backend state.
 - Persist chats/settings across app relaunch on iOS-family and macOS while defaulting UI to draft mode at startup.
 - Native platform-adapted shell: drawer workspace on iOS/iPadOS, split-view workspace on macOS, and tab fallback on visionOS/tvOS.
@@ -42,11 +42,12 @@
 - App shell is platform-aware:
   - iOS/iPadOS uses a custom drawer sidebar (`iosDrawerLayout`) with global right-swipe open/left-swipe close and a chat-header sidebar toggle.
   - iOS sidebar swipe-open is recognized from anywhere on the detail surface, including transcript bubble regions.
-  - iOS/iPadOS sidebar contains fixed top actions (`Search`, `New Chat`), workspace rows (`Layca Chat`, `Setting`), and a scrollable `Recent Chats` list.
+  - iOS/iPadOS sidebar contains fixed top actions (`Search`, `New Chat`), workspace rows (`Layca Chat`, `Settings`), and a scrollable `Recent Chats` list.
   - visionOS/tvOS currently use `TabView`/`TabSection` fallback with a `New Chat` action tab.
   - iOS-family uses plain `systemBackground` for chat/settings surfaces with native material cards and automatic device light/dark appearance.
   - macOS uses `NavigationSplitView` with sidebar workspace sections and dedicated detail views.
-  - macOS sidebar workspace sections are `Layca Chat` and `Setting`, with `Recent Chats` below.
+  - macOS sidebar workspace sections are `Layca Chat` and `Settings`, with `Recent Chats` below.
+  - Selecting `Settings` presents one modal settings sheet with an internal multi-step navigation stack (no nested settings sheets).
   - macOS Chat detail toolbar uses inline title rename plus a trailing native control group (`Play` + `More`).
 - VAD uses native CoreML Silero (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) with bundled offline model.
 - Speaker branch uses native CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) with bundled offline model.
@@ -64,8 +65,9 @@
 - Settings Advanced Zone controls:
   - `Whisper ggml GPU Decode` toggle
   - `Whisper CoreML Encoder` toggle
-  - `Time Display` (`Friendly` / `Hybrid` / `Professional`) for main timer only
   - `Model Switch` (`Fast`, `Normal`, `Pro`)
+- Settings General controls include:
+  - `Time Display` (`Friendly` / `Hybrid` / `Professional`) for main timer only
 - On physical iOS devices, CoreML encoder now uses an auto profile: enabled on high-memory/high-core devices for maximum performance, safety-disabled on lower-tier devices to avoid startup stalls.
 - Set `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON` to force-enable on any iPhone.
 - On some iPhones, first CoreML encoder run may log ANE/CoreML plan-build warnings before succeeding.

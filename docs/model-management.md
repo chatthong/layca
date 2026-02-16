@@ -6,13 +6,13 @@
 - Settings provides:
   - Language Focus (multi-select)
   - Context keywords (free text), used in Whisper `initial_prompt`
+  - Time Display (main timer only: `Friendly`, `Hybrid`, `Professional`)
   - Advanced Zone:
     - Whisper ggml GPU Decode (toggle)
     - Whisper CoreML Encoder (toggle)
-    - Time Display (main timer only: `Friendly`, `Hybrid`, `Professional`)
     - Model Switch (`Fast`, `Normal`, `Pro`)
 - On macOS, the same model-related settings are shown in the native settings workspace form.
-- macOS settings view is reachable from sidebar `Setting`.
+- macOS settings view is reachable from sidebar `Settings` and opens as a modal sheet flow.
 - Initial Advanced Zone values are auto-detected by device and persisted; users can override anytime.
 - `Time Display` default is `Friendly` and persists in app settings (`mainTimerDisplayStyleRawValue`).
 
