@@ -377,8 +377,9 @@ struct ChatTabView: View {
         ControlGroup {
             Button(action: onPlayFromStartTap) {
                 Label("Play", systemImage: "play.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(width: topToolbarGroupedIconSize - 4, height: topToolbarGroupedIconSize - 4)
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 12, weight: .semibold))
+                    
             }
             .disabled(!canPlaySessionFromStart)
 
@@ -386,14 +387,20 @@ struct ChatTabView: View {
                 topTrailingMenuActions
             } label: {
                 Label("More", systemImage: "ellipsis")
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(width: topToolbarGroupedIconSize - 4, height: topToolbarGroupedIconSize - 4)
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 12, weight: .semibold))
+                    
             }
+            .menuIndicator(.hidden)
         } label: {
             Label("More", systemImage: "ellipsis")
                 .labelStyle(.iconOnly)
+                .font(.system(size: 12, weight: .semibold))
         }
         .controlSize(.regular)
+#if os(iOS)
+        .fixedSize(horizontal: true, vertical: false)
+#endif
     }
 
     @ViewBuilder
