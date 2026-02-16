@@ -376,31 +376,41 @@ struct ChatTabView: View {
     private var topTrailingToolbarControls: some View {
         ControlGroup {
             Button(action: onPlayFromStartTap) {
-                Label("Play", systemImage: "play.fill")
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: 12, weight: .semibold))
-                    
+                topToolbarPlayIconLabel
             }
             .disabled(!canPlaySessionFromStart)
 
             Menu {
                 topTrailingMenuActions
             } label: {
-                Label("More", systemImage: "ellipsis")
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: 12, weight: .semibold))
-                    
+                topToolbarMoreMenuIconLabel
             }
             .menuIndicator(.hidden)
         } label: {
-            Label("More", systemImage: "ellipsis")
-                .labelStyle(.iconOnly)
-                .font(.system(size: 12, weight: .semibold))
+            topToolbarMergedMoreIconLabel
         }
         .controlSize(.regular)
 #if os(iOS)
         .fixedSize(horizontal: true, vertical: false)
 #endif
+    }
+
+    private var topToolbarPlayIconLabel: some View {
+        Label("Play", systemImage: "play.fill")
+            .labelStyle(.iconOnly)
+            .font(.system(size: 12, weight: .semibold))
+    }
+
+    private var topToolbarMoreMenuIconLabel: some View {
+        Label("More", systemImage: "ellipsis")
+            .labelStyle(.iconOnly)
+            .font(.system(size: 12, weight: .semibold))
+    }
+
+    private var topToolbarMergedMoreIconLabel: some View {
+        Image(systemName: "ellipsis")
+            .font(.system(size: 18, weight: .semibold))
+            .accessibilityLabel("More")
     }
 
     @ViewBuilder
