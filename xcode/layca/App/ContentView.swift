@@ -14,6 +14,7 @@ struct ContentView: View {
     @StateObject private var backend = AppBackend()
     @State private var isExportPresented = false
     @State private var isSettingsPresented = false
+    @State private var settingsSheetPresentationID = UUID()
 
     @State private var selectedTab: AppTab = .chat
 #if os(iOS)
@@ -473,9 +474,11 @@ private extension ContentView {
         NavigationStack {
             macSettingScreen
         }
+        .id(settingsSheetPresentationID)
         .frame(minWidth: 620, minHeight: 640)
 #else
         settingScreen
+            .id(settingsSheetPresentationID)
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
 #endif
@@ -488,6 +491,7 @@ private extension ContentView {
 
     func presentSettingsSheet() {
         selectedTab = .chat
+        settingsSheetPresentationID = UUID()
         isSettingsPresented = true
     }
 

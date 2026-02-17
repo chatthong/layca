@@ -108,6 +108,9 @@ struct SettingsSheetFlowView: View {
                     switch step {
                     case .credits:
                         SettingsCreditsStepView(totalHours: totalHours, usedHours: usedHours)
+                            .applySettingsSubstepCloseControl {
+                                dismiss()
+                            }
                     case .languageFocus:
                         SettingsLanguageFocusStepView(
                             selectedLanguageCodes: $selectedLanguageCodes,
@@ -115,6 +118,9 @@ struct SettingsSheetFlowView: View {
                             filteredFocusLanguages: filteredFocusLanguages,
                             groupedFocusLanguages: groupedFocusLanguages
                         )
+                        .applySettingsSubstepCloseControl {
+                            dismiss()
+                        }
                     case .languageRegion(let region):
                         SettingsLanguageRegionStepView(
                             region: region,
@@ -122,6 +128,9 @@ struct SettingsSheetFlowView: View {
                             selectedLanguageCodes: $selectedLanguageCodes,
                             onToggleLanguage: onToggleLanguage
                         )
+                        .applySettingsSubstepCloseControl {
+                            dismiss()
+                        }
                     case .advancedZone:
                         SettingsAdvancedZoneStepView(
                             whisperCoreMLEncoderEnabled: $whisperCoreMLEncoderEnabled,
@@ -131,6 +140,9 @@ struct SettingsSheetFlowView: View {
                             whisperGGMLGPUDecodeRecommendationText: whisperGGMLGPUDecodeRecommendationText,
                             whisperModelRecommendationText: whisperModelRecommendationText
                         )
+                        .applySettingsSubstepCloseControl {
+                            dismiss()
+                        }
                     case .cloudAndPurchases:
                         SettingsCloudAndPurchasesStepView(
                             isICloudSyncEnabled: $isICloudSyncEnabled,
@@ -138,27 +150,32 @@ struct SettingsSheetFlowView: View {
                             restoreStatusMessage: restoreStatusMessage,
                             onRestorePurchases: onRestorePurchases
                         )
+                        .applySettingsSubstepCloseControl {
+                            dismiss()
+                        }
                     case .microphoneAccess:
                         SettingsMicrophoneAccessStepView(
                             permissionState: microphonePermissionState,
                             onRequestMicrophoneAccess: onRequestMicrophoneAccess,
                             onOpenMicrophoneSettings: onOpenMicrophoneSettings
                         )
+                        .applySettingsSubstepCloseControl {
+                            dismiss()
+                        }
                     }
                 }
 #if os(iOS)
                 .toolbar {
-                    ToolbarItem(placement: path.isEmpty ? .topBarLeading : .topBarTrailing) {
-                        Button(action: { dismiss() }) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 14, weight: .semibold))
-                                .frame(width: 32, height: 32)
-                                .background(.regularMaterial, in: Circle())
+                    ToolbarItem(placement: .topBarLeading) {
+                        settingsSheetCloseButton {
+                            dismiss()
                         }
-                        .accessibilityLabel("Cancel")
                     }
                 }
 #endif
+        }
+        .onDisappear {
+            path.removeAll()
         }
         .applySettingsSheetCloseControl {
             dismiss()
@@ -573,6 +590,19 @@ private extension View {
     }
 
     @ViewBuilder
+    func applySettingsSubstepCloseControl(onClose: @escaping () -> Void) -> some View {
+#if os(iOS)
+        toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                settingsSheetCloseButton(action: onClose)
+            }
+        }
+#else
+        self
+#endif
+    }
+
+    @ViewBuilder
     func applyRootTitleDisplayMode() -> some View {
 #if os(iOS)
         navigationBarTitleDisplayMode(.inline)
@@ -598,6 +628,14 @@ private extension View {
         listStyle(.insetGrouped)
 #endif
     }
+}
+
+@ViewBuilder
+private func settingsSheetCloseButton(action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+        Image(systemName: "xmark")
+    }
+    .accessibilityLabel("Cancel")
 }
 
 private extension SettingsMicrophonePermissionState {
