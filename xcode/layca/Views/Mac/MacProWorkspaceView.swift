@@ -334,7 +334,6 @@ struct MacChatWorkspaceView: View {
                     } label: {
                         Image(systemName: "ellipsis")
                     }
-                    .labelStyle(.iconOnly)
                     .menuIndicator(.hidden)
                     .disabled(isDraftSession)
                 }
