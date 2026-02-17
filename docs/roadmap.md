@@ -2,6 +2,11 @@
 
 ## Completed In This Chat
 
+### Export Sheet Detail-Step Polish (iOS + macOS)
+- `Features/Share/ExportSheetFlowView.swift`
+- Export format preview in detail steps is intentionally shorter (line cap reduced from `14` to `11`) with trailing ellipsis when truncated.
+- macOS `Actions` now keeps `Share` and `Copy` on a single horizontal row.
+
 ### Settings Sheet Flow Refresh (iOS + macOS)
 - `App/ContentView.swift`, `Features/Share/SettingsSheetFlowView.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - `Settings` now opens as a single modal sheet from app shell actions (instead of switching to a dedicated settings detail workspace).

@@ -94,6 +94,8 @@
   - tapping outside the edit form (content/sidebar/toolbar focus-loss path) cancels editing
 - Renaming from session context menu (Library where available or sidebar `Recent Chats`) updates the same persisted session title used by Chat header.
 - `Export` opens from a header/toolbar action instead of a tab.
+- Export format sub-steps show a shortened preview snippet (11 lines + `…` when truncated) on both iOS-family and macOS.
+- macOS export format sub-step keeps `Share` and `Copy` in a single action row.
 - Recorder timer behavior:
   - draft idle state shows starter text (`Tap to start record` on iOS/iPadOS, `Click to start record` on macOS)
   - main timer formatting follows setting `Time Display` (`Friendly` / `Hybrid` / `Professional`)

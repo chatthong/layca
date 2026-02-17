@@ -222,6 +222,7 @@ struct SettingsSheetFlowView: View {
                 }
 #endif
         }
+        .applySettingsMacSheetFill()
         .onDisappear {
             path.removeAll()
         }
@@ -249,6 +250,7 @@ struct SettingsSheetFlowView: View {
             }
             .formStyle(.grouped)
         }
+        .applySettingsMacSheetFill()
     }
 
     private var macCategoryHeader: some View {
@@ -315,6 +317,7 @@ struct SettingsSheetFlowView: View {
             accountSection
         }
         .applySettingsListStyle()
+        .applySettingsMacSheetFill()
     }
 
     private var generalSection: some View {
@@ -725,6 +728,7 @@ private struct SettingsStepContainer<Content: View>: View {
             content
         }
         .formStyle(.grouped)
+        .applySettingsMacSheetFill()
 #else
         Form {
             content
@@ -802,6 +806,15 @@ private extension View {
         listStyle(.inset)
 #else
         listStyle(.insetGrouped)
+#endif
+    }
+
+    @ViewBuilder
+    func applySettingsMacSheetFill() -> some View {
+#if os(macOS)
+        frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+#else
+        self
 #endif
     }
 }

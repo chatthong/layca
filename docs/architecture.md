@@ -69,6 +69,8 @@
   - `Offline Model Switch` sub-step (`Fast`, `Normal`, `Pro`)
 - Settings `General` controls include:
   - `Time Display` as a dedicated sub-step (`Friendly` / `Hybrid` / `Professional`) for main timer only
+- Export format sub-steps use a shortened preview window (11 lines + trailing ellipsis when truncated) on both iOS-family and macOS.
+- macOS export format sub-step renders `Share` + `Copy` in a single actions row.
 - On physical iOS devices, CoreML encoder now uses an auto profile: enabled on high-memory/high-core devices for maximum performance, safety-disabled on lower-tier devices to avoid startup stalls.
 - Set `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON` to force-enable on any iPhone.
 - On some iPhones, first CoreML encoder run may log ANE/CoreML plan-build warnings before succeeding.

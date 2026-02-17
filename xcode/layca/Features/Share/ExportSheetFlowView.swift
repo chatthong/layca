@@ -95,6 +95,7 @@ struct ExportSheetFlowView: View {
                 }
             }
             .applyExportListStyle()
+            .applyExportMacSheetFill()
             .navigationTitle("Share")
             .applyExportRootTitleDisplayMode()
             .navigationDestination(for: ExportFormat.self) { format in
@@ -117,6 +118,7 @@ struct ExportSheetFlowView: View {
             }
 #endif
         }
+        .applyExportMacSheetFill()
         .onDisappear {
             path.removeAll()
         }
@@ -152,10 +154,11 @@ private struct ExportSheetFormatStepView: View {
     @State private var didCopy = false
 
     private var previewText: String {
+        let previewLineLimit = 11
         let lines = payload.components(separatedBy: .newlines)
-        let previewLines = lines.prefix(14)
+        let previewLines = lines.prefix(previewLineLimit)
         let preview = previewLines.joined(separator: "\n")
-        if lines.count > 14 {
+        if lines.count > previewLineLimit {
             return "\(preview)\n…"
         }
         return preview
@@ -177,6 +180,27 @@ private struct ExportSheetFormatStepView: View {
             }
 
             Section("Actions") {
+#if os(macOS)
+                HStack(spacing: 10) {
+                    ShareLink(
+                        item: payload,
+                        subject: Text(sessionTitle),
+                        message: Text("Shared from Layca")
+                    ) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+
+                    Button {
+                        copyExportTextToPasteboard(payload)
+                        didCopy = true
+                    } label: {
+                        Label(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc")
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .buttonStyle(.bordered)
+#else
                 ShareLink(
                     item: payload,
                     subject: Text(sessionTitle),
@@ -191,8 +215,13 @@ private struct ExportSheetFormatStepView: View {
                 } label: {
                     Label(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc")
                 }
+#endif
             }
         }
+#if os(macOS)
+        .formStyle(.grouped)
+#endif
+        .applyExportMacSheetFill()
         .navigationTitle(format.title)
         .applyExportStepTitleDisplayMode()
     }
@@ -265,6 +294,15 @@ private extension View {
         listStyle(.inset)
 #else
         listStyle(.insetGrouped)
+#endif
+    }
+
+    @ViewBuilder
+    func applyExportMacSheetFill() -> some View {
+#if os(macOS)
+        frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+#else
+        self
 #endif
     }
 }

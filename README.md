@@ -80,7 +80,7 @@ Documents/
   General: hours credit, language focus, `Time Display` sub-step; Advanced: `Acceleration` + `Offline Model Switch`; Account: iCloud toggle + restore purchases; macOS adds microphone access controls.
 - **Library workspace:** Session switcher with long-press/right-click action group (`Rename`, `Share this chat`, `Delete`) on session rows (where Library is present).
 - **macOS recent chats sidebar:** Same long-press/right-click action group (`Rename`, `Share this chat`, `Delete`).
-- **Export:** Separate sheet; Notepad-style formatting is export-only.
+- **Export:** Separate sheet; Notepad-style formatting is export-only. Export format sub-steps intentionally show a shortened preview snippet (11 lines + ellipsis when truncated), and macOS keeps `Share` + `Copy` actions in one row.
 
 ---
 

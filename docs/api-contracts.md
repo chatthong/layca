@@ -66,6 +66,11 @@
   - draft idle state shows starter text (`Tap to start record` / `Click to start record`) until recording starts
   - transcript playback state changes action to `Stop`, switches recorder tint green, and shows countdown + segment range subtitle
 
+## Export Sheet UI Contract (View-level)
+- `ExportSheetFlowView` presents a root list of export formats and pushes into a single format detail step.
+- Format detail preview text is intentionally truncated to the first 11 lines; a trailing ellipsis line is appended when additional content exists.
+- On macOS format detail step, `Actions` displays `Share` and `Copy`/`Copied` in one horizontal row.
+
 ### `toggleLanguageFocus(_ code: String) -> Void`
 - Adds/removes language code used to build pre-flight prompt.
 

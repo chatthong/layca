@@ -41,3 +41,5 @@ Agreed. We can add VAD options after cleanup.
 - Export uses latest persisted row text (including any automatic queued Whisper updates and quality-filtered row removals).
 - Apply style transform at export time only.
 - Keep raw transcript unchanged in persistence.
+- Export format sub-step preview is intentionally capped to a short snippet (11 lines + trailing `…` when truncated) for faster scan on both iOS-family and macOS.
+- On macOS export format sub-step, `Actions` places `Share` and `Copy` on one row.
