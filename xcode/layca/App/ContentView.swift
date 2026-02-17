@@ -9,9 +9,6 @@ import SwiftUI
 #if os(iOS)
 import UIKit
 #endif
-#if os(macOS)
-import AppKit
-#endif
 
 struct ContentView: View {
     @StateObject private var backend = AppBackend()
@@ -522,7 +519,7 @@ private extension ContentView {
     @ViewBuilder
     var exportScreen: some View {
         let snapshot = exportSessionSnapshot
-        ShareSheetFlowView(
+        ExportSheetFlowView(
             sessionTitle: snapshot.title,
             createdAtText: snapshot.createdAtText,
             buildPayload: buildExportPayload
@@ -535,24 +532,24 @@ private extension ContentView {
 #endif
     }
 
-    private var exportSessionSnapshot: ShareSessionSnapshot {
+    private var exportSessionSnapshot: ExportSessionSnapshot {
         if let activeSessionID = backend.activeSessionID,
            let session = backend.sessions.first(where: { $0.id == activeSessionID }) {
-            return ShareSessionSnapshot(
+            return ExportSessionSnapshot(
                 title: session.title,
                 createdAtText: session.formattedDate,
                 rows: session.rows
             )
         }
 
-        return ShareSessionSnapshot(
+        return ExportSessionSnapshot(
             title: backend.activeSessionTitle,
             createdAtText: backend.activeSessionDateText,
             rows: backend.activeTranscriptRows
         )
     }
 
-    private func buildExportPayload(for format: ShareExportFormat) -> String {
+    private func buildExportPayload(for format: ExportFormat) -> String {
         let snapshot = exportSessionSnapshot
         switch format {
         case .notepadMinutes:
@@ -564,7 +561,7 @@ private extension ContentView {
         }
     }
 
-    private func buildPlainTranscriptText(snapshot: ShareSessionSnapshot) -> String {
+    private func buildPlainTranscriptText(snapshot: ExportSessionSnapshot) -> String {
         if let activeSessionID = backend.activeSessionID,
            let session = backend.sessions.first(where: { $0.id == activeSessionID }) {
             return backend.shareText(for: session)
@@ -591,7 +588,7 @@ private extension ContentView {
         return "\(header)\(body)"
     }
 
-    private func buildNotepadMinutesText(snapshot: ShareSessionSnapshot) -> String {
+    private func buildNotepadMinutesText(snapshot: ExportSessionSnapshot) -> String {
         let header = [
             snapshot.title,
             "Created: \(snapshot.createdAtText)",
@@ -611,7 +608,7 @@ private extension ContentView {
         return "\(header)\(lines)"
     }
 
-    private func buildMarkdownText(snapshot: ShareSessionSnapshot) -> String {
+    private func buildMarkdownText(snapshot: ExportSessionSnapshot) -> String {
         var lines: [String] = [
             "# \(snapshot.title)",
             "",
@@ -924,283 +921,8 @@ private enum AppTab: Hashable {
     case newChat
 }
 
-private struct ShareSessionSnapshot {
+private struct ExportSessionSnapshot {
     let title: String
     let createdAtText: String
     let rows: [TranscriptRow]
-}
-
-private enum ShareExportFormat: String, CaseIterable, Hashable, Identifiable {
-    case notepadMinutes
-    case markdown
-    case plainText
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .notepadMinutes:
-            return "Notepad Minutes"
-        case .markdown:
-            return "Markdown"
-        case .plainText:
-            return "Plain Text"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .notepadMinutes:
-            return "Timestamp + speaker style"
-        case .markdown:
-            return "Structured headings format"
-        case .plainText:
-            return "Simple transcript output"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .notepadMinutes:
-            return "note.text"
-        case .markdown:
-            return "number.square"
-        case .plainText:
-            return "text.alignleft"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .notepadMinutes:
-            return "Best for meeting notes with compact timestamp and speaker context."
-        case .markdown:
-            return "Best for docs, notes apps, and formatting-friendly destinations."
-        case .plainText:
-            return "Best for quick copy/share with no additional formatting."
-        }
-    }
-}
-
-private struct ShareSheetFlowView: View {
-    let sessionTitle: String
-    let createdAtText: String
-    let buildPayload: (ShareExportFormat) -> String
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var path: [ShareExportFormat] = []
-
-    var body: some View {
-        NavigationStack(path: $path) {
-            List {
-                Section {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(sessionTitle)
-                            .font(.body.weight(.semibold))
-                        Text("Created: \(createdAtText)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 4)
-                }
-
-                Section("Share Styles") {
-                    ForEach(ShareExportFormat.allCases) { format in
-                        NavigationLink(value: format) {
-                            formatRow(format)
-                        }
-                    }
-                }
-            }
-            .applyShareListStyle()
-            .navigationTitle("Share")
-            .applyShareRootTitleDisplayMode()
-            .navigationDestination(for: ShareExportFormat.self) { format in
-                ShareSheetFormatStepView(
-                    format: format,
-                    sessionTitle: sessionTitle,
-                    payload: buildPayload(format)
-                )
-                .applyShareSubstepCloseControl {
-                    dismiss()
-                }
-            }
-#if os(iOS)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    shareSheetCloseButton {
-                        dismiss()
-                    }
-                }
-            }
-#endif
-        }
-        .onDisappear {
-            path.removeAll()
-        }
-        .applyShareSheetCloseControl {
-            dismiss()
-        }
-    }
-
-    private func formatRow(_ format: ShareExportFormat) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: format.symbol)
-                .font(.body.weight(.semibold))
-                .frame(width: 20, height: 20)
-                .foregroundStyle(Color.accentColor)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(format.title)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text(format.subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-private struct ShareSheetFormatStepView: View {
-    let format: ShareExportFormat
-    let sessionTitle: String
-    let payload: String
-
-    @State private var didCopy = false
-
-    private var previewText: String {
-        let lines = payload.components(separatedBy: .newlines)
-        let previewLines = lines.prefix(14)
-        let preview = previewLines.joined(separator: "\n")
-        if lines.count > 14 {
-            return "\(preview)\n…"
-        }
-        return preview
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                Text(format.detail)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Preview") {
-                Text(previewText)
-                    .font(.system(.footnote, design: .monospaced))
-                    .textSelection(.enabled)
-                    .lineLimit(nil)
-            }
-
-            Section("Actions") {
-                ShareLink(
-                    item: payload,
-                    subject: Text(sessionTitle),
-                    message: Text("Shared from Layca")
-                ) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-
-                Button {
-                    copyExportTextToPasteboard(payload)
-                    didCopy = true
-                } label: {
-                    Label(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc")
-                }
-            }
-        }
-        .navigationTitle(format.title)
-        .applyShareStepTitleDisplayMode()
-    }
-}
-
-private struct ShareSheetCloseControlModifier: ViewModifier {
-    let onClose: () -> Void
-
-    func body(content: Content) -> some View {
-#if os(macOS)
-        content
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button("Close", action: onClose)
-                        .keyboardShortcut(.cancelAction)
-                }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 12)
-                .background(.regularMaterial)
-                .overlay(alignment: .top) {
-                    Divider()
-                }
-            }
-#else
-        content
-#endif
-    }
-}
-
-private extension View {
-    func applyShareSheetCloseControl(onClose: @escaping () -> Void) -> some View {
-        modifier(ShareSheetCloseControlModifier(onClose: onClose))
-    }
-
-    @ViewBuilder
-    func applyShareSubstepCloseControl(onClose: @escaping () -> Void) -> some View {
-#if os(iOS)
-        toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                shareSheetCloseButton(action: onClose)
-            }
-        }
-#else
-        self
-#endif
-    }
-
-    @ViewBuilder
-    func applyShareRootTitleDisplayMode() -> some View {
-#if os(iOS)
-        navigationBarTitleDisplayMode(.inline)
-#else
-        self
-#endif
-    }
-
-    @ViewBuilder
-    func applyShareStepTitleDisplayMode() -> some View {
-#if os(iOS)
-        navigationBarTitleDisplayMode(.inline)
-#else
-        self
-#endif
-    }
-
-    @ViewBuilder
-    func applyShareListStyle() -> some View {
-#if os(macOS)
-        listStyle(.inset)
-#else
-        listStyle(.insetGrouped)
-#endif
-    }
-}
-
-@ViewBuilder
-private func shareSheetCloseButton(action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-        Image(systemName: "xmark")
-    }
-    .accessibilityLabel("Close")
-}
-
-private func copyExportTextToPasteboard(_ text: String) {
-#if os(macOS)
-    let pasteboard = NSPasteboard.general
-    pasteboard.clearContents()
-    pasteboard.setString(text, forType: .string)
-#else
-    UIPasteboard.general.string = text
-#endif
 }

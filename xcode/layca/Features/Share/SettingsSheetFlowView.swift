@@ -7,49 +7,6 @@ enum SettingsMicrophonePermissionState: Sendable {
     case unknown
 }
 
-private enum SettingsStep: Hashable {
-    case credits
-    case languageFocus
-    case timeDisplay
-    case languageRegion(LanguageRegion)
-    case acceleration
-    case offlineModelSwitch
-    case cloudAndPurchases
-    case microphoneAccess
-}
-
-#if os(macOS)
-private enum MacSettingsCategory: String, CaseIterable, Identifiable {
-    case general
-    case advanced
-    case account
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .general:
-            return "General"
-        case .advanced:
-            return "Advanced"
-        case .account:
-            return "Account"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .general:
-            return "gearshape"
-        case .advanced:
-            return "gearshape.2"
-        case .account:
-            return "icloud"
-        }
-    }
-}
-#endif
-
 struct SettingsTabView: View {
     let totalHours: Double
     let usedHours: Double
@@ -101,6 +58,49 @@ struct SettingsTabView: View {
         )
     }
 }
+
+private enum SettingsStep: Hashable {
+    case credits
+    case languageFocus
+    case timeDisplay
+    case languageRegion(LanguageRegion)
+    case acceleration
+    case offlineModelSwitch
+    case cloudAndPurchases
+    case microphoneAccess
+}
+
+#if os(macOS)
+private enum MacSettingsCategory: String, CaseIterable, Identifiable {
+    case general
+    case advanced
+    case account
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general:
+            return "General"
+        case .advanced:
+            return "Advanced"
+        case .account:
+            return "Account"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general:
+            return "gearshape"
+        case .advanced:
+            return "gearshape.2"
+        case .account:
+            return "icloud"
+        }
+    }
+}
+#endif
 
 struct SettingsSheetFlowView: View {
     let totalHours: Double

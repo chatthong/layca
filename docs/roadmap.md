@@ -3,7 +3,7 @@
 ## Completed In This Chat
 
 ### Settings Sheet Flow Refresh (iOS + macOS)
-- `App/ContentView.swift`, `Features/Settings/SettingsTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`
+- `App/ContentView.swift`, `Features/Share/SettingsSheetFlowView.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - `Settings` now opens as a single modal sheet from app shell actions (instead of switching to a dedicated settings detail workspace).
 - Settings navigation is now a single internal multi-step flow using one navigation stack (no nested settings sub-sheets).
 - iOS dismiss/back control placement follows multi-step sheet guidance:
@@ -12,7 +12,7 @@
 - macOS step pages were updated to grouped native form/list styling to avoid broken second-level layout rendering.
 
 ### Settings Information Architecture Tuning
-- `Features/Settings/SettingsTabView.swift`
+- `Features/Share/SettingsSheetFlowView.swift`
 - Removed `Model and Display` sub-step.
 - `Time Display` is now a dedicated sub-step under `General`.
 - Renamed settings section `Runtime` to `Advanced`.
@@ -182,7 +182,7 @@
 - Added background Whisper prewarm after runtime preference apply to reduce first-transcription cold-start delay.
 
 ### Settings Advanced + Time Display Sub-Steps
-- `Features/Settings/SettingsTabView.swift`, `App/ContentView.swift`, `App/AppBackend.swift`
+- `Features/Share/SettingsSheetFlowView.swift`, `App/ContentView.swift`, `App/AppBackend.swift`
 - Added settings controls on iOS-family and macOS settings:
   - `General > Time Display` (`Friendly` / `Hybrid` / `Professional`) for main timer only
   - `Advanced > Acceleration`:
@@ -206,7 +206,7 @@
 - `New Chat` and `Settings` are now sidebar-driven actions on macOS.
 
 ### Native Theme + Surface Simplification
-- `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`, `Features/Library/LibraryTabView.swift`, `Features/Settings/SettingsTabView.swift`, `Views/Components/TranscriptBubbleOptionButton.swift`, `Views/Shared/View+PlatformCompatibility.swift`
+- `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`, `Features/Library/LibraryTabView.swift`, `Features/Share/SettingsSheetFlowView.swift`, `Views/Components/TranscriptBubbleOptionButton.swift`, `Views/Shared/View+PlatformCompatibility.swift`
 - iOS-family backgrounds switched to plain `systemBackground` (removed live backdrop on iOS-family screens).
 - Card and control surfaces now use native SwiftUI material fills instead of custom liquid-card wrappers.
 - iOS-family appearance now follows automatic device light/dark switching.
@@ -241,7 +241,8 @@
 - Reorganized UI feature files into `Features/`:
   - `Features/Chat/ChatTabView.swift`
   - `Features/Library/LibraryTabView.swift`
-  - `Features/Settings/SettingsTabView.swift`
+  - `Features/Share/ExportSheetFlowView.swift`
+  - `Features/Share/SettingsSheetFlowView.swift`
 - Extracted shared UI helpers into `Views/Shared/`:
   - `Views/Shared/LiquidBackdrop.swift`
   - `Views/Shared/View+PlatformCompatibility.swift`

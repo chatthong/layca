@@ -10,7 +10,7 @@
 
 ## High-Level Modules
 1. App Shell + State Coordinator (`App/ContentView.swift`)
-2. Platform UI Components (`Features/Chat/ChatTabView.swift`, `Features/Settings/SettingsTabView.swift`, `Features/Library/LibraryTabView.swift`, `Views/Components/IOSWorkspaceSidebarView.swift`, `Views/Mac/MacProWorkspaceView.swift`)
+2. Platform UI Components (`Features/Chat/ChatTabView.swift`, `Features/Library/LibraryTabView.swift`, `Features/Share/SettingsSheetFlowView.swift`, `Features/Share/ExportSheetFlowView.swift`, `Views/Components/IOSWorkspaceSidebarView.swift`, `Views/Mac/MacProWorkspaceView.swift`)
 3. Backend Orchestrator (`App/AppBackend.swift`)
 4. Preflight Layer (`PreflightService`)
 5. Live Pipeline (`LiveSessionPipeline`)
@@ -115,7 +115,9 @@ xcode/layca/
 ├── Features/
 │   ├── Chat/ChatTabView.swift
 │   ├── Library/LibraryTabView.swift
-│   └── Settings/SettingsTabView.swift
+│   └── Share/
+│       ├── ExportSheetFlowView.swift
+│       └── SettingsSheetFlowView.swift
 ├── Models/
 │   ├── Domain/
 │   │   ├── FocusLanguage.swift

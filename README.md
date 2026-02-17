@@ -220,7 +220,7 @@ Documents/
 
 #### Project Structure Cleanup
 - App orchestration moved to `App/` (`laycaApp.swift`, `ContentView.swift`, `AppBackend.swift`).
-- Feature screens moved to `Features/` (`Chat`, `Library`, `Settings`).
+- Feature screens/components moved to `Features/` (`Chat`, `Library`, `Share`).
 - Shared UI helpers moved to `Views/Shared/`.
 - Domain models extracted to `Models/Domain/` (`FocusLanguage`, `ChatSession`, `TranscriptRow`).
 - Runtime model assets moved to `Models/RuntimeAssets/`.
