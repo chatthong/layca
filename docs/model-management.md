@@ -6,14 +6,15 @@
 - Settings provides:
   - Language Focus (multi-select)
   - Context keywords (free text), used in Whisper `initial_prompt`
-  - Time Display (main timer only: `Friendly`, `Hybrid`, `Professional`)
-  - Advanced Zone:
-    - Whisper ggml GPU Decode (toggle)
-    - Whisper CoreML Encoder (toggle)
-    - Model Switch (`Fast`, `Normal`, `Pro`)
+  - Time Display as a dedicated sub-step (main timer only: `Friendly`, `Hybrid`, `Professional`)
+  - Advanced:
+    - Acceleration sub-step:
+      - Whisper ggml GPU Decode (toggle)
+      - Whisper CoreML Encoder (toggle)
+    - Offline Model Switch sub-step (`Fast`, `Normal`, `Pro`)
 - On macOS, the same model-related settings are shown in the native settings workspace form.
 - macOS settings view is reachable from sidebar `Settings` and opens as a modal sheet flow.
-- Initial Advanced Zone values are auto-detected by device and persisted; users can override anytime.
+- Initial Advanced values (Acceleration + Offline Model Switch) are auto-detected by device and persisted; users can override anytime.
 - `Time Display` default is `Friendly` and persists in app settings (`mainTimerDisplayStyleRawValue`).
 
 ## Current Runtime Assets
@@ -53,7 +54,7 @@
 ## Whisper Startup / Backend Selection
 - App applies runtime preferences during bootstrap and triggers background Whisper prepare/warmup to reduce first-use latency.
 - Runtime preference sources:
-  1. App settings (`Advanced Zone`) via `setRuntimePreferences(...)` (highest priority in app flow)
+  1. App settings (`Advanced`) via `setRuntimePreferences(...)` (highest priority in app flow)
   2. Environment fallback at service level
 - Runtime acceleration env toggles:
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`

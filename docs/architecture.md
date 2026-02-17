@@ -2,7 +2,7 @@
 
 ## Goals
 - Offline-first meeting assistant with local-first processing.
-- Dynamic configuration from Settings (language focus + main timer display + sync toggle + Whisper Advanced Zone controls).
+- Dynamic configuration from Settings (language focus + main timer display + sync toggle + Whisper Advanced controls).
 - Reactive chat UI driven by backend state.
 - Persist chats/settings across app relaunch on iOS-family and macOS while defaulting UI to draft mode at startup.
 - Native platform-adapted shell: drawer workspace on iOS/iPadOS, split-view workspace on macOS, and tab fallback on visionOS/tvOS.
@@ -62,12 +62,13 @@
 - Whisper acceleration toggles are available at environment level:
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
   - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
-- Settings Advanced Zone controls:
-  - `Whisper ggml GPU Decode` toggle
-  - `Whisper CoreML Encoder` toggle
-  - `Model Switch` (`Fast`, `Normal`, `Pro`)
-- Settings General controls include:
-  - `Time Display` (`Friendly` / `Hybrid` / `Professional`) for main timer only
+- Settings `Advanced` controls:
+  - `Acceleration` sub-step:
+    - `Whisper ggml GPU Decode` toggle
+    - `Whisper CoreML Encoder` toggle
+  - `Offline Model Switch` sub-step (`Fast`, `Normal`, `Pro`)
+- Settings `General` controls include:
+  - `Time Display` as a dedicated sub-step (`Friendly` / `Hybrid` / `Professional`) for main timer only
 - On physical iOS devices, CoreML encoder now uses an auto profile: enabled on high-memory/high-core devices for maximum performance, safety-disabled on lower-tier devices to avoid startup stalls.
 - Set `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON` to force-enable on any iPhone.
 - On some iPhones, first CoreML encoder run may log ANE/CoreML plan-build warnings before succeeding.

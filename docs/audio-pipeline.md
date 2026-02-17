@@ -64,7 +64,7 @@
   - `preferredLanguageCode = "auto"` (language auto-detect)
   - `translate = false` (never translate)
   - `initial_prompt` comes from strict verbatim preflight template + context keywords
-- Whisper runtime preferences are applied from Settings Advanced Zone and prewarmed in background to reduce first-use latency.
+- Whisper runtime preferences are applied from Settings `Advanced` (`Acceleration` + `Offline Model Switch`) and prewarmed in background to reduce first-use latency.
 - Runtime acceleration env flags (service-level fallback):
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
   - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
@@ -72,7 +72,7 @@
   - CoreML encoder is auto-enabled on higher-tier iPhones for maximum speed
   - lower-tier iPhones auto-fallback to encoder OFF for startup reliability
   - set `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON` to force-enable
-- Advanced Zone model profiles:
+- `Offline Model Switch` model profiles:
   - `Fast` -> `ggml-large-v3-turbo-q5_0.bin`
   - `Normal` -> `ggml-large-v3-turbo-q8_0.bin`
   - `Pro` -> `ggml-large-v3-turbo.bin`

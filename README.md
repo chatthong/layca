@@ -29,7 +29,9 @@
 - **Decoder model profiles:** `Fast` (`ggml-large-v3-turbo-q5_0.bin`), `Normal` (`ggml-large-v3-turbo-q8_0.bin`), `Pro` (`ggml-large-v3-turbo.bin`).
 - **Model source layout in project:** `xcode/layca/Models/RuntimeAssets/` (copied into app resources at build time).
 - **Whisper startup mode:** app applies runtime preferences and triggers background prewarm so first manual transcription avoids most cold-start delay.
-- **Advanced Zone runtime controls:** GPU Decode (ON/OFF), CoreML Encoder (ON/OFF), Model Switch (`Fast`/`Normal`/`Pro`) on both iOS-family and macOS settings.
+- **Advanced settings controls:** `Advanced` section now uses two sub-menus on both iOS-family and macOS settings:
+  - `Acceleration`: GPU Decode (ON/OFF), CoreML Encoder (ON/OFF)
+  - `Offline Model Switch`: `Fast` / `Normal` / `Pro`
 - **iOS defaults:** values are auto-detected by device capability at first launch, then persisted as user-overridable settings.
 - **Environment toggles:** `LAYCA_ENABLE_WHISPER_COREML_ENCODER`, `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`, and `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS` remain available at runtime level (primarily useful outside app-managed settings flow).
 - **Acceleration fallback:** if ggml GPU context init fails, runtime falls back to CPU decode and logs status.
@@ -75,7 +77,7 @@ Documents/
 - **Chat workspace:** Recorder card + live transcript bubbles.
 - **Header/session actions:** iOS chat header keeps sidebar toggle before chat title; both iOS and macOS use a trailing native control group (`Play` + `More`). The `More` menu includes `Share`, `Rename`, and `Delete`. On compact iOS toolbar widths (for example long titles), the group collapses into a single overflow button with an explicit ellipsis icon while preserving the same actions.
 - **Settings sheet:** single modal sheet with multi-step navigation on iOS/macOS.  
-  General: hours credit, language focus, main timer `Time Display`; Runtime: Advanced Zone (GPU/CoreML/model profile); Account: iCloud toggle + restore purchases; macOS adds microphone access controls.
+  General: hours credit, language focus, `Time Display` sub-step; Advanced: `Acceleration` + `Offline Model Switch`; Account: iCloud toggle + restore purchases; macOS adds microphone access controls.
 - **Library workspace:** Session switcher with long-press/right-click action group (`Rename`, `Share this chat`, `Delete`) on session rows (where Library is present).
 - **macOS recent chats sidebar:** Same long-press/right-click action group (`Rename`, `Share this chat`, `Delete`).
 - **Export:** Separate sheet; Notepad-style formatting is export-only.

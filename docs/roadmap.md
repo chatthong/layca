@@ -9,16 +9,18 @@
 - iOS dismiss/back control placement follows multi-step sheet guidance:
   - root step: dismiss (`x`) on leading side
   - deeper steps: back on leading side, dismiss (`x`) on trailing side
-- macOS step pages were updated to a native list-based container to avoid broken multi-column `Form` rendering on second-level pages.
+- macOS step pages were updated to grouped native form/list styling to avoid broken second-level layout rendering.
 
 ### Settings Information Architecture Tuning
 - `Features/Settings/SettingsTabView.swift`
 - Removed `Model and Display` sub-step.
-- Moved `Time Display` to main settings sheet `General` section.
-- `Advanced Zone` now contains:
-  - `Whisper ggml GPU Decode`
-  - `Whisper CoreML Encoder`
-  - `Model Switch`
+- `Time Display` is now a dedicated sub-step under `General`.
+- Renamed settings section `Runtime` to `Advanced`.
+- `Advanced` now has two sub-steps:
+  - `Acceleration`
+    - `Whisper ggml GPU Decode`
+    - `Whisper CoreML Encoder`
+  - `Offline Model Switch`
 
 ### iOS Compact Toolbar Overflow Icon Fix
 - `Features/Chat/ChatTabView.swift`
@@ -179,13 +181,14 @@
 - Added ggml GPU decode fallback path to CPU decode when GPU context init fails.
 - Added background Whisper prewarm after runtime preference apply to reduce first-transcription cold-start delay.
 
-### Settings Advanced Zone (Model + Acceleration Controls)
+### Settings Advanced + Time Display Sub-Steps
 - `Features/Settings/SettingsTabView.swift`, `App/ContentView.swift`, `App/AppBackend.swift`
-- Added Advanced Zone controls on iOS-family and macOS settings:
-  - `Whisper ggml GPU Decode` toggle
-  - `Whisper CoreML Encoder` toggle
-  - `Time Display` (`Friendly` / `Hybrid` / `Professional`) for main timer only
-  - `Model Switch` (`Fast` / `Normal` / `Pro`)
+- Added settings controls on iOS-family and macOS settings:
+  - `General > Time Display` (`Friendly` / `Hybrid` / `Professional`) for main timer only
+  - `Advanced > Acceleration`:
+    - `Whisper ggml GPU Decode` toggle
+    - `Whisper CoreML Encoder` toggle
+  - `Advanced > Offline Model Switch` (`Fast` / `Normal` / `Pro`)
 - Added auto-detected first-launch defaults per device with persisted user overrides.
 - Added settings persistence fields for CoreML toggle, GPU toggle, model profile, and main timer display style.
 

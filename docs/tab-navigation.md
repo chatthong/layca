@@ -71,11 +71,12 @@
 - `Settings` sheet currently contains:
   - Hours credit
   - Language focus
-  - Time Display (`Friendly` / `Hybrid` / `Professional`) for main timer only
-  - Advanced Zone:
-    - Whisper ggml GPU Decode toggle
-    - Whisper CoreML Encoder toggle
-    - Model Switch (`Fast` / `Normal` / `Pro`)
+  - Time Display sub-step (`Friendly` / `Hybrid` / `Professional`) for main timer only
+  - Advanced:
+    - Acceleration sub-step:
+      - Whisper ggml GPU Decode toggle
+      - Whisper CoreML Encoder toggle
+    - Offline Model Switch sub-step (`Fast` / `Normal` / `Pro`)
   - iCloud sync + restore purchases
 - macOS `Settings` additionally includes:
   - microphone permission status

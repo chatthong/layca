@@ -10,11 +10,45 @@ enum SettingsMicrophonePermissionState: Sendable {
 private enum SettingsStep: Hashable {
     case credits
     case languageFocus
+    case timeDisplay
     case languageRegion(LanguageRegion)
-    case advancedZone
+    case acceleration
+    case offlineModelSwitch
     case cloudAndPurchases
     case microphoneAccess
 }
+
+#if os(macOS)
+private enum MacSettingsCategory: String, CaseIterable, Identifiable {
+    case general
+    case advanced
+    case account
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general:
+            return "General"
+        case .advanced:
+            return "Advanced"
+        case .account:
+            return "Account"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general:
+            return "gearshape"
+        case .advanced:
+            return "gearshape.2"
+        case .account:
+            return "icloud"
+        }
+    }
+}
+#endif
 
 struct SettingsTabView: View {
     let totalHours: Double
@@ -98,10 +132,13 @@ struct SettingsSheetFlowView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var path: [SettingsStep] = []
+#if os(macOS)
+    @State private var selectedMacCategory: MacSettingsCategory = .general
+#endif
 
     var body: some View {
         NavigationStack(path: $path) {
-            rootList
+            settingsRoot
                 .navigationTitle("Settings")
                 .applyRootTitleDisplayMode()
                 .navigationDestination(for: SettingsStep.self) { step in
@@ -121,6 +158,11 @@ struct SettingsSheetFlowView: View {
                         .applySettingsSubstepCloseControl {
                             dismiss()
                         }
+                    case .timeDisplay:
+                        SettingsTimeDisplayStepView(mainTimerDisplayStyle: $mainTimerDisplayStyle)
+                            .applySettingsSubstepCloseControl {
+                                dismiss()
+                            }
                     case .languageRegion(let region):
                         SettingsLanguageRegionStepView(
                             region: region,
@@ -131,13 +173,19 @@ struct SettingsSheetFlowView: View {
                         .applySettingsSubstepCloseControl {
                             dismiss()
                         }
-                    case .advancedZone:
-                        SettingsAdvancedZoneStepView(
+                    case .acceleration:
+                        SettingsAccelerationStepView(
                             whisperCoreMLEncoderEnabled: $whisperCoreMLEncoderEnabled,
                             whisperGGMLGPUDecodeEnabled: $whisperGGMLGPUDecodeEnabled,
-                            whisperModelProfile: $whisperModelProfile,
                             whisperCoreMLEncoderRecommendationText: whisperCoreMLEncoderRecommendationText,
-                            whisperGGMLGPUDecodeRecommendationText: whisperGGMLGPUDecodeRecommendationText,
+                            whisperGGMLGPUDecodeRecommendationText: whisperGGMLGPUDecodeRecommendationText
+                        )
+                        .applySettingsSubstepCloseControl {
+                            dismiss()
+                        }
+                    case .offlineModelSwitch:
+                        SettingsOfflineModelSwitchStepView(
+                            whisperModelProfile: $whisperModelProfile,
                             whisperModelRecommendationText: whisperModelRecommendationText
                         )
                         .applySettingsSubstepCloseControl {
@@ -182,75 +230,161 @@ struct SettingsSheetFlowView: View {
         }
     }
 
-    private var rootList: some View {
-        List {
-            Section("General") {
-                NavigationLink(value: SettingsStep.credits) {
-                    settingsRowLabel(
-                        title: "Hours Credit",
-                        subtitle: "Usage and balance",
-                        symbol: "clock.badge.checkmark"
-                    )
-                }
+    @ViewBuilder
+    private var settingsRoot: some View {
+#if os(macOS)
+        macSettingsRoot
+#else
+        rootList
+#endif
+    }
 
-                NavigationLink(value: SettingsStep.languageFocus) {
-                    settingsRowLabel(
-                        title: "Language Focus",
-                        subtitle: "Priority recognition languages",
-                        symbol: "globe"
-                    )
-                }
+#if os(macOS)
+    private var macSettingsRoot: some View {
+        VStack(spacing: 0) {
+            macCategoryHeader
+            Divider()
+            Form {
+                macCategorySections
+            }
+            .formStyle(.grouped)
+        }
+    }
 
-                if showsMicrophoneMenu {
-                    NavigationLink(value: SettingsStep.microphoneAccess) {
-                        settingsRowLabel(
-                            title: "Microphone Access",
-                            subtitle: "Permission status and actions",
-                            symbol: "mic"
-                        )
+    private var macCategoryHeader: some View {
+        HStack(spacing: 12) {
+            ForEach(MacSettingsCategory.allCases) { category in
+                Button {
+                    selectedMacCategory = category
+                } label: {
+                    VStack(spacing: 6) {
+                        Image(systemName: category.symbol)
+                            .font(.system(size: 20, weight: .semibold))
+                            .frame(height: 22)
+                        Text(category.title)
+                            .font(.headline)
+                    }
+                    .frame(minWidth: 94)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 10)
+                    .background {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(
+                                selectedMacCategory == category
+                                    ? Color(nsColor: .controlBackgroundColor)
+                                    : Color.clear
+                            )
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(
+                                selectedMacCategory == category
+                                    ? Color(nsColor: .separatorColor)
+                                    : Color.clear,
+                                lineWidth: 1
+                            )
                     }
                 }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Time Display")
-                        .font(.subheadline.weight(.semibold))
-
-                    Picker("Time Display", selection: $mainTimerDisplayStyle) {
-                        ForEach(MainTimerDisplayStyle.allCases, id: \.self) { style in
-                            Text(style.title).tag(style)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-
-                    Text("Main timer only: \(mainTimerDisplayStyle.sampleText)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
-            }
-
-            Section("Runtime") {
-                NavigationLink(value: SettingsStep.advancedZone) {
-                    settingsRowLabel(
-                        title: "Advanced Zone",
-                        subtitle: "Runtime and model behavior",
-                        symbol: "gearshape.2"
-                    )
-                }
-            }
-
-            Section("Account") {
-                NavigationLink(value: SettingsStep.cloudAndPurchases) {
-                    settingsRowLabel(
-                        title: "Cloud and Purchases",
-                        subtitle: "iCloud sync and restore",
-                        symbol: "icloud"
-                    )
-                }
+                .buttonStyle(.plain)
+                .foregroundStyle(selectedMacCategory == category ? .primary : .secondary)
             }
         }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 22)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
+    }
+
+    @ViewBuilder
+    private var macCategorySections: some View {
+        switch selectedMacCategory {
+        case .general:
+            generalSection
+        case .advanced:
+            advancedSection
+        case .account:
+            accountSection
+        }
+    }
+#endif
+
+    private var rootList: some View {
+        List {
+            generalSection
+            advancedSection
+            accountSection
+        }
         .applySettingsListStyle()
+    }
+
+    private var generalSection: some View {
+        Section("General") {
+            NavigationLink(value: SettingsStep.credits) {
+                settingsRowLabel(
+                    title: "Hours Credit",
+                    subtitle: "Usage and balance",
+                    symbol: "clock.badge.checkmark"
+                )
+            }
+
+            NavigationLink(value: SettingsStep.languageFocus) {
+                settingsRowLabel(
+                    title: "Language Focus",
+                    subtitle: "Priority recognition languages",
+                    symbol: "globe"
+                )
+            }
+
+            if showsMicrophoneMenu {
+                NavigationLink(value: SettingsStep.microphoneAccess) {
+                    settingsRowLabel(
+                        title: "Microphone Access",
+                        subtitle: "Permission status and actions",
+                        symbol: "mic"
+                    )
+                }
+            }
+
+            NavigationLink(value: SettingsStep.timeDisplay) {
+                settingsRowLabel(
+                    title: "Time Display",
+                    subtitle: mainTimerDisplayStyle.title,
+                    symbol: "timer"
+                )
+            }
+        }
+    }
+
+    private var advancedSection: some View {
+        Section("Advanced") {
+            NavigationLink(value: SettingsStep.acceleration) {
+                settingsRowLabel(
+                    title: "Acceleration",
+                    subtitle: "CPU/GPU and CoreML options",
+                    symbol: "speedometer"
+                )
+            }
+
+            NavigationLink(value: SettingsStep.offlineModelSwitch) {
+                settingsRowLabel(
+                    title: "Offline Model Switch",
+                    subtitle: "Pick local model profile",
+                    symbol: "externaldrive.badge.checkmark"
+                )
+            }
+        }
+    }
+
+    private var accountSection: some View {
+        Section("Account") {
+            NavigationLink(value: SettingsStep.cloudAndPurchases) {
+                settingsRowLabel(
+                    title: "Cloud and Purchases",
+                    subtitle: "iCloud sync and restore",
+                    symbol: "icloud"
+                )
+            }
+        }
     }
 
     private func settingsRowLabel(title: String, subtitle: String, symbol: String) -> some View {
@@ -322,16 +456,12 @@ private struct SettingsLanguageFocusStepView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
-                HStack {
-                    Text("Selected")
-                    Spacer()
+                LabeledContent("Selected") {
                     Text("\(selectedLanguageCodes.count)")
                         .fontWeight(.semibold)
                 }
 
-                HStack {
-                    Text("Shown")
-                    Spacer()
+                LabeledContent("Shown") {
                     Text("\(filteredFocusLanguages.count)")
                         .fontWeight(.semibold)
                 }
@@ -419,13 +549,40 @@ private struct SettingsLanguageRegionStepView: View {
     }
 }
 
-private struct SettingsAdvancedZoneStepView: View {
+private struct SettingsTimeDisplayStepView: View {
+    @Binding var mainTimerDisplayStyle: MainTimerDisplayStyle
+
+    var body: some View {
+        SettingsStepContainer {
+            Section {
+                Text("Select how the main timer is shown during recording.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Time Display") {
+                Picker("Time Display", selection: $mainTimerDisplayStyle) {
+                    ForEach(MainTimerDisplayStyle.allCases, id: \.self) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text("Main timer only: \(mainTimerDisplayStyle.sampleText)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Time Display")
+        .applyStepTitleDisplayMode()
+    }
+}
+
+private struct SettingsAccelerationStepView: View {
     @Binding var whisperCoreMLEncoderEnabled: Bool
     @Binding var whisperGGMLGPUDecodeEnabled: Bool
-    @Binding var whisperModelProfile: WhisperModelProfile
     let whisperCoreMLEncoderRecommendationText: String
     let whisperGGMLGPUDecodeRecommendationText: String
-    let whisperModelRecommendationText: String
 
     var body: some View {
         SettingsStepContainer {
@@ -446,9 +603,26 @@ private struct SettingsAdvancedZoneStepView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+        .navigationTitle("Acceleration")
+        .applyStepTitleDisplayMode()
+    }
+}
 
-            Section("Model Switch") {
-                Picker("Model Switch", selection: $whisperModelProfile) {
+private struct SettingsOfflineModelSwitchStepView: View {
+    @Binding var whisperModelProfile: WhisperModelProfile
+    let whisperModelRecommendationText: String
+
+    var body: some View {
+        SettingsStepContainer {
+            Section {
+                Text("Choose which offline model profile the app should prefer.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Offline Model Switch") {
+                Picker("Offline Model Switch", selection: $whisperModelProfile) {
                     ForEach(WhisperModelProfile.allCases, id: \.self) { profile in
                         Text(profile.title).tag(profile)
                     }
@@ -463,7 +637,7 @@ private struct SettingsAdvancedZoneStepView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("Advanced Zone")
+        .navigationTitle("Offline Model Switch")
         .applyStepTitleDisplayMode()
     }
 }
@@ -547,10 +721,10 @@ private struct SettingsStepContainer<Content: View>: View {
 
     var body: some View {
 #if os(macOS)
-        List {
+        Form {
             content
         }
-        .listStyle(.inset)
+        .formStyle(.grouped)
 #else
         Form {
             content
@@ -570,6 +744,8 @@ private struct SettingsSheetCloseControlModifier: ViewModifier {
                     Spacer()
                     Button("Cancel", action: onClose)
                         .keyboardShortcut(.cancelAction)
+                    Button("OK", action: onClose)
+                        .keyboardShortcut(.defaultAction)
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
