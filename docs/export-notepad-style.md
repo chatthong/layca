@@ -1,45 +1,58 @@
-# Export Notepad Style
+# Export Formats
 
 ## Purpose
 - Keep the app UI chat-first and simple.
-- Provide Notepad-style readability only in exported documents.
+- Offer format-specific export outputs for notes, copy/paste, docs, and subtitle workflows.
 
 ## Scope
 - Applies only to transcript export output.
-- Does not add an in-app Notepad tab or editor mode.
+- Does not add an in-app editor mode.
 - Available from chat header/toolbar export action on both iOS-family and macOS layouts.
 - On macOS, export is triggered from the Chat-detail top-right `More` menu (`Share` action).
 
-## Style Presets
+## Styles (Current)
 1. `notepadMinutes`
-- Timestamp as prefix per paragraph.
-- Speaker label included.
-- Compact spacing for meeting minutes.
+- Output includes:
+  - session title
+  - `Created: <date>`
+  - one extra blank spacer line
+  - transcript blocks formatted as `[HH:mm:ss] Speaker (LANG)` + message body
+- Intended for meeting-minute readability.
 
-2. `notepadClean`
-- Speaker label optional.
-- Wider spacing and cleaner paragraph flow.
-- Good for sharing summaries in email/docs.
+2. `plainText`
+- Output includes only transcript message text blocks.
+- No title/date header.
+- No timestamp/speaker/language prefixes.
+- Intended for quick paste into other tools.
 
-## Suggested Export Header
-- Session title
-- Date/time range
-- Language(s)
-- Optional participant labels
+3. `markdown`
+- Output includes markdown heading and transcript section structure.
+- Intended for docs/wiki/notes tools that support markdown.
 
-## Example Snippet
-```text
-[00:04:32] Speaker A (EN)
-Let's lock the roadmap and keep the settings page minimal.
+4. `videoSubtitlesSRT`
+- Output uses SubRip format (`.srt`):
+  - indexed cues
+  - `HH:MM:SS,mmm --> HH:MM:SS,mmm` timing lines
+  - cue text body
+- Cue timing prefers row `startOffset`/`endOffset`; falls back to parsed row time and minimum duration guards when offsets are unavailable.
+- Intended for video editors and players with subtitle track support.
 
-[00:04:47] Speaker B (TH)
-Agreed. We can add VAD options after cleanup.
-```
+## Share + Copy Behavior
+- `Share` writes a temporary file and shares its URL with style-specific extension:
+  - `notepadMinutes` -> `.txt`
+  - `plainText` -> `.txt`
+  - `markdown` -> `.md`
+  - `videoSubtitlesSRT` -> `.srt`
+- `Copy` always copies the text payload for the selected style.
+
+## Preview Rules
+- Export format detail preview is intentionally capped to a short snippet:
+  - first 11 lines
+  - trailing `…` when additional lines exist
+- On macOS export detail step, `Actions` places `Share` and `Copy` on one row.
 
 ## Implementation Notes
-- Reuse transcript message rows and timestamps from storage.
-- Export uses latest persisted row text (including any automatic queued Whisper updates and quality-filtered row removals).
-- Apply style transform at export time only.
+- Reuse transcript message rows and timestamps/offsets from storage.
+- Export uses latest persisted row text (including automatic queued Whisper updates and quality-filtered row removals).
+- Apply style transforms at export time only.
 - Keep raw transcript unchanged in persistence.
-- Export format sub-step preview is intentionally capped to a short snippet (11 lines + trailing `…` when truncated) for faster scan on both iOS-family and macOS.
-- On macOS export format sub-step, `Actions` places `Share` and `Copy` on one row.

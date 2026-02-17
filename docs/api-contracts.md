@@ -68,7 +68,13 @@
 
 ## Export Sheet UI Contract (View-level)
 - `ExportSheetFlowView` presents a root list of export formats and pushes into a single format detail step.
+- Supported styles:
+  - `Notepad Minutes` (session header + spacer line + `[HH:mm:ss] Speaker (LANG)` blocks)
+  - `Plain Text` (raw row text only, no header/timestamp/speaker labels)
+  - `Markdown`
+  - `Video Subtitles (.srt)` (SubRip cue list using row offsets with safe timing fallback)
 - Format detail preview text is intentionally truncated to the first 11 lines; a trailing ellipsis line is appended when additional content exists.
+- `Share` emits a temporary file URL with extension mapped by style (`.txt`, `.md`, `.srt`) so downstream apps receive the expected file type.
 - On macOS format detail step, `Actions` displays `Share` and `Copy`/`Copied` in one horizontal row.
 
 ### `toggleLanguageFocus(_ code: String) -> Void`

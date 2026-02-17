@@ -70,6 +70,12 @@
 - Settings `General` controls include:
   - `Time Display` as a dedicated sub-step (`Friendly` / `Hybrid` / `Professional`) for main timer only
 - Export format sub-steps use a shortened preview window (11 lines + trailing ellipsis when truncated) on both iOS-family and macOS.
+- Export sheet styles currently include:
+  - `Notepad Minutes` (header + spacer line + timestamp/speaker/language blocks)
+  - `Plain Text` (raw transcript text only)
+  - `Markdown`
+  - `Video Subtitles (.srt)` (SubRip cue output)
+- Export `Share` action writes and shares a temporary file URL with a style-matched extension (`.txt`, `.md`, `.srt`), while `Copy` always copies text payload.
 - macOS export format sub-step renders `Share` + `Copy` in a single actions row.
 - On physical iOS devices, CoreML encoder now uses an auto profile: enabled on high-memory/high-core devices for maximum performance, safety-disabled on lower-tier devices to avoid startup stalls.
 - Set `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON` to force-enable on any iPhone.

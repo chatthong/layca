@@ -7,6 +7,15 @@
 - Export format preview in detail steps is intentionally shorter (line cap reduced from `14` to `11`) with trailing ellipsis when truncated.
 - macOS `Actions` now keeps `Share` and `Copy` on a single horizontal row.
 
+### Export Format Expansion + Real File-Type Sharing
+- `Features/Share/ExportSheetFlowView.swift`, `App/ContentView.swift`
+- Added new export style: `Video Subtitles (.srt)` with SubRip cue output.
+- `Share` now writes and shares a temporary file URL using style-specific extensions (`.txt`, `.md`, `.srt`) instead of sharing only raw text payload.
+- Kept `Notepad Minutes` and `Plain Text` as separate styles with clear behavioral split:
+  - `Notepad Minutes` keeps title/date header + speaker/timestamp/language format
+  - `Plain Text` now outputs only raw message text
+- `Notepad Minutes` header now includes an extra blank spacer line after `Created:` for cleaner readability in preview/export.
+
 ### Settings Sheet Flow Refresh (iOS + macOS)
 - `App/ContentView.swift`, `Features/Share/SettingsSheetFlowView.swift`, `Views/Mac/MacProWorkspaceView.swift`
 - `Settings` now opens as a single modal sheet from app shell actions (instead of switching to a dedicated settings detail workspace).

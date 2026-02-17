@@ -16,6 +16,7 @@ enum ExportFormat: String, CaseIterable, Hashable, Identifiable {
     case notepadMinutes
     case markdown
     case plainText
+    case videoSubtitlesSRT
 
     var id: String { rawValue }
 
@@ -27,17 +28,21 @@ enum ExportFormat: String, CaseIterable, Hashable, Identifiable {
             return "Markdown"
         case .plainText:
             return "Plain Text"
+        case .videoSubtitlesSRT:
+            return "Video Subtitles (.srt)"
         }
     }
 
     var subtitle: String {
         switch self {
         case .notepadMinutes:
-            return "Timestamp + speaker style"
+            return "Timestamp + speaker + language"
         case .markdown:
             return "Structured headings format"
         case .plainText:
-            return "Simple transcript output"
+            return "Raw transcript text only"
+        case .videoSubtitlesSRT:
+            return "SubRip subtitles for video tools"
         }
     }
 
@@ -49,6 +54,8 @@ enum ExportFormat: String, CaseIterable, Hashable, Identifiable {
             return "number.square"
         case .plainText:
             return "text.alignleft"
+        case .videoSubtitlesSRT:
+            return "captions.bubble"
         }
     }
 
@@ -59,7 +66,33 @@ enum ExportFormat: String, CaseIterable, Hashable, Identifiable {
         case .markdown:
             return "Best for docs, notes apps, and formatting-friendly destinations."
         case .plainText:
-            return "Best for quick copy/share with no additional formatting."
+            return "Best for quick paste workflows where you only need the spoken content."
+        case .videoSubtitlesSRT:
+            return "Best for video editors and players that support SubRip subtitle files."
+        }
+    }
+
+    var fileExtension: String {
+        switch self {
+        case .markdown:
+            return "md"
+        case .videoSubtitlesSRT:
+            return "srt"
+        case .notepadMinutes, .plainText:
+            return "txt"
+        }
+    }
+
+    var fileNameSuffix: String {
+        switch self {
+        case .notepadMinutes:
+            return "notepad-minutes"
+        case .markdown:
+            return "markdown"
+        case .plainText:
+            return "plain-text"
+        case .videoSubtitlesSRT:
+            return "video-subtitles"
         }
     }
 }
@@ -152,6 +185,7 @@ private struct ExportSheetFormatStepView: View {
     let payload: String
 
     @State private var didCopy = false
+    @State private var shareFileURL: URL?
 
     private var previewText: String {
         let previewLineLimit = 11
@@ -182,12 +216,22 @@ private struct ExportSheetFormatStepView: View {
             Section("Actions") {
 #if os(macOS)
                 HStack(spacing: 10) {
-                    ShareLink(
-                        item: payload,
-                        subject: Text(sessionTitle),
-                        message: Text("Shared from Layca")
-                    ) {
-                        Label("Share", systemImage: "square.and.arrow.up")
+                    if let shareFileURL {
+                        ShareLink(
+                            item: shareFileURL,
+                            subject: Text(sessionTitle),
+                            message: Text("Shared from Layca")
+                        ) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
+                    } else {
+                        ShareLink(
+                            item: payload,
+                            subject: Text(sessionTitle),
+                            message: Text("Shared from Layca")
+                        ) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
                     }
 
                     Button {
@@ -201,12 +245,22 @@ private struct ExportSheetFormatStepView: View {
                 }
                 .buttonStyle(.bordered)
 #else
-                ShareLink(
-                    item: payload,
-                    subject: Text(sessionTitle),
-                    message: Text("Shared from Layca")
-                ) {
-                    Label("Share", systemImage: "square.and.arrow.up")
+                if let shareFileURL {
+                    ShareLink(
+                        item: shareFileURL,
+                        subject: Text(sessionTitle),
+                        message: Text("Shared from Layca")
+                    ) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                } else {
+                    ShareLink(
+                        item: payload,
+                        subject: Text(sessionTitle),
+                        message: Text("Shared from Layca")
+                    ) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
                 }
 
                 Button {
@@ -224,6 +278,49 @@ private struct ExportSheetFormatStepView: View {
         .applyExportMacSheetFill()
         .navigationTitle(format.title)
         .applyExportStepTitleDisplayMode()
+        .task(id: shareTaskID) {
+            shareFileURL = buildShareFileURL()
+        }
+    }
+
+    private var shareTaskID: String {
+        "\(format.rawValue)|\(sessionTitle)|\(payload)"
+    }
+
+    private func buildShareFileURL() -> URL? {
+        let fileName = "\(sanitizedFileStem(sessionTitle))-\(format.fileNameSuffix).\(format.fileExtension)"
+        let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+
+        do {
+            try payload.write(to: targetURL, atomically: true, encoding: .utf8)
+            return targetURL
+        } catch {
+            return nil
+        }
+    }
+
+    private func sanitizedFileStem(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "layca-export"
+        }
+
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        var output = ""
+        var hasSeparator = false
+
+        for scalar in trimmed.unicodeScalars {
+            if allowed.contains(scalar) {
+                output.append(Character(scalar))
+                hasSeparator = false
+            } else if !hasSeparator {
+                output.append("-")
+                hasSeparator = true
+            }
+        }
+
+        let cleaned = output.trimmingCharacters(in: CharacterSet(charactersIn: "-_")).lowercased()
+        return cleaned.isEmpty ? "layca-export" : cleaned
     }
 }
 

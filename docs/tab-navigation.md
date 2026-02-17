@@ -95,6 +95,12 @@
 - Renaming from session context menu (Library where available or sidebar `Recent Chats`) updates the same persisted session title used by Chat header.
 - `Export` opens from a header/toolbar action instead of a tab.
 - Export format sub-steps show a shortened preview snippet (11 lines + `…` when truncated) on both iOS-family and macOS.
+- Export styles are:
+  - `Notepad Minutes` (header + spacer line + timestamp/speaker/language blocks)
+  - `Plain Text` (raw transcript text only)
+  - `Markdown`
+  - `Video Subtitles (.srt)`
+- Export `Share` sends a style-specific temporary file (`.txt`, `.md`, `.srt`) so receiving apps treat the payload as the intended format.
 - macOS export format sub-step keeps `Share` and `Copy` in a single action row.
 - Recorder timer behavior:
   - draft idle state shows starter text (`Tap to start record` on iOS/iPadOS, `Click to start record` on macOS)

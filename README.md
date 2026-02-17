@@ -80,7 +80,12 @@ Documents/
   General: hours credit, language focus, `Time Display` sub-step; Advanced: `Acceleration` + `Offline Model Switch`; Account: iCloud toggle + restore purchases; macOS adds microphone access controls.
 - **Library workspace:** Session switcher with long-press/right-click action group (`Rename`, `Share this chat`, `Delete`) on session rows (where Library is present).
 - **macOS recent chats sidebar:** Same long-press/right-click action group (`Rename`, `Share this chat`, `Delete`).
-- **Export:** Separate sheet; Notepad-style formatting is export-only. Export format sub-steps intentionally show a shortened preview snippet (11 lines + ellipsis when truncated), and macOS keeps `Share` + `Copy` actions in one row.
+- **Export:** Separate sheet with four styles:
+  - `Notepad Minutes` (title + created header, one blank spacer line after `Created:`, then `[timestamp] Speaker (LANG)` blocks)
+  - `Plain Text` (raw message text only, no header/speaker/timestamp labels)
+  - `Markdown` (structured heading format)
+  - `Video Subtitles (.srt)` (SubRip cue format for video tools)
+  Export format sub-steps intentionally show a shortened preview snippet (11 lines + ellipsis when truncated), and macOS keeps `Share` + `Copy` actions in one row.
 
 ---
 
@@ -189,6 +194,11 @@ Documents/
   - green during transcript-chunk playback
 - Library rows now support long-press action menu: `Rename`, `Share this chat`, `Delete`.
 - macOS sidebar `Recent Chats` rows now support the same action menu: `Rename`, `Share this chat`, `Delete`.
+- Export sheet `Share` now publishes a real temporary file per selected style (instead of plain-text-only share payload):
+  - `Notepad Minutes` -> `.txt`
+  - `Plain Text` -> `.txt`
+  - `Markdown` -> `.md`
+  - `Video Subtitles` -> `.srt`
 - macOS split detail uses a minimum width guard to prevent over-compressed chat layout.
 - macOS settings includes live microphone permission status and actions (`Allow Microphone Access` / `Open System Settings`).
 - macOS recorder error state provides direct deep-link action to System Settings when microphone permission is denied.
@@ -248,5 +258,5 @@ Documents/
 - [Audio Pipeline](docs/audio-pipeline.md)
 - [API Contracts](docs/api-contracts.md)
 - [Tab Navigation](docs/tab-navigation.md)
-- [Export Notepad Style](docs/export-notepad-style.md)
+- [Export Formats](docs/export-notepad-style.md)
 - [Roadmap](docs/roadmap.md)
