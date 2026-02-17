@@ -81,7 +81,7 @@
 - Set `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON` to force-enable on any iPhone.
 - On some iPhones, first CoreML encoder run may log ANE/CoreML plan-build warnings before succeeding.
 - If ggml GPU decode init fails, runtime falls back to CPU decode and logs reason.
-- Chunk slicing defaults are tuned longer to reduce over-splitting: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
+- Chunk slicing defaults keep silence boundaries (`silence cutoff 1.2s`, `minimum chunk 3.2s`, `max chunk 12s`) and add near-real-time speaker-change boundary cuts with `1.0s` backtrack plus stability guard.
 - Chunk playback is gated off while recording to avoid audio-session conflicts.
 - `startNewChat()` is draft-reset behavior (does not create a persisted session until recording starts).
 - First recording from draft creates a new persisted session title (`chat N`).

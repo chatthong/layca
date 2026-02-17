@@ -104,6 +104,8 @@ Documents/
 2. **Track 2: VAD slicer**
    - Detect speech/silence, cut message chunk after sustained silence.
    - Current defaults: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
+   - Speaker-aware boundary cut runs near real-time during active speech.
+   - Boundary uses `1.0s` backtrack from detected speaker switch point, with a stability guard (needs enough speech context before split).
 3. **Track 3: Speaker branch**
    - CoreML speaker embedding extraction + cosine matching / new speaker assignment.
    - Fallback branch uses amplitude + zero-crossing-rate + RMS signature matching.

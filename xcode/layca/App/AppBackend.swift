@@ -437,6 +437,16 @@ actor LiveSessionPipeline {
         let rmsEnergy: Double
     }
 
+    private enum ProbeSpeakerObservation: Equatable {
+        case existingLabel(String)
+        case newCandidate
+    }
+
+    private struct SpeakerChangeCandidate {
+        let observation: ProbeSpeakerObservation
+        let startTimestamp: Double
+    }
+
     private enum VADState {
         case loading
         case ready
@@ -455,6 +465,7 @@ actor LiveSessionPipeline {
         let sampleRate: Double
         let amplitude: Double
         let zeroCrossingRate: Double
+        let isSpeech: Bool
         let samples: [Float]
     }
 
@@ -472,6 +483,9 @@ actor LiveSessionPipeline {
     private var waveformBuffer: [Double] = Array(repeating: 0.03, count: 18)
     private var activeChunkFrames: [AudioFrame] = []
     private var silenceSeconds: Double = 0
+    private var activeChunkSpeakerID: String?
+    private var speakerChangeCandidate: SpeakerChangeCandidate?
+    private var speechSecondsSinceLastSpeakerProbe: Double = 0
     private var chunkCounter = 0
     private var runToken = UUID()
     private var vadState: VADState = .loading
@@ -484,6 +498,13 @@ actor LiveSessionPipeline {
     private let silenceCutoffSeconds: Double = 1.2
     private let minChunkDurationSeconds: Double = 3.2
     private let maxChunkDurationSeconds: Double = 12
+    private let speakerChangeCutoffSeconds: Double = 0.0
+    private let speakerBoundaryBacktrackSeconds: Double = 1.0
+    // Speaker embedding needs enough voiced audio; probing too early collapses labels.
+    private let speakerProbeWindowSpeechSeconds: Double = 1.6
+    private let speakerProbeIntervalSpeechSeconds: Double = 0.25
+    private let minSpeechSecondsForSpeakerProbe: Double = 1.6
+    private let minSpeakerBoundaryChunkSeconds: Double = 1.6
     private let speakerSimilarityThreshold: Float = 0.72
     private let speakerLooseSimilarityThreshold: Float = 0.60
     private let newSpeakerCandidateSimilarity: Float = 0.55
@@ -518,6 +539,7 @@ actor LiveSessionPipeline {
         if let config = activeConfig, !activeChunkFrames.isEmpty {
             await processChunk(activeChunkFrames, config: config)
             activeChunkFrames.removeAll(keepingCapacity: false)
+            resetActiveChunkSpeakerTracking()
         }
 
         continuation?.yield(.stopped)
@@ -528,6 +550,7 @@ actor LiveSessionPipeline {
         elapsedSeconds = 0
         waveformBuffer = Array(repeating: 0.03, count: 18)
         silenceSeconds = 0
+        resetActiveChunkSpeakerTracking()
         chunkCounter = 0
         speakerEmbeddings.removeAll()
         speakerObservationCounts.removeAll()
@@ -549,6 +572,7 @@ actor LiveSessionPipeline {
         waveformBuffer = Array(repeating: 0.03, count: 18)
         activeChunkFrames = []
         silenceSeconds = 0
+        resetActiveChunkSpeakerTracking()
         chunkCounter = 0
         runToken = UUID()
         vadState = .loading
@@ -629,20 +653,22 @@ actor LiveSessionPipeline {
         continuation?.yield(.waveform(waveformBuffer))
         continuation?.yield(.timer(elapsedSeconds))
 
+        let isSpeechFrame = await evaluateSpeech(frame: frame)
         let audioFrame = AudioFrame(
             timestamp: frameTimestamp,
             duration: frame.duration,
             sampleRate: frame.sampleRate,
             amplitude: frame.amplitude,
             zeroCrossingRate: frame.zeroCrossingRate,
+            isSpeech: isSpeechFrame,
             samples: frame.samples
         )
-
-        let isSpeechFrame = await evaluateSpeech(frame: frame)
 
         if isSpeechFrame {
             activeChunkFrames.append(audioFrame)
             silenceSeconds = 0
+            speechSecondsSinceLastSpeakerProbe += frame.duration
+            await evaluateSpeakerBoundary(config: config)
         } else if !activeChunkFrames.isEmpty {
             // Keep non-speech frames once a message has started so queued
             // auto-transcription receives natural timing instead of
@@ -662,6 +688,7 @@ actor LiveSessionPipeline {
                 activeChunkFrames.removeAll(keepingCapacity: true)
                 silenceSeconds = 0
                 await processChunk(chunk, config: config)
+                resetActiveChunkSpeakerTracking()
             }
         }
     }
@@ -709,6 +736,236 @@ actor LiveSessionPipeline {
 
         continuation?.yield(.transcript(event, chunkSeconds: chunkSeconds))
         chunkCounter += 1
+    }
+
+    private func evaluateSpeakerBoundary(config: LivePipelineConfig) async {
+        guard speechSecondsSinceLastSpeakerProbe >= speakerProbeIntervalSpeechSeconds else {
+            return
+        }
+
+        guard let probeFrames = recentSpeakerProbeWindow(),
+              let last = activeChunkFrames.last else {
+            return
+        }
+
+        speechSecondsSinceLastSpeakerProbe = 0
+        guard let observation = await probeSpeakerObservation(chunk: probeFrames) else {
+            return
+        }
+
+        let now = last.timestamp + last.duration
+
+        guard let currentSpeaker = activeChunkSpeakerID else {
+            if case let .existingLabel(label) = observation {
+                activeChunkSpeakerID = label
+            }
+            speakerChangeCandidate = nil
+            return
+        }
+
+        if case let .existingLabel(label) = observation, label == currentSpeaker {
+            speakerChangeCandidate = nil
+            return
+        }
+
+        if let candidate = speakerChangeCandidate, candidate.observation == observation {
+            speakerChangeCandidate = candidate
+        } else {
+            speakerChangeCandidate = SpeakerChangeCandidate(
+                observation: observation,
+                startTimestamp: now
+            )
+        }
+
+        guard let candidate = speakerChangeCandidate,
+              (now - candidate.startTimestamp) >= speakerChangeCutoffSeconds else {
+            return
+        }
+
+        let earliestBoundary = activeChunkFrames.first?.timestamp ?? 0
+        let boundaryTimestamp = max(
+            earliestBoundary,
+            candidate.startTimestamp - speakerBoundaryBacktrackSeconds
+        )
+
+        await cutChunkForSpeakerBoundary(
+            config: config,
+            boundaryTimestamp: boundaryTimestamp,
+            newObservation: candidate.observation
+        )
+    }
+
+    private func cutChunkForSpeakerBoundary(
+        config: LivePipelineConfig,
+        boundaryTimestamp: Double,
+        newObservation: ProbeSpeakerObservation
+    ) async {
+        guard !activeChunkFrames.isEmpty else {
+            return
+        }
+
+        guard let splitIndex = activeChunkFrames.firstIndex(where: { $0.timestamp >= boundaryTimestamp }) else {
+            applyTrailingSpeakerObservation(newObservation)
+            speakerChangeCandidate = nil
+            return
+        }
+
+        guard splitIndex > 0 else {
+            applyTrailingSpeakerObservation(newObservation)
+            speakerChangeCandidate = nil
+            return
+        }
+
+        let leadingChunk = Array(activeChunkFrames[..<splitIndex])
+        let trailingChunk = Array(activeChunkFrames[splitIndex...])
+
+        guard chunkDuration(for: leadingChunk) >= minSpeakerBoundaryChunkSeconds else {
+            return
+        }
+
+        activeChunkFrames = trailingChunk
+        applyTrailingSpeakerObservation(newObservation)
+        speakerChangeCandidate = nil
+        silenceSeconds = trailingSilenceDuration(for: trailingChunk)
+        speechSecondsSinceLastSpeakerProbe = speechDuration(for: trailingChunk)
+
+        guard hasSpeech(leadingChunk) else {
+            return
+        }
+
+        await processChunk(leadingChunk, config: config)
+    }
+
+    private func applyTrailingSpeakerObservation(_ observation: ProbeSpeakerObservation) {
+        switch observation {
+        case .existingLabel(let label):
+            activeChunkSpeakerID = label
+        case .newCandidate:
+            activeChunkSpeakerID = nil
+        }
+    }
+
+    private func recentSpeakerProbeWindow() -> [AudioFrame]? {
+        guard !activeChunkFrames.isEmpty else {
+            return nil
+        }
+
+        var startIndex = activeChunkFrames.count - 1
+        var speechAccumulated: Double = 0
+
+        for index in stride(from: activeChunkFrames.count - 1, through: 0, by: -1) {
+            let frame = activeChunkFrames[index]
+            startIndex = index
+            if frame.isSpeech {
+                speechAccumulated += frame.duration
+            }
+            if speechAccumulated >= speakerProbeWindowSpeechSeconds {
+                break
+            }
+        }
+
+        guard speechAccumulated >= minSpeechSecondsForSpeakerProbe else {
+            return nil
+        }
+
+        let window = Array(activeChunkFrames[startIndex...])
+        guard hasSpeech(window) else {
+            return nil
+        }
+        return window
+    }
+
+    private func probeSpeakerObservation(chunk: [AudioFrame]) async -> ProbeSpeakerObservation? {
+        switch speakerState {
+        case .ready:
+            do {
+                let samples = chunk.flatMap(\.samples)
+                let sampleRate = chunk.first?.sampleRate ?? 16_000
+                guard let embedding = try await speakerDiarizer.embedding(for: samples, sampleRate: sampleRate),
+                      !embedding.isEmpty else {
+                    return probeSpeakerObservationFallback(chunk: chunk)
+                }
+                return probeSpeakerObservation(from: embedding)
+            } catch {
+                // Probe errors must not degrade the primary speaker detector.
+                return probeSpeakerObservationFallback(chunk: chunk)
+            }
+        case .loading, .fallback:
+            return probeSpeakerObservationFallback(chunk: chunk)
+        }
+    }
+
+    private func probeSpeakerObservation(from embedding: [Float]) -> ProbeSpeakerObservation? {
+        guard let closest = closestSpeaker(for: embedding) else {
+            return nil
+        }
+
+        if closest.similarity >= speakerLooseSimilarityThreshold {
+            return .existingLabel(closest.label)
+        }
+        return .newCandidate
+    }
+
+    private func probeSpeakerObservationFallback(chunk: [AudioFrame]) -> ProbeSpeakerObservation? {
+        guard let currentSpeaker = activeChunkSpeakerID,
+              let currentSignature = fallbackSpeakerEmbeddings[currentSpeaker] else {
+            return nil
+        }
+
+        let averageAmplitude = chunk.map(\.amplitude).reduce(0, +) / Double(max(chunk.count, 1))
+        let averageZCR = chunk.map(\.zeroCrossingRate).reduce(0, +) / Double(max(chunk.count, 1))
+        let flattenedSamples = chunk.flatMap(\.samples)
+        let rmsEnergy: Double = {
+            guard !flattenedSamples.isEmpty else {
+                return 0
+            }
+            let meanSquare = flattenedSamples.reduce(0.0) { partial, sample in
+                partial + (Double(sample) * Double(sample))
+            } / Double(flattenedSamples.count)
+            return sqrt(meanSquare)
+        }()
+        let signature = FallbackSpeakerSignature(
+            amplitude: averageAmplitude,
+            zeroCrossingRate: averageZCR,
+            rmsEnergy: rmsEnergy
+        )
+
+        let distance =
+            (abs(currentSignature.amplitude - signature.amplitude) * 0.45) +
+            (abs(currentSignature.zeroCrossingRate - signature.zeroCrossingRate) * 0.35) +
+            (abs(currentSignature.rmsEnergy - signature.rmsEnergy) * 0.20)
+
+        if distance <= speakerFallbackThreshold {
+            return .existingLabel(currentSpeaker)
+        }
+        return .newCandidate
+    }
+
+    private func speechDuration(for chunk: [AudioFrame]) -> Double {
+        chunk.reduce(0) { partial, frame in
+            partial + (frame.isSpeech ? frame.duration : 0)
+        }
+    }
+
+    private func trailingSilenceDuration(for chunk: [AudioFrame]) -> Double {
+        var total: Double = 0
+        for frame in chunk.reversed() {
+            if frame.isSpeech {
+                break
+            }
+            total += frame.duration
+        }
+        return total
+    }
+
+    private func hasSpeech(_ chunk: [AudioFrame]) -> Bool {
+        chunk.contains(where: \.isSpeech)
+    }
+
+    private func resetActiveChunkSpeakerTracking() {
+        activeChunkSpeakerID = nil
+        speakerChangeCandidate = nil
+        speechSecondsSinceLastSpeakerProbe = 0
     }
 
     private func identifySpeaker(chunk: [AudioFrame]) async -> String {

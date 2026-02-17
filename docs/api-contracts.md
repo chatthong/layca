@@ -131,6 +131,7 @@
 - Uses native CoreML Silero VAD for speech detection when available.
 - Uses native CoreML WeSpeaker embedding (`wespeaker_v2.mlmodelc`) for speaker matching when available.
 - Emits deferred transcript placeholder text during recording; backend auto-queues Whisper transcription.
+- Applies chunk cuts on silence/max-duration guardrails and near-real-time speaker-change boundaries (with boundary backtrack and stability guard).
 - Falls back to amplitude-threshold gating if VAD cannot initialize.
 - Falls back to lightweight heuristic speaker matching if speaker model cannot initialize.
 

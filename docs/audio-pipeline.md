@@ -22,6 +22,9 @@
 - Message-chunk guardrails:
   - minimum chunk duration: `3.2s`
   - maximum chunk duration: `12s`
+  - near-real-time speaker-change boundary cut is also applied while speech is active
+  - boundary cut uses `1.0s` backtrack from detected speaker-change point
+  - stability guard requires enough speech context before boundary split (prevents over-aggressive cuts that degrade speaker ID)
 
 ### Track 3: Dual AI Branch
 - Branch A: speaker embedding extraction from CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) and cosine-similarity matching for session speaker labels.

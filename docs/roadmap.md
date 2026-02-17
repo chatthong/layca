@@ -116,7 +116,7 @@
   - CoreML speaker-ID branch
   - merged transcript events (`speaker`, `language`, `text`, `timestamp`)
 - Current implementation uses real `AVAudioEngine` + bundled/offline CoreML Silero VAD + bundled/offline CoreML speaker diarization.
-- Chunk split defaults are tuned longer (`silenceCutoff=1.2s`, `minChunk=3.2s`, `maxChunk=12s`) to reduce over-splitting.
+- Chunk split defaults keep silence + max-duration guardrails (`silenceCutoff=1.2s`, `minChunk=3.2s`, `maxChunk=12s`) and add near-real-time speaker-change boundary cuts with `1.0s` backtrack plus stability guard.
 - Speaker fallback matching upgraded to multi-feature signature (amplitude + ZCR + RMS) to improve multi-speaker separation when CoreML speaker inference is unavailable.
 
 ### Storage, Update, and Sync Hooks
