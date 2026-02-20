@@ -19,6 +19,7 @@ struct ChatTabView: View {
     let activeSessionTitle: String
     let activeSessionDateText: String
     let transcriptChunkPlaybackRangeText: String?
+    let activePlaybackRowID: UUID?
     let isDraftSession: Bool
     let liveChatItems: [TranscriptRow]
     let selectedFocusLanguageCodes: Set<String>
@@ -67,6 +68,7 @@ struct ChatTabView: View {
         activeSessionTitle: String,
         activeSessionDateText: String,
         transcriptChunkPlaybackRangeText: String?,
+        activePlaybackRowID: UUID?,
         isDraftSession: Bool,
         liveChatItems: [TranscriptRow],
         selectedFocusLanguageCodes: Set<String>,
@@ -99,6 +101,7 @@ struct ChatTabView: View {
         self.activeSessionTitle = activeSessionTitle
         self.activeSessionDateText = activeSessionDateText
         self.transcriptChunkPlaybackRangeText = transcriptChunkPlaybackRangeText
+        self.activePlaybackRowID = activePlaybackRowID
         self.isDraftSession = isDraftSession
         self.liveChatItems = liveChatItems
         self.selectedFocusLanguageCodes = selectedFocusLanguageCodes
@@ -863,7 +866,10 @@ struct ChatTabView: View {
                         onChangeSpeaker: onChangeSpeaker,
                         onRetranscribeTranscript: onRetranscribeTranscript
                     ) {
-                        messageBubble(for: item)
+                        messageBubble(
+                            for: item,
+                            isPlaybackActive: item.id == activePlaybackRowID
+                        )
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -916,7 +922,7 @@ struct ChatTabView: View {
         .shadow(color: .black.opacity(0.12), radius: 7, x: 0, y: 4)
     }
 
-    private func messageBubble(for item: TranscriptRow) -> some View {
+    private func messageBubble(for item: TranscriptRow, isPlaybackActive: Bool) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
                 speakerMeta(for: item)
@@ -957,15 +963,24 @@ struct ChatTabView: View {
         .padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.regularMaterial)
+                .fill(isPlaybackActive ? Color.green.opacity(0.18) : Color.clear)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.regularMaterial)
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(.primary.opacity(0.12), lineWidth: 0.8)
+                .stroke(
+                    isPlaybackActive ? Color.green.opacity(0.45) : .primary.opacity(0.12),
+                    lineWidth: 0.8
+                )
         )
         .animation(
             .easeInOut(duration: 0.2),
-            value: transcribingRowIDs.contains(item.id) || queuedRetranscriptionRowIDs.contains(item.id)
+            value: transcribingRowIDs.contains(item.id)
+                || queuedRetranscriptionRowIDs.contains(item.id)
+                || isPlaybackActive
         )
     }
 

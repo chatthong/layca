@@ -2110,10 +2110,17 @@ final class AppBackend: ObservableObject {
         case unusable
     }
 
+    private struct PlaybackRowSegment: Sendable {
+        let rowID: UUID
+        let startOffset: Double
+        let endOffset: Double
+    }
+
     @Published var isRecording = false
     @Published private(set) var isTranscriptChunkPlaying = false
     @Published private(set) var transcriptChunkPlaybackRemainingSeconds: Double = 0
     @Published private(set) var transcriptChunkPlaybackRangeText: String?
+    @Published private(set) var activeTranscriptPlaybackRowID: UUID?
     @Published var recordingSeconds: Double = 0
     @Published var waveformBars: [Double] = Array(repeating: 0.03, count: 9)
 
@@ -2730,7 +2737,20 @@ final class AppBackend: ObservableObject {
             isTranscriptChunkPlaying = true
             transcriptChunkPlaybackRemainingSeconds = duration
             transcriptChunkPlaybackRangeText = playbackRangeText(startSeconds: start, endSeconds: stopAt)
-            startChunkPlaybackProgressUpdates(player: player, stopAt: stopAt)
+            let playbackRowSegments = playbackRowSegments(
+                sessionID: sessionID,
+                startOffset: start,
+                endOffset: stopAt
+            )
+            activeTranscriptPlaybackRowID = activePlaybackRowID(
+                at: start,
+                from: playbackRowSegments
+            )
+            startChunkPlaybackProgressUpdates(
+                player: player,
+                stopAt: stopAt,
+                playbackRowSegments: playbackRowSegments
+            )
             chunkStopTask = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
                 guard let self else {
@@ -3305,10 +3325,15 @@ final class AppBackend: ObservableObject {
         isTranscriptChunkPlaying = false
         transcriptChunkPlaybackRemainingSeconds = 0
         transcriptChunkPlaybackRangeText = nil
+        activeTranscriptPlaybackRowID = nil
         deactivateChunkPlaybackAudioSessionIfSupported()
     }
 
-    private func startChunkPlaybackProgressUpdates(player: AVAudioPlayer, stopAt: TimeInterval) {
+    private func startChunkPlaybackProgressUpdates(
+        player: AVAudioPlayer,
+        stopAt: TimeInterval,
+        playbackRowSegments: [PlaybackRowSegment]
+    ) {
         chunkProgressTask?.cancel()
         chunkProgressTask = Task { @MainActor [weak self] in
             guard let self else {
@@ -3320,16 +3345,67 @@ final class AppBackend: ObservableObject {
                     return
                 }
 
-                let remaining = max(stopAt - player.currentTime, 0)
+                let currentPlaybackTime = max(player.currentTime, 0)
+                self.activeTranscriptPlaybackRowID = self.activePlaybackRowID(
+                    at: currentPlaybackTime,
+                    from: playbackRowSegments
+                )
+                let remaining = max(stopAt - currentPlaybackTime, 0)
                 self.transcriptChunkPlaybackRemainingSeconds = remaining
 
                 if remaining <= 0.01 || !player.isPlaying {
+                    self.activeTranscriptPlaybackRowID = nil
                     return
                 }
 
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
         }
+    }
+
+    private func playbackRowSegments(
+        sessionID: UUID,
+        startOffset: Double,
+        endOffset: Double
+    ) -> [PlaybackRowSegment] {
+        guard let session = sessions.first(where: { $0.id == sessionID }) else {
+            return []
+        }
+
+        return session.rows
+            .compactMap { row -> PlaybackRowSegment? in
+                guard let rowStartOffset = row.startOffset,
+                      let rowEndOffset = row.endOffset,
+                      rowEndOffset > rowStartOffset
+                else {
+                    return nil
+                }
+
+                guard rowEndOffset > startOffset, rowStartOffset < endOffset else {
+                    return nil
+                }
+
+                return PlaybackRowSegment(
+                    rowID: row.id,
+                    startOffset: rowStartOffset,
+                    endOffset: rowEndOffset
+                )
+            }
+            .sorted { left, right in
+                if left.startOffset == right.startOffset {
+                    return left.endOffset < right.endOffset
+                }
+                return left.startOffset < right.startOffset
+            }
+    }
+
+    private func activePlaybackRowID(
+        at playbackTime: Double,
+        from playbackRowSegments: [PlaybackRowSegment]
+    ) -> UUID? {
+        playbackRowSegments.first(where: { segment in
+            playbackTime >= segment.startOffset && playbackTime < segment.endOffset
+        })?.rowID
     }
 
     private func playbackRangeText(startSeconds: Double, endSeconds: Double) -> String {

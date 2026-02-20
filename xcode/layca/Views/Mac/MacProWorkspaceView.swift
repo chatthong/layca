@@ -242,6 +242,7 @@ struct MacChatWorkspaceView: View {
     let activeSessionTitle: String
     let activeSessionDateText: String
     let transcriptChunkPlaybackRangeText: String?
+    let activePlaybackRowID: UUID?
     let liveChatItems: [TranscriptRow]
     let selectedFocusLanguageCodes: Set<String>
     let transcribingRowIDs: Set<UUID>
@@ -597,7 +598,8 @@ struct MacChatWorkspaceView: View {
                                     transcriptRow(
                                         for: item,
                                         isTranscribing: transcribingRowIDs.contains(item.id),
-                                        isQueued: queuedRetranscriptionRowIDs.contains(item.id)
+                                        isQueued: queuedRetranscriptionRowIDs.contains(item.id),
+                                        isPlaybackActive: item.id == activePlaybackRowID
                                     )
                                 }
                                 .id(item.id)
@@ -692,7 +694,12 @@ struct MacChatWorkspaceView: View {
         .allowsHitTesting(false)
     }
 
-    private func transcriptRow(for item: TranscriptRow, isTranscribing: Bool, isQueued: Bool) -> some View {
+    private func transcriptRow(
+        for item: TranscriptRow,
+        isTranscribing: Bool,
+        isQueued: Bool,
+        isPlaybackActive: Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Text(item.speaker)
@@ -742,13 +749,23 @@ struct MacChatWorkspaceView: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(.regularMaterial)
+                .fill(isPlaybackActive ? Color.green.opacity(0.18) : Color.clear)
+                .background(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(.regularMaterial)
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(.primary.opacity(0.08), lineWidth: 0.8)
+                .stroke(
+                    isPlaybackActive ? Color.green.opacity(0.45) : .primary.opacity(0.08),
+                    lineWidth: 0.8
+                )
         )
-        .animation(.easeInOut(duration: 0.2), value: isTranscribing || isQueued)
+        .animation(
+            .easeInOut(duration: 0.2),
+            value: isTranscribing || isQueued || isPlaybackActive
+        )
     }
 
     private func displayText(for item: TranscriptRow) -> String {
