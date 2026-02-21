@@ -504,6 +504,7 @@ actor LiveSessionPipeline {
     private var vadState: VADState = .loading
     private var speakerState: SpeakerState = .loading
     private let sileroVAD = SileroVADCoreMLService()
+    private let intraChunkVAD = SileroVADCoreMLService()
     private let speakerDiarizer = SpeakerDiarizationCoreMLService()
 
     private let speechThreshold: Double = 0.06
@@ -748,28 +749,156 @@ actor LiveSessionPipeline {
             return
         }
 
-        let chunkSeconds = max((last.timestamp + last.duration) - first.timestamp, 0.2)
-        lastChunkDurationSeconds = chunkSeconds
-
-        async let speakerID = identifySpeaker(chunk: chunk)
-
-        let speaker = await speakerID
+        let allSamples = chunk.flatMap(\.samples)
+        let sampleRate = first.sampleRate
+        let chunkStartTime = first.timestamp
+        let totalDuration = max((last.timestamp + last.duration) - chunkStartTime, 0.2)
+        lastChunkDurationSeconds = totalDuration
         let languageCode = "AUTO"
 
-        let event = PipelineTranscriptEvent(
-            id: UUID(),
-            sessionID: config.sessionID,
-            speakerID: speaker,
-            languageID: languageCode,
-            text: deferredTranscriptPlaceholder,
-            startOffset: first.timestamp,
-            endOffset: first.timestamp + chunkSeconds,
-            samples: chunk.flatMap(\.samples),
-            sampleRate: first.sampleRate
-        )
+        // Run speaker identification and VAD sub-chunking concurrently.
+        async let speakerIDTask = identifySpeaker(chunk: chunk)
+        async let subRangesTask = splitIntoSubChunksByVAD(samples: allSamples, sampleRate: sampleRate)
+        let (speaker, subRanges) = await (speakerIDTask, subRangesTask)
 
-        continuation?.yield(.transcript(event, chunkSeconds: chunkSeconds))
+        // Emit one PipelineTranscriptEvent per sub-chunk.
+        for range in subRanges {
+            let subSamples = Array(allSamples[range])
+            let startFraction = Double(range.lowerBound) / Double(allSamples.count)
+            let endFraction = Double(range.upperBound) / Double(allSamples.count)
+            let subStart = chunkStartTime + startFraction * totalDuration
+            let subEnd = chunkStartTime + endFraction * totalDuration
+            let subDuration = max(subEnd - subStart, 0.2)
+
+            let event = PipelineTranscriptEvent(
+                id: UUID(),
+                sessionID: config.sessionID,
+                speakerID: speaker,
+                languageID: languageCode,
+                text: deferredTranscriptPlaceholder,
+                startOffset: subStart,
+                endOffset: subEnd,
+                samples: subSamples,
+                sampleRate: sampleRate
+            )
+            continuation?.yield(.transcript(event, chunkSeconds: subDuration))
+        }
         chunkCounter += 1
+    }
+
+    // Runs a second-pass VAD on the raw samples of a completed chunk to find
+    // breath-pause boundaries (silence >= 0.3 s) and splits the chunk into
+    // sub-ranges. Each sub-range becomes its own chat bubble. Sub-chunks
+    // shorter than 0.8 s are not used as split points to avoid fragmenting
+    // very short utterances. Falls back to a single full-range if no valid
+    // splits are found or if intraChunkVAD has not finished loading.
+    private func splitIntoSubChunksByVAD(
+        samples: [Float],
+        sampleRate: Double
+    ) async -> [Range<Int>] {
+        let fullRange = [0..<samples.count]
+        guard !samples.isEmpty, sampleRate > 0 else {
+            return fullRange
+        }
+
+        // Reset the dedicated intra-chunk VAD so it starts fresh with zeroed
+        // LSTM state — independent from the live-stream sileroVAD instance.
+        await intraChunkVAD.reset()
+
+        // Hop size: ~32 ms worth of samples in the original sample rate.
+        let hopSize = max(Int((0.032 * sampleRate).rounded()), 1)
+
+        // Minimum silence width that qualifies as a breath pause (0.3 s).
+        let minSilenceSamples = Int((0.3 * sampleRate).rounded())
+
+        // Minimum sub-chunk length (0.8 s). Splits that would produce a
+        // sub-chunk shorter than this are discarded.
+        let minSubChunkSamples = Int((0.8 * sampleRate).rounded())
+
+        // Feed hops one at a time and record (sampleMidpoint, probability).
+        var observations: [(sampleIndex: Int, probability: Float)] = []
+        var hopStart = 0
+        while hopStart < samples.count {
+            let hopEnd = min(hopStart + hopSize, samples.count)
+            let hop = Array(samples[hopStart..<hopEnd])
+            let midpoint = hopStart + (hopEnd - hopStart) / 2
+            if let prob = try? intraChunkVAD.ingest(samples: hop, sampleRate: sampleRate) {
+                observations.append((sampleIndex: midpoint, probability: prob))
+            }
+            hopStart = hopEnd
+        }
+
+        guard !observations.isEmpty else {
+            return fullRange
+        }
+
+        // Identify contiguous silence regions (probability < 0.30).
+        let silenceThreshold: Float = 0.30
+        var splitPoints: [Int] = []
+
+        var silenceStart: Int? = nil
+
+        for observation in observations {
+            if observation.probability < silenceThreshold {
+                if silenceStart == nil {
+                    silenceStart = observation.sampleIndex
+                }
+            } else {
+                if let start = silenceStart {
+                    let silenceEnd = observation.sampleIndex
+                    let silenceSpan = silenceEnd - start
+                    if silenceSpan >= minSilenceSamples {
+                        // Split at the midpoint of the silence region.
+                        let splitPoint = start + silenceSpan / 2
+                        splitPoints.append(splitPoint)
+                    }
+                    silenceStart = nil
+                }
+            }
+        }
+
+        // Handle a trailing silence region that runs to the end of the chunk.
+        if let start = silenceStart {
+            let silenceEnd = samples.count
+            let silenceSpan = silenceEnd - start
+            if silenceSpan >= minSilenceSamples {
+                let splitPoint = start + silenceSpan / 2
+                splitPoints.append(splitPoint)
+            }
+        }
+
+        guard !splitPoints.isEmpty else {
+            return fullRange
+        }
+
+        // Build candidate ranges and discard any split that would produce a
+        // sub-chunk shorter than minSubChunkSamples.
+        var ranges: [Range<Int>] = []
+        var rangeStart = 0
+
+        for splitPoint in splitPoints {
+            let candidateEnd = splitPoint
+            let nextStart = splitPoint
+
+            // Reject splits that produce a sub-chunk that is too short on
+            // either side of the boundary.
+            let leadingLength = candidateEnd - rangeStart
+            let trailingLength = samples.count - nextStart
+            guard leadingLength >= minSubChunkSamples,
+                  trailingLength >= minSubChunkSamples else {
+                continue
+            }
+
+            ranges.append(rangeStart..<candidateEnd)
+            rangeStart = nextStart
+        }
+
+        // Always append the final trailing range.
+        ranges.append(rangeStart..<samples.count)
+
+        // If all splits were rejected we end up with a single range equal to
+        // the original; that is equivalent to no splitting.
+        return ranges.isEmpty ? fullRange : ranges
     }
 
     private func checkForSpeakerInterrupt(config: LivePipelineConfig) async {

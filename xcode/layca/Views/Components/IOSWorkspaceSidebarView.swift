@@ -229,8 +229,7 @@ struct IOSWorkspaceSidebarView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 10)
                 } else {
-                    ForEach(0..<sessions.count, id: \.self) { index in
-                        let session = sessions[index]
+                    ForEach(sessions) { session in
                         recentChatRow(for: session)
                     }
                 }

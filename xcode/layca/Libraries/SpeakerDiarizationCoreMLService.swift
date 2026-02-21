@@ -19,6 +19,9 @@ enum SpeakerDiarizationCoreMLError: LocalizedError {
 }
 
 actor SpeakerDiarizationCoreMLService {
+    /// Tracks consecutive windows where embedding distance exceeds the interrupt threshold.
+    private var consecutiveInterruptWindows: Int = 0
+
     private struct Constants {
         static let modelDirectoryName = "wespeaker_v2.mlmodelc"
         static let modelName = "wespeaker_v2"
@@ -341,5 +344,131 @@ actor SpeakerDiarizationCoreMLService {
         }
 
         return output
+    }
+
+    // MARK: - Interrupt Detection
+
+    /// Checks whether the tail of `audioBuffer` contains a different speaker than `currentSpeakerEmbedding`.
+    ///
+    /// Extracts an embedding from the last ~4,096 samples of `audioBuffer` and compares it
+    /// against the supplied reference embedding. Returns `true` when cosine distance exceeds a
+    /// threshold for two consecutive calls (or immediately for very high-confidence deviations).
+    func checkForInterrupt(
+        audioBuffer: [Float],
+        currentSpeakerEmbedding: [Float],
+        sampleRate: Double = 16_000
+    ) -> Bool {
+        guard model != nil else {
+            return false
+        }
+
+        let windowSize = 4_096
+        let tail: [Float]
+        if audioBuffer.count > windowSize {
+            tail = Array(audioBuffer.suffix(windowSize))
+        } else {
+            tail = audioBuffer
+        }
+
+        guard let windowEmbedding = try? embeddingDirect(for: tail, sampleRate: sampleRate) else {
+            return false
+        }
+
+        let similarity = Self.cosineSimilarity(windowEmbedding, currentSpeakerEmbedding)
+        let distance = 1.0 - similarity
+
+        // Very high confidence: immediate interrupt.
+        if distance > 0.5 {
+            consecutiveInterruptWindows = 0
+            return true
+        }
+
+        if distance > 0.35 {
+            consecutiveInterruptWindows += 1
+            if consecutiveInterruptWindows >= 2 {
+                consecutiveInterruptWindows = 0
+                return true
+            }
+            return false
+        }
+
+        consecutiveInterruptWindows = 0
+        return false
+    }
+
+    /// Resets the consecutive interrupt window counter (call on speaker boundary cuts).
+    func resetInterruptState() {
+        consecutiveInterruptWindows = 0
+    }
+
+    /// Lightweight embedding extraction that skips silence trimming and uses a lower sample minimum,
+    /// suitable for short interrupt-detection windows.
+    private func embeddingDirect(for samples: [Float], sampleRate: Double) throws -> [Float]? {
+        guard let model else {
+            return nil
+        }
+
+        let converted = Self.resampleTo16k(samples: samples, sourceSampleRate: sampleRate)
+        // Accept shorter windows than normal inference — pad to model input size.
+        guard converted.count >= 1_600 else {
+            return nil
+        }
+
+        let fixedInput = Self.fitToInputLength(converted, targetCount: Constants.inputSamples)
+
+        let waveform = try MLMultiArray(
+            shape: [
+                NSNumber(value: Constants.waveformBatch),
+                NSNumber(value: Constants.inputSamples)
+            ],
+            dataType: .float32
+        )
+        fillBatch(waveform, with: fixedInput)
+
+        let mask = try MLMultiArray(
+            shape: [
+                NSNumber(value: Constants.waveformBatch),
+                NSNumber(value: Constants.maskLength)
+            ],
+            dataType: .float32
+        )
+        fillMask(mask, validRatio: min(Double(converted.count) / Double(Constants.inputSamples), 1.0))
+
+        let input = try MLDictionaryFeatureProvider(dictionary: [
+            "waveform": waveform,
+            "mask": mask
+        ])
+
+        let output = try model.prediction(from: input)
+        guard let embeddingMatrix = output.featureValue(for: "embedding")?.multiArrayValue else {
+            return nil
+        }
+
+        let vector = extractFirstRow(from: embeddingMatrix)
+        return Self.normalize(vector)
+    }
+
+    static func cosineSimilarity(_ a: [Float], _ b: [Float]) -> Float {
+        let length = min(a.count, b.count)
+        guard length > 0 else {
+            return -1
+        }
+
+        var dot: Float = 0
+        var aNorm: Float = 0
+        var bNorm: Float = 0
+
+        for index in 0..<length {
+            dot += a[index] * b[index]
+            aNorm += a[index] * a[index]
+            bNorm += b[index] * b[index]
+        }
+
+        let denominator = sqrt(aNorm) * sqrt(bNorm)
+        guard denominator > 0 else {
+            return -1
+        }
+
+        return dot / denominator
     }
 }

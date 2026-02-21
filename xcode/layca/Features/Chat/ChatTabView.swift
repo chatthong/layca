@@ -852,8 +852,15 @@ struct ChatTabView: View {
                     speakerChangeSeparator(for: item)
                 }
 
+                // A bubble is a "continuation" when the same speaker produced the immediately
+                // preceding bubble — this happens when two-pass VAD sub-chunking splits one
+                // speaker's speech at breath-pause boundaries.
+                let isContinuation = index > 0
+                    && liveChatItems[index - 1].speakerID == item.speakerID
+                    && item.speakerID != nil
+
                 HStack(alignment: .top, spacing: 10) {
-                    avatarView(for: item)
+                    avatarView(for: item, isContinuation: isContinuation)
                     TranscriptBubbleOptionButton(
                         item: item,
                         liveChatItems: liveChatItems,
@@ -873,11 +880,14 @@ struct ChatTabView: View {
                     ) {
                         messageBubble(
                             for: item,
+                            isContinuation: isContinuation,
                             isPlaybackActive: item.id == activePlaybackRowID
                         )
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
+                // Tighten vertical gap between consecutive same-speaker sub-chunks.
+                .padding(.top, isContinuation ? 2 : 0)
                 .transition(.asymmetric(
                     insertion: .move(edge: .bottom).combined(with: .opacity),
                     removal: .opacity
@@ -943,29 +953,57 @@ struct ChatTabView: View {
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
-    private func avatarView(for item: TranscriptRow) -> some View {
-        ZStack {
-            Circle()
-                .fill(item.avatarColor)
+    private func avatarView(for item: TranscriptRow, isContinuation: Bool = false) -> some View {
+        Group {
+            if isContinuation {
+                // Continuation bubble: replace the full avatar with a small dot in the
+                // speaker's color. The dot is vertically centred in the same 34 pt column
+                // so the message bubble aligns with non-continuation rows.
+                ZStack {
+                    Circle()
+                        .fill(item.avatarColor.opacity(0.55))
+                        .frame(width: 8, height: 8)
+                }
+                .frame(width: 34, height: 34)
+                // Mirror the accessibility information that the full avatar carries so
+                // VoiceOver users still know whose sub-chunk this is.
+                .accessibilityLabel("Continued: \(item.speaker)")
+                .accessibilityHidden(false)
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(item.avatarColor)
 
-            Image(systemName: item.avatarSymbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.95))
+                    Image(systemName: item.avatarSymbol)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.95))
+                }
+                .frame(width: 34, height: 34)
+                .overlay(
+                    Circle()
+                        .stroke(.white.opacity(0.6), lineWidth: 0.8)
+                )
+                .shadow(color: .black.opacity(0.12), radius: 7, x: 0, y: 4)
+            }
         }
-        .frame(width: 34, height: 34)
-        .overlay(
-            Circle()
-                .stroke(.white.opacity(0.6), lineWidth: 0.8)
-        )
-        .shadow(color: .black.opacity(0.12), radius: 7, x: 0, y: 4)
     }
 
-    private func messageBubble(for item: TranscriptRow, isPlaybackActive: Bool) -> some View {
+    private func messageBubble(for item: TranscriptRow, isContinuation: Bool = false, isPlaybackActive: Bool) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 8) {
-                speakerMeta(for: item)
-                Spacer(minLength: 8)
-                timestampView(for: item)
+            if isContinuation {
+                // Continuation bubble: hide the speaker name / language badge row to avoid
+                // repetitive visual noise. The 3 pt left-border Capsule accent (below) still
+                // provides the color cue connecting same-speaker sub-chunks.
+                // VoiceOver picks up the speaker name from the avatar dot's accessibilityLabel
+                // on the left; add it here too so every interactive element is self-describing.
+                EmptyView()
+                    .accessibilityLabel("Continued: \(item.speaker)")
+            } else {
+                HStack(spacing: 8) {
+                    speakerMeta(for: item)
+                    Spacer(minLength: 8)
+                    timestampView(for: item)
+                }
             }
 
             if transcribingRowIDs.contains(item.id) {

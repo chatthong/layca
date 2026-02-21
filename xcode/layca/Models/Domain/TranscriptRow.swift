@@ -8,9 +8,23 @@ struct TranscriptRow: Identifiable {
     let time: String
     let language: String
     let avatarSymbol: String
-    let avatarPalette: [Color]
+    let avatarPaletteIndex: Int
     let startOffset: Double?
     let endOffset: Double?
+
+    var avatarColor: Color {
+        Self.palettes[avatarPaletteIndex % Self.palettes.count].first ?? .accentColor
+    }
+
+    static let palettes: [[Color]] = [
+        [Color(hex: "#F97316"), .white.opacity(0.72)],
+        [Color(hex: "#0EA5E9"), .white.opacity(0.72)],
+        [Color(hex: "#10B981"), .white.opacity(0.72)],
+        [Color(hex: "#EF4444"), .white.opacity(0.72)],
+        [Color(hex: "#6366F1"), .white.opacity(0.72)],
+        [Color(hex: "#D97706"), .white.opacity(0.72)],
+        [Color(hex: "#14B8A6"), .white.opacity(0.72)]
+    ]
 
     nonisolated init(
         id: UUID = UUID(),
@@ -20,7 +34,7 @@ struct TranscriptRow: Identifiable {
         time: String,
         language: String,
         avatarSymbol: String,
-        avatarPalette: [Color],
+        avatarPaletteIndex: Int,
         startOffset: Double?,
         endOffset: Double?
     ) {
@@ -31,7 +45,7 @@ struct TranscriptRow: Identifiable {
         self.time = time
         self.language = language
         self.avatarSymbol = avatarSymbol
-        self.avatarPalette = avatarPalette
+        self.avatarPaletteIndex = avatarPaletteIndex
         self.startOffset = startOffset
         self.endOffset = endOffset
     }
@@ -50,13 +64,6 @@ struct TranscriptRow: Identifiable {
             "person.crop.circle.fill.badge.checkmark",
             "person.crop.circle.badge.clock",
             "person.crop.circle.badge.questionmark"
-        ]
-        let avatarPalettes: [[Color]] = [
-            [.blue, .cyan],
-            [.teal, .mint],
-            [.indigo, .blue],
-            [.orange, .pink],
-            [.purple, .indigo]
         ]
 
         let baseMessages: [BaseMessage] = [
@@ -80,15 +87,17 @@ struct TranscriptRow: Identifiable {
             )
         ]
 
-        var speakerAvatars: [String: (String, [Color])] = [:]
+        var speakerAvatars: [String: (String, Int)] = [:]
+        var nextIndex = 0
 
-        func avatarForSpeaker(_ speaker: String) -> (String, [Color]) {
+        func avatarForSpeaker(_ speaker: String) -> (String, Int) {
             if let existing = speakerAvatars[speaker] {
                 return existing
             }
             let symbol = avatarSymbols.randomElement() ?? "person.fill"
-            let palette = avatarPalettes.randomElement() ?? [.blue, .cyan]
-            let generated = (symbol, palette)
+            let paletteIndex = nextIndex % palettes.count
+            nextIndex += 1
+            let generated = (symbol, paletteIndex)
             speakerAvatars[speaker] = generated
             return generated
         }
@@ -102,7 +111,7 @@ struct TranscriptRow: Identifiable {
                 time: message.time,
                 language: message.language,
                 avatarSymbol: avatar.0,
-                avatarPalette: avatar.1,
+                avatarPaletteIndex: avatar.1,
                 startOffset: nil,
                 endOffset: nil
             )

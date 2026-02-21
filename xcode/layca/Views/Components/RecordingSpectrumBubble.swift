@@ -13,7 +13,7 @@ struct RecordingSpectrumBubble: View {
         HStack(spacing: 12) {
             // Pulsing listening indicator dot
             Circle()
-                .fill(Color(red: 0.20, green: 0.49, blue: 0.95))
+                .fill(Color.accentColor)
                 .frame(width: 8, height: 8)
                 .scaleEffect(isPulsing ? 1.3 : 0.85)
                 .opacity(isPulsing ? 1.0 : 0.55)
@@ -25,8 +25,8 @@ struct RecordingSpectrumBubble: View {
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    Color(red: 0.20, green: 0.49, blue: 0.95).opacity(0.94),
-                                    Color(red: 0.30, green: 0.58, blue: 1.0).opacity(0.72)
+                                    Color.accentColor.opacity(0.94),
+                                    Color.accentColor.opacity(0.72)
                                 ],
                                 startPoint: .bottom,
                                 endPoint: .top

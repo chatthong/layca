@@ -151,8 +151,7 @@ struct MacWorkspaceSidebarView: View {
                 Text("No chats yet")
                     .foregroundStyle(.secondary)
             } else {
-                SwiftUI.ForEach(0..<sessions.count, id: \.self) { (index: Int) in
-                    let session = sessions[index]
+                ForEach(sessions) { session in
                     Button {
                         selectedSection = .chat
                         onSelectSession(session)
@@ -350,11 +349,10 @@ struct MacChatWorkspaceView: View {
                 titleDraft = newTitle
             }
         }
-        .onChange(of: isEditingTitle) { _, editing in
-            guard editing else {
-                return
+        .task(id: isEditingTitle) {
+            if isEditingTitle {
+                isTitleFieldFocused = true
             }
-            requestTitleFieldFocus()
         }
         .onChange(of: isTitleFieldFocused) { _, focused in
             if isEditingTitle && !focused {
@@ -868,7 +866,6 @@ struct MacChatWorkspaceView: View {
     private func beginTitleRename() {
         titleDraft = activeSessionTitle
         isEditingTitle = true
-        requestTitleFieldFocus()
     }
 
     private func commitTitleRename() {
@@ -889,21 +886,6 @@ struct MacChatWorkspaceView: View {
         isTitleFieldFocused = false
     }
 
-    private func requestTitleFieldFocus() {
-        let delays: [Double] = [0.0, 0.08, 0.2]
-        for delay in delays {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                guard isEditingTitle else {
-                    return
-                }
-#if os(macOS)
-                NSApp.keyWindow?.makeFirstResponder(nil)
-#endif
-                isTitleFieldFocused = false
-                isTitleFieldFocused = true
-            }
-        }
-    }
 }
 
 struct MacLibraryWorkspaceView: View {
@@ -940,8 +922,7 @@ struct MacLibraryWorkspaceView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
-                    SwiftUI.ForEach(0..<sessions.count, id: \.self) { (index: Int) in
-                        let session = sessions[index]
+                    ForEach(sessions) { session in
                         Button {
                             onSelectSession(session)
                         } label: {
