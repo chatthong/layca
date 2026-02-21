@@ -810,7 +810,7 @@ struct ChatTabView: View {
         Button {
             onRecordTap()
         } label: {
-            Label(isRecording ? "Pause" : "Record", systemImage: isRecording ? "pause.fill" : "record.circle.fill")
+            Label(isRecording ? "Stop" : "Record", systemImage: isRecording ? "stop.fill" : "record.circle.fill")
                 .font(.headline.weight(.semibold))
                 .frame(maxWidth: .infinity)
         }
@@ -822,9 +822,9 @@ struct ChatTabView: View {
             onRecordTap()
         } label: {
             HStack(spacing: 9) {
-                Image(systemName: isRecording ? "pause.fill" : "record.circle.fill")
+                Image(systemName: isRecording ? "stop.fill" : "record.circle.fill")
                     .font(.headline.weight(.semibold))
-                Text(isRecording ? "Pause" : "Record")
+                Text(isRecording ? "Stop" : "Record")
                     .fontWeight(.semibold)
             }
             .foregroundStyle(isRecording ? Color.red.opacity(0.96) : .primary)
@@ -846,7 +846,12 @@ struct ChatTabView: View {
 
     private var liveSegmentsCard: some View {
         VStack(alignment: .leading, spacing: 13) {
-            ForEach(liveChatItems) { item in
+            ForEach(Array(liveChatItems.enumerated()), id: \.element.id) { index, item in
+                // Separator: show when speaker changes (not before the first bubble)
+                if index > 0 && liveChatItems[index - 1].speakerID != item.speakerID {
+                    speakerChangeSeparator(for: item)
+                }
+
                 HStack(alignment: .top, spacing: 10) {
                     avatarView(for: item)
                     TranscriptBubbleOptionButton(
@@ -873,6 +878,10 @@ struct ChatTabView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
+                .transition(.asymmetric(
+                    insertion: .move(edge: .bottom).combined(with: .opacity),
+                    removal: .opacity
+                ))
             }
 
             if isRecording {
@@ -880,14 +889,43 @@ struct ChatTabView: View {
                     .id(recordingSpectrumAnchorID)
             }
         }
+        .animation(.spring(response: 0.38, dampingFraction: 0.82), value: liveChatItems.count)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func speakerChangeSeparator(for item: TranscriptRow) -> some View {
+        HStack(spacing: 8) {
+            Rectangle()
+                .fill(Color.primary.opacity(0.08))
+                .frame(height: 1)
+
+            Text(item.speaker)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(item.avatarColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule()
+                        .fill(item.avatarColor.opacity(0.12))
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(item.avatarColor.opacity(0.25), lineWidth: 0.5)
+                        )
+                )
+
+            Rectangle()
+                .fill(Color.primary.opacity(0.08))
+                .frame(height: 1)
+        }
+        .padding(.vertical, 2)
+        .accessibilityHidden(true)  // speaker name already on the bubble itself
     }
 
     private var recordingSpectrumRow: some View {
         HStack(alignment: .top, spacing: 10) {
             ZStack {
                 Circle()
-                    .fill(Color.blue.opacity(0.84))
+                    .fill((liveChatItems.last?.avatarColor ?? Color.blue).opacity(0.84))
 
                 Image(systemName: "waveform")
                     .font(.system(size: 13, weight: .semibold))
@@ -908,7 +946,7 @@ struct ChatTabView: View {
     private func avatarView(for item: TranscriptRow) -> some View {
         ZStack {
             Circle()
-                .fill(item.avatarPalette.first ?? .accentColor)
+                .fill(item.avatarColor)
 
             Image(systemName: item.avatarSymbol)
                 .font(.system(size: 14, weight: .semibold))
@@ -976,6 +1014,12 @@ struct ChatTabView: View {
                     lineWidth: 0.8
                 )
         )
+        .overlay(alignment: .leading) {
+            Capsule()
+                .fill(item.avatarColor.opacity(0.55))
+                .frame(width: 3)
+                .padding(.vertical, 6)
+        }
         .animation(
             .easeInOut(duration: 0.2),
             value: transcribingRowIDs.contains(item.id)
@@ -1051,6 +1095,7 @@ struct ChatTabView: View {
             hasher.combine(item.endOffset ?? -1)
             hasher.combine(transcribingRowIDs.contains(item.id))
             hasher.combine(queuedRetranscriptionRowIDs.contains(item.id))
+            hasher.combine(item.speakerID)
         }
         return hasher.finalize()
     }
@@ -1129,6 +1174,11 @@ struct ChatTabView: View {
             hasPendingNewMessage = false
             isAutoScrollModeEnabled = false
             return
+        }
+
+        // If this is the first item during a live recording, enable auto-scroll
+        if liveChatItems.count == 1 && isRecording {
+            isAutoScrollModeEnabled = true
         }
 
         if isAutoScrollModeEnabled {

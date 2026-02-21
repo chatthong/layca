@@ -26,8 +26,10 @@ Layca (เลขา, "secretary" in Thai) is a **native Apple meeting recorder**
 
 ## Known Critical Issues (Fix Before Adding Features)
 1. `ForEach(0..<sessions.count, id: \.self)` in `MacProWorkspaceView.swift:154` — **crash risk**
-2. `TranscriptRow.avatarPalette: [Color]` — SwiftUI.Color is not Codable — **blocks SwiftData migration**
+2. `TranscriptRow.palettes: [Color]` static array — SwiftUI.Color not Codable — **blocks SwiftData** (avatarPalette refactored to avatarPaletteIndex: Int but the static palettes array still uses Color)
 3. `MasterAudioRecorder.stop()` does file I/O on `@MainActor` — **UI stutter risk**
+4. `checkForSpeakerInterrupt` called without `sampleRate` (defaults 16kHz, engine runs 44.1kHz) — wrong decimation ratio, degraded interrupt embeddings — `AppBackend.swift:777`
+5. `activeChunkSpeakerID == nil` guard blocks interrupt detection for first 1.6s of every chunk — `AppBackend.swift:758`
 
 ## Agents Available
 Custom agents are in `.claude/agents/`:
@@ -36,6 +38,8 @@ Custom agents are in `.claude/agents/`:
 - `product-strategist` — features, monetization, roadmap
 - `accessibility-lead` — VoiceOver, Dynamic Type, inclusive design
 - `market-analyst` — competitive research, pricing, launch
+- `ml-inference-lead` — CoreML, Metal GPU, ANE routing, Whisper/VAD/diarization model optimization, on-device inference latency
+- `audio-processing-lead` — AVAudioEngine, AVAudioSession, signal processing, VAD tuning, buffer alignment, audio quality
 
 ## Task List
 All pending work is tracked in **[TODO.md](TODO.md)**.

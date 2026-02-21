@@ -2,6 +2,9 @@ import Foundation
 import SwiftUI
 import Combine
 import AVFoundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct PreflightConfig {
     let prompt: String
@@ -66,6 +69,7 @@ struct PipelineTranscriptEvent: Sendable {
 enum PipelineEvent: Sendable {
     case waveform([Double])
     case timer(Double)
+    case liveSpeaker(String?)
     case transcript(PipelineTranscriptEvent, chunkSeconds: Double)
     case stopped
 }
@@ -170,11 +174,13 @@ final class MasterAudioRecorder: NSObject, AVAudioRecorderDelegate {
            let segmentURL = segmentRecordingURL,
            let destinationURL {
             do {
-                try await mergeAudioFilesWithRetries(
-                    sourceURL: sourceURL,
-                    appendedURL: segmentURL,
-                    outputURL: destinationURL
-                )
+                try await Task.detached(priority: .userInitiated) {
+                    try await Self.mergeAudioFilesWithRetries(
+                        sourceURL: sourceURL,
+                        appendedURL: segmentURL,
+                        outputURL: destinationURL
+                    )
+                }.value
             } catch {
                 cleanupTemporaryRecordingFile()
                 resetAppendState()
@@ -188,7 +194,7 @@ final class MasterAudioRecorder: NSObject, AVAudioRecorderDelegate {
         deactivateAudioSessionIfSupported()
     }
 
-    private func mergeAudioFilesWithRetries(sourceURL: URL, appendedURL: URL, outputURL: URL) async throws {
+    private static func mergeAudioFilesWithRetries(sourceURL: URL, appendedURL: URL, outputURL: URL) async throws {
         let maxAttempts = 3
         var lastError: Error?
 
@@ -260,7 +266,7 @@ final class MasterAudioRecorder: NSObject, AVAudioRecorderDelegate {
 #endif
     }
 
-    private func mergeAudioFiles(sourceURL: URL, appendedURL: URL, outputURL: URL) async throws {
+    private static func mergeAudioFiles(sourceURL: URL, appendedURL: URL, outputURL: URL) async throws {
         let sourceAsset = AVURLAsset(url: sourceURL)
         let appendedAsset = AVURLAsset(url: appendedURL)
         let composition = AVMutableComposition()
@@ -477,6 +483,8 @@ actor LiveSessionPipeline {
     private var pendingSpeakerChunks = 0
     private var fallbackSpeakerEmbeddings: [String: FallbackSpeakerSignature] = [:]
 
+    private var hadSignificantSilenceBeforeChunk: Bool = false
+
     private var inputController: LiveAudioInputController?
     private var activeConfig: LivePipelineConfig?
     private var elapsedSeconds: Double = 0
@@ -486,6 +494,11 @@ actor LiveSessionPipeline {
     private var activeChunkSpeakerID: String?
     private var speakerChangeCandidate: SpeakerChangeCandidate?
     private var speechSecondsSinceLastSpeakerProbe: Double = 0
+    private var interruptCheckSampleAccumulator: [Float] = []
+    private var lastKnownSpeakerEmbedding: [Float]?
+    private var interruptCheckSampleRate: Double = 16_000
+    private var lastChunkDurationSeconds: Double = 0
+    private let interruptCheckWindowSize = 4_096
     private var chunkCounter = 0
     private var runToken = UUID()
     private var vadState: VADState = .loading
@@ -505,11 +518,17 @@ actor LiveSessionPipeline {
     private let speakerProbeIntervalSpeechSeconds: Double = 0.25
     private let minSpeechSecondsForSpeakerProbe: Double = 1.6
     private let minSpeakerBoundaryChunkSeconds: Double = 1.6
-    private let speakerSimilarityThreshold: Float = 0.72
-    private let speakerLooseSimilarityThreshold: Float = 0.60
-    private let newSpeakerCandidateSimilarity: Float = 0.55
+    private let speakerSimilarityThreshold: Float = 0.65
+    private let speakerLooseSimilarityThreshold: Float = 0.52
+    private let newSpeakerCandidateSimilarity: Float = 0.58
+    private let immediatNewSpeakerSimilarityThreshold: Float = 0.40
     private let pendingChunksBeforeNewSpeaker = 2
     private let maxSpeakersPerSession = 6
+    private let minSegmentDurationForNewSpeaker: Double = 2.5
+    private let adaptiveProbeWindowSpeechSeconds: Double = 0.8
+    private let adaptiveProbeObservationThreshold: Int = 5
+    private let turnTakingSilenceThreshold: Double = 0.5
+    private let turnTakingSimilarityThreshold: Float = 0.45
     private let speakerFallbackThreshold: Double = 0.015
     private let deferredTranscriptPlaceholder = "Message queued for automatic transcription..."
 
@@ -665,9 +684,23 @@ actor LiveSessionPipeline {
         )
 
         if isSpeechFrame {
+            // Detect turn-taking: if this is the first speech frame of a new chunk,
+            // record whether significant silence preceded it.
+            if activeChunkFrames.isEmpty {
+                hadSignificantSilenceBeforeChunk = silenceSeconds >= turnTakingSilenceThreshold
+            }
+
             activeChunkFrames.append(audioFrame)
             silenceSeconds = 0
             speechSecondsSinceLastSpeakerProbe += frame.duration
+
+            // Accumulate samples for interrupt detection.
+            interruptCheckSampleAccumulator.append(contentsOf: frame.samples)
+            interruptCheckSampleRate = Double(frame.sampleRate)
+            if interruptCheckSampleAccumulator.count >= interruptCheckWindowSize {
+                await checkForSpeakerInterrupt(config: config)
+            }
+
             await evaluateSpeakerBoundary(config: config)
         } else if !activeChunkFrames.isEmpty {
             // Keep non-speech frames once a message has started so queued
@@ -716,6 +749,7 @@ actor LiveSessionPipeline {
         }
 
         let chunkSeconds = max((last.timestamp + last.duration) - first.timestamp, 0.2)
+        lastChunkDurationSeconds = chunkSeconds
 
         async let speakerID = identifySpeaker(chunk: chunk)
 
@@ -736,6 +770,65 @@ actor LiveSessionPipeline {
 
         continuation?.yield(.transcript(event, chunkSeconds: chunkSeconds))
         chunkCounter += 1
+    }
+
+    private func checkForSpeakerInterrupt(config: LivePipelineConfig) async {
+        guard speakerState == .ready,
+              !activeChunkFrames.isEmpty else {
+            interruptCheckSampleAccumulator.removeAll(keepingCapacity: true)
+            return
+        }
+
+        // Resolve the reference embedding: prefer the actively tracked speaker,
+        // fall back to the last known embedding from the previous chunk so that
+        // the first 1.6 s of a new chunk is not a blind window.
+        let referenceEmbedding: [Float]
+        if let currentLabel = activeChunkSpeakerID,
+           let embedding = speakerEmbeddings[currentLabel] {
+            referenceEmbedding = embedding
+        } else if let fallback = lastKnownSpeakerEmbedding {
+            referenceEmbedding = fallback
+        } else {
+            interruptCheckSampleAccumulator.removeAll(keepingCapacity: true)
+            return
+        }
+
+        let buffer = interruptCheckSampleAccumulator
+        interruptCheckSampleAccumulator.removeAll(keepingCapacity: true)
+
+        // Race inference against an 80ms timeout. Under thermal throttling CoreML
+        // can take 100-300ms; it is better to skip an interrupt window than to
+        // back-log audio frames on the pipeline actor.
+        let interrupted: Bool = await withTaskGroup(of: Bool?.self) { group in
+            group.addTask {
+                await self.speakerDiarizer.checkForInterrupt(
+                    audioBuffer: buffer,
+                    currentSpeakerEmbedding: referenceEmbedding,
+                    sampleRate: self.interruptCheckSampleRate
+                )
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 80_000_000) // 80ms
+                return nil  // timeout sentinel
+            }
+            for await result in group {
+                group.cancelAll()
+                return result ?? false
+            }
+            return false
+        }
+
+        guard interrupted, let last = activeChunkFrames.last else {
+            return
+        }
+
+        let boundaryTimestamp = last.timestamp
+        await speakerDiarizer.resetInterruptState()
+        await cutChunkForSpeakerBoundary(
+            config: config,
+            boundaryTimestamp: boundaryTimestamp,
+            newObservation: .newCandidate
+        )
     }
 
     private func evaluateSpeakerBoundary(config: LivePipelineConfig) async {
@@ -840,14 +933,28 @@ actor LiveSessionPipeline {
         switch observation {
         case .existingLabel(let label):
             activeChunkSpeakerID = label
+            lastKnownSpeakerEmbedding = speakerEmbeddings[label]
+            continuation?.yield(.liveSpeaker(label))
         case .newCandidate:
             activeChunkSpeakerID = nil
+            lastKnownSpeakerEmbedding = nil
+            continuation?.yield(.liveSpeaker(nil))
         }
     }
 
     private func recentSpeakerProbeWindow() -> [AudioFrame]? {
         guard !activeChunkFrames.isEmpty else {
             return nil
+        }
+
+        // Use a shorter probe window for speakers that have been observed enough
+        // times to produce a reliable embedding from less audio.
+        let effectiveProbeWindow: Double
+        if let label = activeChunkSpeakerID,
+           (speakerObservationCounts[label] ?? 0) >= adaptiveProbeObservationThreshold {
+            effectiveProbeWindow = adaptiveProbeWindowSpeechSeconds
+        } else {
+            effectiveProbeWindow = speakerProbeWindowSpeechSeconds
         }
 
         var startIndex = activeChunkFrames.count - 1
@@ -859,7 +966,7 @@ actor LiveSessionPipeline {
             if frame.isSpeech {
                 speechAccumulated += frame.duration
             }
-            if speechAccumulated >= speakerProbeWindowSpeechSeconds {
+            if speechAccumulated >= effectiveProbeWindow {
                 break
             }
         }
@@ -900,7 +1007,18 @@ actor LiveSessionPipeline {
             return nil
         }
 
-        if closest.similarity >= speakerLooseSimilarityThreshold {
+        // After significant prior silence (turn-taking), use a lower similarity
+        // threshold so the probe more readily returns .newCandidate, enabling
+        // faster speaker boundary detection at natural turn boundaries.
+        let effectiveSimilarityThreshold: Float
+        if hadSignificantSilenceBeforeChunk {
+            effectiveSimilarityThreshold = turnTakingSimilarityThreshold
+            hadSignificantSilenceBeforeChunk = false
+        } else {
+            effectiveSimilarityThreshold = speakerLooseSimilarityThreshold
+        }
+
+        if closest.similarity >= effectiveSimilarityThreshold {
             return .existingLabel(closest.label)
         }
         return .newCandidate
@@ -966,6 +1084,11 @@ actor LiveSessionPipeline {
         activeChunkSpeakerID = nil
         speakerChangeCandidate = nil
         speechSecondsSinceLastSpeakerProbe = 0
+        interruptCheckSampleAccumulator.removeAll(keepingCapacity: true)
+        interruptCheckSampleRate = 16_000
+        lastKnownSpeakerEmbedding = nil
+        hadSignificantSilenceBeforeChunk = false
+        continuation?.yield(.liveSpeaker(nil))
     }
 
     private func identifySpeaker(chunk: [AudioFrame]) async -> String {
@@ -1022,11 +1145,29 @@ actor LiveSessionPipeline {
             return closest.label
         }
 
+        // If the voice is dramatically different from all known speakers,
+        // skip the 2-chunk confirmation gate and create a new speaker immediately.
+        if closest.similarity < immediatNewSpeakerSimilarityThreshold {
+            pendingSpeakerEmbedding = nil
+            pendingSpeakerChunks = 0
+            if lastChunkDurationSeconds >= minSegmentDurationForNewSpeaker {
+                return createSpeakerLabel(with: embedding)
+            }
+            // Segment too short — assign to closest but don't accumulate pending.
+            updateSpeaker(label: closest.label, with: embedding)
+            return closest.label
+        }
+
         if let pending = pendingSpeakerEmbedding,
            cosineSimilarity(pending, embedding) >= newSpeakerCandidateSimilarity {
-            pendingSpeakerEmbedding = normalize(zip(pending, embedding).map { pair in
-                (pair.0 + pair.1) * 0.5
-            })
+            // Incremental EMA: weight new observation less as chunks accumulate,
+            // so the established embedding gains momentum and resists noisy frames.
+            let newWeight = 1.0 / Float(pendingSpeakerChunks + 1)
+            let oldWeight = 1.0 - newWeight
+            let averaged = zip(pending, embedding).map { old, new in
+                old * oldWeight + new * newWeight
+            }
+            pendingSpeakerEmbedding = normalize(averaged)
             pendingSpeakerChunks += 1
         } else {
             pendingSpeakerEmbedding = normalize(embedding)
@@ -1036,6 +1177,11 @@ actor LiveSessionPipeline {
         if pendingSpeakerChunks >= pendingChunksBeforeNewSpeaker {
             pendingSpeakerEmbedding = nil
             pendingSpeakerChunks = 0
+            // Suppress new speaker creation for very short segments (coughs, interjections).
+            if lastChunkDurationSeconds < minSegmentDurationForNewSpeaker {
+                updateSpeaker(label: closest.label, with: embedding)
+                return closest.label
+            }
             return createSpeakerLabel(with: embedding)
         }
 
@@ -1449,7 +1595,7 @@ actor SessionStore {
         }
 
         let profile = speakerProfile(for: event.speakerID, in: &session.speakers)
-        let baseColor = Color(hex: profile.colorHex)
+        let paletteIndex = Self.speakerColorPalette.firstIndex(of: profile.colorHex) ?? 0
 
         let row = TranscriptRow(
             id: event.id,
@@ -1459,7 +1605,7 @@ actor SessionStore {
             time: Self.formatTimestamp(seconds: event.startOffset),
             language: event.languageID,
             avatarSymbol: profile.avatarSymbol,
-            avatarPalette: [baseColor, .white.opacity(0.72)],
+            avatarPaletteIndex: paletteIndex,
             startOffset: event.startOffset,
             endOffset: event.endOffset
         )
@@ -1495,7 +1641,7 @@ actor SessionStore {
             time: existing.time,
             language: language,
             avatarSymbol: existing.avatarSymbol,
-            avatarPalette: existing.avatarPalette,
+            avatarPaletteIndex: existing.avatarPaletteIndex,
             startOffset: existing.startOffset,
             endOffset: existing.endOffset
         )
@@ -1553,7 +1699,7 @@ actor SessionStore {
                 time: existing.time,
                 language: existing.language,
                 avatarSymbol: existing.avatarSymbol,
-                avatarPalette: existing.avatarPalette,
+                avatarPaletteIndex: existing.avatarPaletteIndex,
                 startOffset: existing.startOffset,
                 endOffset: existing.endOffset
             )
@@ -1585,7 +1731,7 @@ actor SessionStore {
             return
         }
 
-        let baseColor = Color(hex: targetProfile.colorHex)
+        let targetPaletteIndex = Self.speakerColorPalette.firstIndex(of: targetProfile.colorHex) ?? 0
         session.rows[rowIndex] = TranscriptRow(
             id: existing.id,
             speakerID: targetSpeakerID,
@@ -1594,7 +1740,7 @@ actor SessionStore {
             time: existing.time,
             language: existing.language,
             avatarSymbol: targetProfile.avatarSymbol,
-            avatarPalette: [baseColor, .white.opacity(0.72)],
+            avatarPaletteIndex: targetPaletteIndex,
             startOffset: existing.startOffset,
             endOffset: existing.endOffset
         )
@@ -1789,7 +1935,7 @@ actor SessionStore {
                     time: timestamp,
                     language: snapshot.language.isEmpty ? "AUTO" : snapshot.language,
                     avatarSymbol: profile.avatarSymbol,
-                    avatarPalette: [Color(hex: profile.colorHex), .white.opacity(0.72)],
+                    avatarPaletteIndex: Self.speakerColorPalette.firstIndex(of: profile.colorHex) ?? 0,
                     startOffset: snapshot.startOffset,
                     endOffset: snapshot.endOffset
                 )
@@ -1813,7 +1959,7 @@ actor SessionStore {
                     time: Self.resolvedTimestamp(snapshot.time, startOffset: snapshot.startOffset),
                     language: snapshot.language.isEmpty ? "AUTO" : snapshot.language,
                     avatarSymbol: profile.avatarSymbol,
-                    avatarPalette: [Color(hex: profile.colorHex), .white.opacity(0.72)],
+                    avatarPaletteIndex: Self.speakerColorPalette.firstIndex(of: profile.colorHex) ?? 0,
                     startOffset: snapshot.startOffset,
                     endOffset: snapshot.endOffset
                 )
@@ -2117,6 +2263,7 @@ final class AppBackend: ObservableObject {
     }
 
     @Published var isRecording = false
+    @Published var liveSpeakerID: String? = nil
     @Published private(set) var isTranscriptChunkPlaying = false
     @Published private(set) var transcriptChunkPlaybackRemainingSeconds: Double = 0
     @Published private(set) var transcriptChunkPlaybackRangeText: String?
@@ -2647,8 +2794,14 @@ final class AppBackend: ObservableObject {
             recordingSeconds = 0
             streamTask?.cancel()
             streamTask = consume(stream: stream, sessionID: sessionID)
+#if canImport(UIKit)
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+#endif
         } catch {
             preflightStatusMessage = error.localizedDescription
+#if canImport(UIKit)
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+#endif
         }
     }
 
@@ -2668,6 +2821,9 @@ final class AppBackend: ObservableObject {
         }
 
         isRecording = false
+#if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+#endif
         await refreshSessionsFromStore()
     }
 
@@ -3510,6 +3666,9 @@ final class AppBackend: ObservableObject {
                 }
             }
 
+        case .liveSpeaker(let speakerID):
+            liveSpeakerID = speakerID
+
         case .stopped:
             isRecording = false
         }
@@ -3761,7 +3920,7 @@ final class AppBackend: ObservableObject {
 
 }
 
-private extension Color {
+extension Color {
     nonisolated init(hex: String) {
         let normalized = hex
             .trimmingCharacters(in: .whitespacesAndNewlines)

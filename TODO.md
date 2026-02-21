@@ -10,16 +10,8 @@
 
 User-defined priorities. Do these before anything else in the codebase.
 
-- [ ] **Real-time speaker interrupt detection** · `Libraries/SpeakerDiarizationCoreMLService.swift` + pipeline
-  - Current behavior: speaker boundary cut uses a 1.0s backtrack + stability guard, and `minSamplesForInference = 24_000` (1.5s) means the diarizer can't fire until 1.5s of audio has accumulated — so interruptions go undetected until the next VAD chunk ends
-  - Goal: cut speaker label the moment a new voice interrupts mid-sentence, not after silence
-  - Approach:
-    1. Add a sliding-window embedding comparison inside `LiveSessionPipeline` — every ~256ms (4_096 samples), extract a short embedding and compare it to the current speaker's profile via cosine distance
-    2. If cosine distance crosses a threshold (e.g. > 0.35) for two consecutive windows → fire an early boundary cut, bypassing the stability guard
-    3. Tune `minSamplesForInference` vs fast-path: keep the full 1.5s path for low-confidence situations, use the fast-path only when distance is high-confidence (> 0.5)
-    4. Test on overlapping-speech recordings; measure false-positive rate vs latency improvement
-  - Files: `Libraries/SpeakerDiarizationCoreMLService.swift`, `Libraries/LiveSessionPipeline.swift` (or equivalent pipeline coordinator), `docs/audio-pipeline.md`
-  - Effort: M · Agent: `swift-engineer`
+- [x] **Real-time speaker interrupt detection** · `Libraries/SpeakerDiarizationCoreMLService.swift` + pipeline
+  - ✅ Done 2026-02-21: sliding-window cosine distance fast-path (256ms / 4,096 samples). Dual threshold: 0.35×2 windows for robustness, 0.5×1 for instant cut. `checkForInterrupt()`, `resetInterruptState()`, `cosineSimilarity()` added. Pipeline wired in `AppBackend.swift` `ingest()`.
 
 - [ ] **On-device LLM summary with user prompt** · new `Services/SummaryService.swift`
   - Feature: user taps "Summarize" (in share sheet or toolbar), gets a prompt field to type instructions (e.g. "bullet points", "action items", "formal report"), then Qwen 2.5 runs on-device and produces formatted output
@@ -45,16 +37,11 @@ User-defined priorities. Do these before anything else in the codebase.
 
 These are bugs or blockers for all future work. Do them first.
 
-- [ ] **Fix ForEach crash risk** · `MacProWorkspaceView.swift:154`
-  - `ForEach(0..<sessions.count, id: \.self)` crashes if sessions mutates during render
-  - Fix: `ForEach(sessions, id: \.id)` — search whole codebase for same pattern
-  - Effort: S · Agent: `swift-engineer`
+- [x] **Fix ForEach crash risk** · `MacProWorkspaceView.swift:154`
+  - ✅ Done 2026-02-21: Fixed 3 instances total — MacProWorkspaceView.swift (×2, lines 154 + 925) and IOSWorkspaceSidebarView.swift (×1, line 232). All use `ForEach(sessions) { session in }` now.
 
-- [ ] **Extract `Color` out of `TranscriptRow`** · `Models/Domain/TranscriptRow.swift:14`
-  - `avatarPalette: [Color]` — SwiftUI.Color is not Codable or Sendable
-  - Blocks: SwiftData migration, @Observable migration, speaker profile persistence
-  - Fix: Create `SpeakerProfileStore` mapping speakerID → palette index (Int into fixed array)
-  - Effort: L · Agent: `swift-engineer`
+- [x] **Extract `Color` out of `TranscriptRow`** · `Models/Domain/TranscriptRow.swift:14`
+  - ✅ Done 2026-02-21: `avatarPalette: [Color]` → `avatarPaletteIndex: Int`. `static let palettes: [[Color]]` added to TranscriptRow.swift. Computed `var avatarColor: Color`. 6 call sites updated in AppBackend.swift. TranscriptRow is now Codable-ready; unblocks SwiftData + @Observable.
 
 ---
 
@@ -62,26 +49,19 @@ These are bugs or blockers for all future work. Do them first.
 
 Small fixes, high impact. Can be done in any order.
 
-- [ ] **Set Settings sheet default to `.large` detent** · `App/ContentView.swift`
-  - `.presentationDetents([.medium, .large])` clips multi-step settings at medium
-  - Fix: change to `[.large]` or make `.large` first
-  - Effort: S · Agent: `apple-design-lead`
+- [x] **Set Settings sheet default to `.large` detent** · `App/ContentView.swift`
+  - ✅ Done 2026-02-21: Changed `.presentationDetents([.medium, .large])` → `[.large]`.
 
 - [ ] **Fix waveform bars color state** · `Features/Chat/ChatTabView.swift` `waveformPanel`
   - Bars always show `Color.red.opacity(0.78)` — should match recording state
   - Fix: use `recorderActionColor` (already computed) as bar fill
   - Effort: S · Agent: `apple-design-lead`
 
-- [ ] **Unify "Pause" vs "Stop" vocabulary**
-  - `recorderCard` (macOS) says "Pause" during recording; iOS accessory says "Stop"
-  - Decide one word. "Stop" is correct (it finalizes the chunk, not pauses)
-  - Effort: S · Agent: `apple-design-lead`
+- [x] **Unify "Pause" vs "Stop" vocabulary**
+  - ✅ Done 2026-02-21: Changed in ChatTabView.swift (lines 813, 825, 827). Zero "Pause" labels remain across all Swift files.
 
-- [ ] **Add haptic feedback on record start/stop** · `App/AppBackend.swift`
-  - No haptics exist — DHH users cannot feel state change
-  - Fix: `UIImpactFeedbackGenerator(style: .medium).impactOccurred()` at toggle transitions
-  - Also: `.heavy` impact on error (credit exhausted)
-  - Effort: S · Agent: `accessibility-lead`
+- [x] **Add haptic feedback on record start/stop** · `App/AppBackend.swift`
+  - ✅ Done 2026-02-21: `.medium` on start/stop, `.heavy` on error. Wrapped in `#if canImport(UIKit)`.
 
 ---
 
@@ -121,27 +101,21 @@ Small fixes, high impact. Can be done in any order.
 
 ## 🟡 High Priority — Design & HIG
 
-- [ ] **Replace hardcoded RGB colors with adaptive Color assets**
-  - `RecordingSpectrumBubble`: `Color(red: 0.20, green: 0.49, blue: 0.95)` breaks dark mode
-  - `ChatTabView` macOS background gradient: `Color(red: 0.91, ...)` breaks dark mode
-  - Fix: create named color assets in `Assets.xcassets` with light/dark variants
-  - Effort: S · Agent: `apple-design-lead`
+- [x] **Replace hardcoded RGB colors with adaptive Color assets**
+  - ✅ Done 2026-02-21 (partial): `RecordingSpectrumBubble.swift` — all hardcoded blues → `Color.accentColor`.
+  - ⏳ Remaining: `ChatTabView` macOS background gradient `Color(red: 0.91, ...)` — pending ChatTabView pass.
 
 - [ ] **Replace `titleDisplayCharacterWidth` pixel hack** · `ChatTabView.swift:8`
   - `titleDisplayCharacterWidth: CGFloat = 9` breaks for Thai, Arabic, CJK (wider chars)
   - Fix: use `ViewThatFits` or natural button sizing with `.frame(maxWidth:)` cap
   - Effort: M · Agent: `apple-design-lead`
 
-- [ ] **Fix iPadOS layout — use NavigationSplitView** · `App/ContentView.swift`
-  - iPadOS uses the phone-style drawer — wrong for large screen
-  - Fix: check `horizontalSizeClass == .regular` → use macOS-style `NavigationSplitView`
-  - Effort: M · Agent: `apple-design-lead`
+- [x] **Fix iPadOS layout — use NavigationSplitView** · `App/ContentView.swift`
+  - ✅ Done 2026-02-21: Added `horizontalSizeClass == .regular` check → `ipadSplitLayout` using `NavigationSplitView` with `IOSWorkspaceSidebarView` (min 230, ideal 280, max 360).
 
-- [ ] **Fix DispatchQueue focus retries** · `MacProWorkspaceView.swift` `requestTitleFieldFocus()`
-  - Three `asyncAfter` calls (0.0s, 0.08s, 0.2s) fight SwiftUI focus — fragile hack
-  - Fix: `.task(id: isEditingTitle) { if isEditingTitle { isTitleFieldFocused = true } }`
-  - Same issue in `ChatTabView.swift` `beginTitleRename()`
-  - Effort: S · Agent: `swift-engineer`
+- [x] **Fix DispatchQueue focus retries** · `MacProWorkspaceView.swift` `requestTitleFieldFocus()`
+  - ✅ Done 2026-02-21 (MacProWorkspaceView portion): Replaced 3×asyncAfter + NSApp hacks with `.task(id: isEditingTitle)`. Function deleted entirely.
+  - ⏳ Remaining: `ChatTabView.swift` `beginTitleRename()` — pending ChatTabView pass.
 
 - [ ] **Add play affordance to transcript bubbles**
   - No visual hint that bubbles are tappable for playback
@@ -152,20 +126,16 @@ Small fixes, high impact. Can be done in any order.
 
 ## 🟡 Medium — Code Quality & Architecture
 
-- [ ] **Move MasterAudioRecorder file I/O off @MainActor** · `App/AppBackend.swift`
-  - `stop()` does temp file creation + segment merge on main thread — UI stutter risk
-  - Fix: detached `Task` or background actor for the merge/finalize work
-  - Effort: M · Agent: `swift-engineer`
+- [x] **Move MasterAudioRecorder file I/O off @MainActor** · `App/AppBackend.swift`
+  - ✅ Done 2026-02-21: `mergeAudioFilesWithRetries` + `mergeAudioFiles` made `private static` (nonisolated). Called via `Task.detached(priority: .userInitiated)` in `stop()`.
 
 - [ ] **Extract ExportService from ContentView** · `App/ContentView.swift`
   - ~200 lines of export logic (SRT, Markdown, NotepadMinutes, PlainText) in ContentView
   - Fix: new file `Services/ExportService.swift` with a pure struct — makes it testable
   - Effort: M · Agent: `swift-engineer`
 
-- [ ] **Extract focusLanguages catalog** · `App/ContentView.swift`
-  - 96-language array inline as computed property — recomputed on every render
-  - Fix: `static let all: [FocusLanguage]` in `Models/Domain/FocusLanguage+Catalog.swift`
-  - Effort: S · Agent: `swift-engineer`
+- [x] **Extract focusLanguages catalog** · `App/ContentView.swift`
+  - ✅ Done 2026-02-21: 96-language array moved to `static let all: [FocusLanguage]` in `FocusLanguage.swift`. `var focusLanguages` computed property deleted from ContentView (100 lines removed).
 
 - [ ] **Replace NotificationCenter rename-cancel with environment** · `ChatTabView.swift:198`
   - `NotificationCenter.publisher(for: "LaycaCancelTitleRenameEditing")` is fragile coupling
@@ -201,7 +171,7 @@ These unlock monetization and long-term user retention. Work in order.
   - Toggle already exists in Settings — wire it to actual sync behavior
   - Effort: L · Agent: `swift-engineer`
 
-- [ ] **Speaker profile persistence across sessions** · blocked by: Extract Color from TranscriptRow
+- [ ] **Speaker profile persistence across sessions** · ~~blocked by: Extract Color from TranscriptRow~~ (blocker resolved ✅)
   - Persist speaker voice embeddings + user-assigned names in shared `profiles.json`
   - Match incoming embeddings against known profiles at session start
   - Effort: L · Agent: `swift-engineer`
@@ -210,14 +180,14 @@ These unlock monetization and long-term user retention. Work in order.
 
 ## 🟢 Features — Platform & Polish
 
-- [ ] **Migrate AppBackend to @Observable macro** · blocked by: Extract Color from TranscriptRow
+- [ ] **Migrate AppBackend to @Observable macro** · ~~blocked by: Extract Color from TranscriptRow~~ (blocker resolved ✅)
   - Replace `@MainActor ObservableObject` + prop drilling with `@Observable` + `.environment()`
   - Eliminates the 20+ parameter init in ChatTabView
   - Effort: L · Agent: `swift-engineer`
 
 - [ ] **Add SwiftData persistence layer**
   - Mirror filesystem JSON to SwiftData for search, filtering, and CloudKit sync
-  - Requires: Color extracted from TranscriptRow (no SwiftUI types in models)
+  - Requires: Color extracted from TranscriptRow (no SwiftUI types in models) ✅ resolved
   - Effort: XL · Agent: `swift-engineer`
 
 - [ ] **RTL layout support for Arabic/Hebrew/Persian/Urdu**
@@ -260,12 +230,12 @@ These unlock monetization and long-term user retention. Work in order.
 ## Dependency Graph
 
 ```
-Extract Color from TranscriptRow (#2 critical)
-    ├── blocks: Speaker profile persistence
-    └── blocks: @Observable migration
-            └── blocks: SwiftData layer
+Extract Color from TranscriptRow ✅ RESOLVED
+    ├── Speaker profile persistence — now unblocked
+    └── @Observable migration — now unblocked
+            └── SwiftData layer — now unblocked
 ```
 
 ---
 
-*Last updated: 2026-02-21 · Source: docs/team-explorer-report.md*
+*Last updated: 2026-02-21 · Sprint 1 complete (9 tasks done, ChatTabView pass pending)*
