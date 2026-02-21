@@ -233,8 +233,14 @@ actor WhisperGGMLCoreMLService {
         params.n_threads = Int32(maxThreads)
         params.offset_ms = 0
         params.no_context = true
-        params.single_segment = true
-        params.no_timestamps = true
+        // For short chunks (≤6 s) single-segment / no-timestamp mode is fast and
+        // accurate. For longer chunks, restoring timestamp-conditioned multi-segment
+        // decoding prevents greedy attention drift: without timestamp tokens the
+        // decoder has no temporal anchor and locks onto the clearest tail phrase,
+        // discarding everything before it. collectText() already joins all segments.
+        let isLongChunk = samples.count > Int(Constants.targetSampleRate * 6)
+        params.single_segment = !isLongChunk
+        params.no_timestamps = !isLongChunk
         let prompt = initialPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
         let promptOrNil = (prompt?.isEmpty == false) ? prompt : nil
         let normalizedFocusLanguageCodes = Set(

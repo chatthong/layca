@@ -401,16 +401,24 @@ actor SpeakerDiarizationCoreMLService {
         consecutiveInterruptWindows = 0
     }
 
+    /// Extracts a speaker embedding from a short interrupt-detection window.
+    /// Uses a lower sample minimum than full inference (1 200 vs 1 600) to handle
+    /// typical tap buffer sizes at 44.1 kHz / 48 kHz without resampling to nil.
+    /// Returns nil when the model is not loaded or the buffer is too short.
+    func extractWindowEmbedding(audioBuffer: [Float], sampleRate: Double) -> [Float]? {
+        return try? embeddingDirect(for: audioBuffer, sampleRate: sampleRate, minimumSamples: 1_200)
+    }
+
     /// Lightweight embedding extraction that skips silence trimming and uses a lower sample minimum,
     /// suitable for short interrupt-detection windows.
-    private func embeddingDirect(for samples: [Float], sampleRate: Double) throws -> [Float]? {
+    private func embeddingDirect(for samples: [Float], sampleRate: Double, minimumSamples: Int = 1_600) throws -> [Float]? {
         guard let model else {
             return nil
         }
 
         let converted = Self.resampleTo16k(samples: samples, sourceSampleRate: sampleRate)
         // Accept shorter windows than normal inference — pad to model input size.
-        guard converted.count >= 1_600 else {
+        guard converted.count >= minimumSamples else {
             return nil
         }
 

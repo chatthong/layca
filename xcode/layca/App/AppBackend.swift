@@ -255,6 +255,7 @@ final class MasterAudioRecorder: NSObject, AVAudioRecorderDelegate {
 #if !os(macOS)
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
+        try session.setPreferredIOBufferDuration(0.02)
         try session.setActive(true, options: .notifyOthersOnDeactivation)
 #endif
     }
@@ -511,7 +512,7 @@ actor LiveSessionPipeline {
     private let vadSpeechThreshold: Float = 0.5
     private let silenceCutoffSeconds: Double = 1.2
     private let minChunkDurationSeconds: Double = 3.2
-    private let maxChunkDurationSeconds: Double = 12
+    private let maxChunkDurationSeconds: Double = 6
     private let speakerChangeCutoffSeconds: Double = 0.0
     private let speakerBoundaryBacktrackSeconds: Double = 1.0
     // Speaker embedding needs enough voiced audio; probing too early collapses labels.
@@ -807,12 +808,13 @@ actor LiveSessionPipeline {
         // Hop size: ~32 ms worth of samples in the original sample rate.
         let hopSize = max(Int((0.032 * sampleRate).rounded()), 1)
 
-        // Minimum silence width that qualifies as a breath pause (0.3 s).
-        let minSilenceSamples = Int((0.3 * sampleRate).rounded())
+        // Minimum silence width that qualifies as a breath pause (0.15 s).
+        // Lowered from 0.3 s: Thai/rapid turn-taking pauses are often 100-150 ms.
+        let minSilenceSamples = Int((0.15 * sampleRate).rounded())
 
-        // Minimum sub-chunk length (0.8 s). Splits that would produce a
+        // Minimum sub-chunk length (0.5 s). Splits that would produce a
         // sub-chunk shorter than this are discarded.
-        let minSubChunkSamples = Int((0.8 * sampleRate).rounded())
+        let minSubChunkSamples = Int((0.5 * sampleRate).rounded())
 
         // Single cross-actor call: batchIngest resets LSTM state then processes
         // all hops inside SileroVADCoreMLService, returning observations in one go.
@@ -826,8 +828,10 @@ actor LiveSessionPipeline {
             return fullRange
         }
 
-        // Identify contiguous silence regions (probability < 0.30).
-        let silenceThreshold: Float = 0.30
+        // Identify contiguous silence regions (probability < 0.20).
+        // Lowered from 0.30: rapid turn-taking keeps VAD probability elevated;
+        // a lower threshold catches brief inter-speaker dips.
+        let silenceThreshold: Float = 0.20
         var splitPoints: [Int] = []
 
         var silenceStart: Int? = nil
@@ -896,7 +900,7 @@ actor LiveSessionPipeline {
 
         // Debug: log split outcome
         if result.count > 1 {
-            print(String(format: "[VAD-split] → %d sub-chunks from %d split point(s) (silence threshold=0.30, minPause=0.3s, minSubChunk=0.8s)", result.count, splitPoints.count))
+            print(String(format: "[VAD-split] → %d sub-chunks from %d split point(s) (silence threshold=0.20, minPause=0.15s, minSubChunk=0.5s)", result.count, splitPoints.count))
             for (i, r) in result.enumerated() {
                 let startSec = Double(r.lowerBound) / sampleRate
                 let endSec   = Double(r.upperBound)  / sampleRate
@@ -958,6 +962,14 @@ actor LiveSessionPipeline {
         guard interrupted, let last = activeChunkFrames.last else {
             return
         }
+
+        // Seed the next interrupt window with the interrupting speaker's embedding so that
+        // checkForSpeakerInterrupt is not blind during the ~1.6 s warmup of the new chunk.
+        // extractWindowEmbedding uses a relaxed sample minimum to handle 44.1 kHz / 48 kHz tap buffers.
+        lastKnownSpeakerEmbedding = await speakerDiarizer.extractWindowEmbedding(
+            audioBuffer: buffer,
+            sampleRate: interruptCheckSampleRate
+        )
 
         let boundaryTimestamp = last.timestamp
         await speakerDiarizer.resetInterruptState()
@@ -1056,6 +1068,9 @@ actor LiveSessionPipeline {
         activeChunkFrames = trailingChunk
         applyTrailingSpeakerObservation(newObservation)
         speakerChangeCandidate = nil
+        // Clear stale samples from the old speaker so the first interrupt window of the
+        // trailing chunk is not contaminated with mixed audio from both speakers.
+        interruptCheckSampleAccumulator.removeAll(keepingCapacity: true)
         silenceSeconds = trailingSilenceDuration(for: trailingChunk)
         speechSecondsSinceLastSpeakerProbe = speechDuration(for: trailingChunk)
 
@@ -1074,7 +1089,9 @@ actor LiveSessionPipeline {
             continuation?.yield(.liveSpeaker(label))
         case .newCandidate:
             activeChunkSpeakerID = nil
-            lastKnownSpeakerEmbedding = nil
+            // lastKnownSpeakerEmbedding is preserved: it was seeded in checkForSpeakerInterrupt
+            // with the interrupting speaker's embedding so interrupt detection is not blind
+            // during the ~1.6 s warmup before evaluateSpeakerBoundary assigns a label.
             continuation?.yield(.liveSpeaker(nil))
         }
     }
@@ -1223,7 +1240,9 @@ actor LiveSessionPipeline {
         speechSecondsSinceLastSpeakerProbe = 0
         interruptCheckSampleAccumulator.removeAll(keepingCapacity: true)
         interruptCheckSampleRate = 16_000
-        lastKnownSpeakerEmbedding = nil
+        // lastKnownSpeakerEmbedding is intentionally preserved across silence/max-duration
+        // chunk boundaries: the same speaker is likely continuing, so the first interrupt
+        // window of the new chunk has a valid reference without waiting 1.6 s for a probe.
         hadSignificantSilenceBeforeChunk = false
         continuation?.yield(.liveSpeaker(nil))
     }
