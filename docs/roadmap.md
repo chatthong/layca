@@ -293,6 +293,16 @@
   - UI3: 3pt speaker-color left border `Capsule` accent on every transcript bubble.
   - UI4: Speaker-change separator pill (hairline + color dot + speaker name label) between different-speaker turns.
 
+### Sprint 5: Multi-Speaker Chunk Transcription Bug Fix
+- `App/AppBackend.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
+- **Root cause:** 5 compounding bugs caused 9–12s multi-speaker chunks (3–4 speakers, dense turn-taking) to transcribe only the last utterance ~2–5% of the time. Investigated in parallel by ml-inference-lead, swift-engineer, and audio-processing-lead.
+- **Fix 1 (CRITICAL):** Adaptive Whisper decoding — `single_segment=false` / `no_timestamps=false` for chunks > 6s (96,000 samples at 16kHz). Restores timestamp-conditioned multi-segment decoding; prevents greedy attention drift where decoder discarded all but the tail phrase. Short chunks (≤ 6s) retain the fast single-segment path unchanged.
+- **Fix 2 (CRITICAL):** `maxChunkDurationSeconds` lowered `12 → 6`. The 12s ceiling was the only guard against dense multi-speaker speech with < 1.2s pauses; 12s of 3–4 speaker audio reliably triggered decoder drift.
+- **Fix 3 (CRITICAL):** Resurrected dead `lastKnownSpeakerEmbedding` fallback. Previous code cleared both `activeChunkSpeakerID` and `lastKnownSpeakerEmbedding` simultaneously on `.newCandidate`, making the fallback unreachable. Fix: extract interrupt window embedding via new `extractWindowEmbedding(audioBuffer:sampleRate:)` (1,200-sample minimum for 44.1/48 kHz tap buffers) before the cut, store in `lastKnownSpeakerEmbedding`, and preserve it across silence/max-duration resets.
+- **Fix 4 (HIGH):** `interruptCheckSampleAccumulator.removeAll()` added to `cutChunkForSpeakerBoundary` — clears stale samples from the old speaker before the new chunk starts.
+- **Fix 5 (HIGH):** VAD sub-chunk thresholds tuned for Thai/rapid turn-taking: silence pause `0.3s → 0.15s`, VAD probability `0.30 → 0.20`, min sub-chunk `0.8s → 0.5s`.
+- **Fix 6 (MEDIUM):** `AVAudioSession.preferredIOBufferDuration = 0.02s` (iOS only) for tighter VAD frame alignment.
+
 ### Sprint 4: Two-Pass VAD Sub-Chunking + iPadOS Split Layout
 - `App/AppBackend.swift`, `Libraries/SileroVADCoreMLService.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`, `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`
 - **Two-pass VAD sub-chunking:**
@@ -314,6 +324,7 @@
 3. Add resilience/recovery for interrupted recording or processing.
 4. Add optional SwiftData mirror/index layer for long-term search/filter use cases.
 5. Add configurable VAD/speaker sensitivity tuning in settings.
+6. Validate multi-speaker chunk fix in production recordings (Thai group, conference calls) to confirm 2–5% tail-only rate drops to near zero.
 
 ## Quality Gates
 - Keep record disabled when credit pre-flight fails.

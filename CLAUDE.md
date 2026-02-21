@@ -25,11 +25,12 @@ Layca (เลขา, "secretary" in Thai) is a **native Apple meeting recorder**
 - Platform shells: iOS=drawer, macOS=NavigationSplitView, visionOS/tvOS=TabView
 
 ## Known Critical Issues (Fix Before Adding Features)
-1. `ForEach(0..<sessions.count, id: \.self)` in `MacProWorkspaceView.swift:154` — **crash risk**
-2. `TranscriptRow.palettes: [Color]` static array — SwiftUI.Color not Codable — **blocks SwiftData** (avatarPalette refactored to avatarPaletteIndex: Int but the static palettes array still uses Color)
-3. `MasterAudioRecorder.stop()` does file I/O on `@MainActor` — **UI stutter risk**
-4. `checkForSpeakerInterrupt` called without `sampleRate` (defaults 16kHz, engine runs 44.1kHz) — wrong decimation ratio, degraded interrupt embeddings — `AppBackend.swift:777`
-5. `activeChunkSpeakerID == nil` guard blocks interrupt detection for first 1.6s of every chunk — `AppBackend.swift:758`
+All previously tracked critical issues are resolved as of 2026-02-22:
+- ✅ `ForEach(0..<sessions.count, id: \.self)` crash risk — fixed 2026-02-21
+- ✅ `TranscriptRow.palettes: [Color]` not Codable — fixed 2026-02-21 (avatarPaletteIndex: Int)
+- ✅ `MasterAudioRecorder.stop()` file I/O on `@MainActor` — fixed 2026-02-21
+- ✅ `checkForSpeakerInterrupt` wrong sampleRate — confirmed resolved (frame.sampleRate passed explicitly)
+- ✅ `lastKnownSpeakerEmbedding` fallback dead code (1.6s blind window) — fixed 2026-02-22 (Sprint 5)
 
 ## Agents Available
 Custom agents are in `.claude/agents/`:

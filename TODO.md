@@ -238,4 +238,4 @@ Extract Color from TranscriptRow ✅ RESOLVED
 
 ---
 
-*Last updated: 2026-02-21 · Sprint 1 complete (9 tasks done, ChatTabView pass pending)*
+*Last updated: 2026-02-22 · Sprint 5 complete — multi-speaker chunk transcription bug fixed (5 root causes resolved across WhisperGGMLCoreMLService, SpeakerDiarizationCoreMLService, AppBackend)*

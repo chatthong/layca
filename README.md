@@ -47,8 +47,9 @@
   - Bundled VAD model in app resources (offline-first), with network/cache fallback
   - Bundled speaker model in app resources (offline-first), with network/cache fallback
   - Chunk merge + persistence + reactive chat updates
-- **Two-pass VAD sub-chunking:** after each chunk is cut, a dedicated second Silero VAD instance re-runs on the chunk's raw samples at 32 ms hops, finds breath-pause boundaries (silence ≥ 0.3s, prob < 0.30), and splits into sub-chunks (min 0.8s each). Each sub-chunk becomes its own chat bubble. Runs concurrently with speaker identification.
-- **Speaker-ID sensitivity improvements:** tuned cosine thresholds (main 0.65, loose 0.52, new-candidate 0.58, immediate 0.40), adaptive probe window, turn-taking detection, 80ms interrupt timeout, fixed sample-rate mismatch, eliminated 1.6s blind window, weighted EMA embedding accumulation.
+- **Two-pass VAD sub-chunking:** after each chunk is cut, a dedicated second Silero VAD instance re-runs on the chunk's raw samples at 32 ms hops, finds breath-pause boundaries (silence ≥ 0.15s, prob < 0.20), and splits into sub-chunks (min 0.5s each). Each sub-chunk becomes its own chat bubble. Runs concurrently with speaker identification.
+- **Speaker-ID sensitivity improvements:** tuned cosine thresholds (main 0.65, loose 0.52, new-candidate 0.58, immediate 0.40), adaptive probe window, turn-taking detection, 80ms interrupt timeout, fixed sample-rate mismatch, `lastKnownSpeakerEmbedding` fallback seeded from interrupt window (eliminates 1.6s blind window), weighted EMA embedding accumulation.
+- **Adaptive Whisper decoding:** chunks ≤ 6s use fast single-segment / no-timestamp mode; chunks > 6s use timestamp-conditioned multi-segment decoding to prevent greedy attention drift on long multi-speaker audio.
 - **Current transcription mode:**
   - Message transcription runs automatically in a serial queue (one-by-one) as chunks are produced.
 
@@ -106,9 +107,9 @@ Documents/
    - Keep session master audio file (`session_full.m4a`).
 2. **Track 2: VAD slicer — two passes**
    - **Pass 1 (live, coarse):** detect speech/silence, cut chunk after sustained silence.
-   - Defaults: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
+   - Defaults: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `6s`.
    - Speaker-aware boundary cut runs near real-time during active speech (1.0s backtrack + stability guard).
-   - **Pass 2 (per-chunk, fine):** after each chunk is cut, re-run Silero VAD (`intraChunkVAD`) on the chunk's raw samples at 32ms hops to find breath-pause sub-boundaries (silence ≥ 0.3s, prob < 0.30). Split into sub-chunks (min 0.8s). Each sub-chunk becomes its own transcript event.
+   - **Pass 2 (per-chunk, fine):** after each chunk is cut, re-run Silero VAD (`intraChunkVAD`) on the chunk's raw samples at 32ms hops to find breath-pause sub-boundaries (silence ≥ 0.15s, prob < 0.20). Split into sub-chunks (min 0.5s). Each sub-chunk becomes its own transcript event.
 3. **Track 3: Speaker branch**
    - CoreML speaker embedding extraction + cosine matching / new speaker assignment.
    - Fallback branch uses amplitude + zero-crossing-rate + RMS signature matching.

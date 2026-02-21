@@ -52,13 +52,14 @@
   - Selecting `Settings` presents one modal settings sheet with an internal multi-step navigation stack (no nested settings sheets).
   - macOS Chat detail toolbar uses inline title rename plus a trailing native control group (`Play` + `More`).
 - VAD uses native CoreML Silero (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) with bundled offline model.
-  - **Two-pass sub-chunking:** a dedicated `intraChunkVAD` (second `SileroVADCoreMLService` instance) re-runs VAD at 32 ms hops on completed chunks, splits at breath-pause boundaries (silence ≥ 0.3s, prob < 0.30), minimum sub-chunk 0.8s; runs concurrently with `identifySpeaker` via `async let`.
+  - **Two-pass sub-chunking:** a dedicated `intraChunkVAD` (second `SileroVADCoreMLService` instance) re-runs VAD at 32 ms hops on completed chunks, splits at breath-pause boundaries (silence ≥ 0.15s, prob < 0.20), minimum sub-chunk 0.5s; runs concurrently with `identifySpeaker` via `async let`. Thresholds tuned for Thai/rapid turn-taking (inter-speaker pauses typically 100–150 ms).
 - Speaker branch uses native CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) with bundled offline model.
   - Thresholds tuned Sprint 1–2: main `0.65`, loose `0.52`, new-candidate `0.58`, immediate `0.40`.
   - Turn-taking detection at `0.45` after 500ms silence; adaptive probe window 0.8s for established speakers.
   - `checkForInterrupt` with consecutive-window tracking and 80ms timeout guard.
-  - Sample-rate mismatch fixed: source `sampleRate` passed explicitly to interrupt inference.
-  - Eliminated 1.6s blind window at chunk start via `lastKnownSpeakerEmbedding` fallback.
+  - Sample-rate mismatch: confirmed resolved — source `sampleRate` passed explicitly to interrupt inference.
+  - `lastKnownSpeakerEmbedding` fallback properly seeded before each speaker-boundary cut via `extractWindowEmbedding(audioBuffer:sampleRate:)` (relaxed 1,200-sample minimum for 44.1/48 kHz); preserved across silence/max-duration cuts. Eliminates the ~1.6s interrupt-detection blind window at every chunk start.
+  - `interruptCheckSampleAccumulator` cleared on boundary cut to prevent mixed-audio contamination.
 - Speaker fallback now uses a multi-feature signature (amplitude + zero-crossing-rate + RMS energy) with tunable threshold when CoreML speaker model is unavailable.
 - Runtime model asset sources are organized under `Models/RuntimeAssets/`.
 - Whisper transcription runs automatically through a serial queue (`whisper.cpp`) as chunks are produced.
@@ -89,8 +90,9 @@
 - Set `LAYCA_FORCE_WHISPER_COREML_ENCODER_IOS=ON` to force-enable on any iPhone.
 - On some iPhones, first CoreML encoder run may log ANE/CoreML plan-build warnings before succeeding.
 - If ggml GPU decode init fails, runtime falls back to CPU decode and logs reason.
-- Chunk slicing defaults keep silence boundaries (`silence cutoff 1.2s`, `minimum chunk 3.2s`, `max chunk 12s`) and add near-real-time speaker-change boundary cuts with `1.0s` backtrack plus stability guard.
-- Post-chunk two-pass VAD splits completed chunks into sub-chunks at breath-pause boundaries; each sub-chunk gets its own `TranscriptRow` and chat bubble.
+- Chunk slicing defaults keep silence boundaries (`silence cutoff 1.2s`, `minimum chunk 3.2s`, `max chunk 6s`) and add near-real-time speaker-change boundary cuts with `1.0s` backtrack plus stability guard.
+- Post-chunk two-pass VAD splits completed chunks into sub-chunks at breath-pause boundaries (prob < 0.20, pause ≥ 0.15s, min sub-chunk 0.5s); each sub-chunk gets its own `TranscriptRow` and chat bubble.
+- Whisper decoding is adaptive: chunks ≤ 6s use single-segment/no-timestamp fast path; chunks > 6s use timestamp-conditioned multi-segment decoding to prevent greedy attention drift on long multi-speaker audio.
 - Chat UI: consecutive same-speaker sub-chunk bubbles use "continuation" styling — 8pt color dot avatar, hidden speaker-name/timestamp header, 2pt top padding — to reduce visual noise while preserving speaker identity via color accent and VoiceOver labels.
 - `@Published var liveSpeakerID: String?` on `AppBackend` tracks the active speaker during recording; `RecordingSpectrumBubble` reflects the current speaker's color.
 - Chunk playback is gated off while recording to avoid audio-session conflicts.

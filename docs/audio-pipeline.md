@@ -20,13 +20,13 @@
 - End chunk when silence reaches threshold (`1.2s` by default).
 - Message-chunk guardrails:
   - minimum chunk duration: `3.2s`
-  - maximum chunk duration: `12s`
+  - maximum chunk duration: `6s`
   - near-real-time speaker-change boundary cut applied while speech is active
   - boundary cut uses `1.0s` backtrack from detected speaker-change point
   - stability guard requires enough speech context before boundary split
 - **Pass 2 (post-chunk, fine — two-pass VAD sub-chunking):** after each chunk is cut, a dedicated second `SileroVADCoreMLService` instance (`intraChunkVAD`) re-runs VAD on the chunk's raw samples at 32 ms hops.
-  - Finds silence regions where probability < `0.30` spanning ≥ `0.3s` (breath pause boundaries).
-  - Splits chunk at silence midpoints into sub-chunks; minimum sub-chunk size `0.8s`.
+  - Finds silence regions where probability < `0.20` spanning ≥ `0.15s` (breath pause boundaries). Thresholds tuned for Thai/rapid turn-taking where inter-speaker pauses are typically 100–150 ms.
+  - Splits chunk at silence midpoints into sub-chunks; minimum sub-chunk size `0.5s`.
   - Each sub-chunk becomes its own `PipelineTranscriptEvent` → its own chat bubble.
   - `intraChunkVAD` LSTM state is reset before each pass; runs concurrently with speaker identification.
   - Falls back to single full-chunk event if no valid split points found.
@@ -38,8 +38,9 @@
   - Adaptive probe window: `0.8s` for speakers seen ≥ 5 times (tighter for known voices).
   - Turn-taking detection: lower threshold `0.45` applied when silence gap ≥ `500ms` precedes chunk.
   - Weighted EMA for pending embedding accumulation.
-  - `checkForSpeakerInterrupt` receives correct source sample rate (fixed Sprint 1 sample-rate mismatch bug).
-  - Eliminated 1.6s blind window at chunk start via `lastKnownSpeakerEmbedding` fallback.
+  - `checkForSpeakerInterrupt` receives correct source sample rate (confirmed resolved — `frame.sampleRate` passed explicitly).
+  - `lastKnownSpeakerEmbedding` fallback properly seeded: before each speaker-boundary cut, the interrupt window embedding is extracted via `extractWindowEmbedding(audioBuffer:sampleRate:)` (relaxed 1,200-sample minimum for 44.1/48 kHz tap buffers) and stored in `lastKnownSpeakerEmbedding`. Preserved across silence/max-duration cuts. Eliminates the ~1.6s interrupt-detection blind window at every chunk start.
+  - `interruptCheckSampleAccumulator` cleared on boundary cut to prevent mixed-audio contamination of the first comparison window.
   - 80ms `withTaskGroup` timeout on interrupt inference to keep pipeline responsive.
 - Branch B: deferred transcription marker (placeholder text persisted per message until queue worker transcribes it).
 - Speaker branch fallback: amplitude + zero-crossing-rate + RMS signature matching when speaker CoreML model is unavailable.
@@ -80,6 +81,7 @@
   - `preferredLanguageCode = "auto"` (language auto-detect)
   - `translate = false` (never translate)
   - `initial_prompt` comes from strict verbatim preflight template + context keywords
+  - **Adaptive decoding mode:** chunks ≤ 6s use `single_segment=true` / `no_timestamps=true` (fast single-pass greedy). Chunks > 6s (96,000 samples at 16kHz) use `single_segment=false` / `no_timestamps=false` — timestamp-conditioned multi-segment decoding that prevents greedy attention drift where the decoder would otherwise latch onto only the tail phrase of long multi-speaker audio.
 - Whisper runtime preferences are applied from Settings `Advanced` (`Acceleration` + `Offline Model Switch`) and prewarmed in background to reduce first-use latency.
 - Runtime acceleration env flags (service-level fallback):
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
@@ -111,5 +113,5 @@
 - `RecordingSpectrumBubble` and the live segment area reflect the current speaker's avatar color in real time.
 
 ## Current vs Planned
-- **Current:** real `AVAudioEngine` input + native CoreML Silero VAD (two-pass: live coarse + per-chunk fine sub-chunking) + native CoreML speaker diarization (tuned thresholds, turn-taking, adaptive probe) + reactive message pipeline + message playback + automatic queued Whisper transcription with auto language detection, no translation, and quality guardrails.
+- **Current:** real `AVAudioEngine` input (iOS: `preferredIOBufferDuration=0.02s` for tighter VAD alignment) + native CoreML Silero VAD (two-pass: live coarse + per-chunk fine sub-chunking; thresholds 0.20 prob / 0.15s pause / 0.5s min sub-chunk) + native CoreML speaker diarization (tuned thresholds, turn-taking, adaptive probe, proper `lastKnownSpeakerEmbedding` seeding) + reactive message pipeline + message playback + automatic queued Whisper transcription (adaptive single/multi-segment by chunk length) with auto language detection, no translation, and quality guardrails.
 - **Planned:** add per-bubble processing/progress state and retry controls for debug workflows; add configurable VAD/speaker sensitivity tuning in settings.
