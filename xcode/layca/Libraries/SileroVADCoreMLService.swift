@@ -113,6 +113,29 @@ actor SileroVADCoreMLService {
         return latestProbability
     }
 
+    /// Resets LSTM state then processes `samples` in `hopSize`-sample hops, returning
+    /// `(sampleIndex: midpoint, probability: Float)` pairs for each hop that produces output.
+    /// Runs entirely inside this actor — callers make a single cross-actor `await` call.
+    func batchIngest(
+        samples: [Float],
+        sampleRate: Double,
+        hopSize: Int
+    ) -> [(sampleIndex: Int, probability: Float)] {
+        reset()
+        var observations: [(sampleIndex: Int, probability: Float)] = []
+        var hopStart = 0
+        while hopStart < samples.count {
+            let hopEnd = min(hopStart + hopSize, samples.count)
+            let hop = Array(samples[hopStart..<hopEnd])
+            let midpoint = hopStart + (hopEnd - hopStart) / 2
+            if let prob = try? ingest(samples: hop, sampleRate: sampleRate) {
+                observations.append((sampleIndex: midpoint, probability: prob))
+            }
+            hopStart = hopEnd
+        }
+        return observations
+    }
+
     private func ensureModelDirectory() async throws -> URL {
         if let bundled = bundledModelDirectory() {
             return bundled

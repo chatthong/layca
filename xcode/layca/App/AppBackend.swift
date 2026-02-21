@@ -801,10 +801,6 @@ actor LiveSessionPipeline {
             return fullRange
         }
 
-        // Reset the dedicated intra-chunk VAD so it starts fresh with zeroed
-        // LSTM state — independent from the live-stream sileroVAD instance.
-        await intraChunkVAD.reset()
-
         // Hop size: ~32 ms worth of samples in the original sample rate.
         let hopSize = max(Int((0.032 * sampleRate).rounded()), 1)
 
@@ -815,18 +811,13 @@ actor LiveSessionPipeline {
         // sub-chunk shorter than this are discarded.
         let minSubChunkSamples = Int((0.8 * sampleRate).rounded())
 
-        // Feed hops one at a time and record (sampleMidpoint, probability).
-        var observations: [(sampleIndex: Int, probability: Float)] = []
-        var hopStart = 0
-        while hopStart < samples.count {
-            let hopEnd = min(hopStart + hopSize, samples.count)
-            let hop = Array(samples[hopStart..<hopEnd])
-            let midpoint = hopStart + (hopEnd - hopStart) / 2
-            if let prob = try? await intraChunkVAD.ingest(samples: hop, sampleRate: sampleRate) {
-                observations.append((sampleIndex: midpoint, probability: prob))
-            }
-            hopStart = hopEnd
-        }
+        // Single cross-actor call: batchIngest resets LSTM state then processes
+        // all hops inside SileroVADCoreMLService, returning observations in one go.
+        let observations = await intraChunkVAD.batchIngest(
+            samples: samples,
+            sampleRate: sampleRate,
+            hopSize: hopSize
+        )
 
         guard !observations.isEmpty else {
             return fullRange
