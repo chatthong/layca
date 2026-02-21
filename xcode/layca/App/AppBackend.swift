@@ -822,7 +822,7 @@ actor LiveSessionPipeline {
             let hopEnd = min(hopStart + hopSize, samples.count)
             let hop = Array(samples[hopStart..<hopEnd])
             let midpoint = hopStart + (hopEnd - hopStart) / 2
-            if let prob = try? intraChunkVAD.ingest(samples: hop, sampleRate: sampleRate) {
+            if let prob = try? await intraChunkVAD.ingest(samples: hop, sampleRate: sampleRate) {
                 observations.append((sampleIndex: midpoint, probability: prob))
             }
             hopStart = hopEnd
