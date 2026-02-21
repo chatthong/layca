@@ -761,6 +761,9 @@ actor LiveSessionPipeline {
         async let subRangesTask = splitIntoSubChunksByVAD(samples: allSamples, sampleRate: sampleRate)
         let (speaker, subRanges) = await (speakerIDTask, subRangesTask)
 
+        // Debug: top-level summary
+        print(String(format: "[VAD-split] processChunk #%d — %.2fs total → VAD split to %d sub-chunk(s)", chunkCounter + 1, totalDuration, subRanges.count))
+
         // Emit one PipelineTranscriptEvent per sub-chunk.
         for range in subRanges {
             let subSamples = Array(allSamples[range])
@@ -889,7 +892,21 @@ actor LiveSessionPipeline {
 
         // If all splits were rejected we end up with a single range equal to
         // the original; that is equivalent to no splitting.
-        return ranges.isEmpty ? fullRange : ranges
+        let result = ranges.isEmpty ? fullRange : ranges
+
+        // Debug: log split outcome
+        if result.count > 1 {
+            print(String(format: "[VAD-split] → %d sub-chunks from %d split point(s) (silence threshold=0.30, minPause=0.3s, minSubChunk=0.8s)", result.count, splitPoints.count))
+            for (i, r) in result.enumerated() {
+                let startSec = Double(r.lowerBound) / sampleRate
+                let endSec   = Double(r.upperBound)  / sampleRate
+                print(String(format: "[VAD-split]   sub-chunk %d/%d  %.2fs – %.2fs  (%d samples)", i + 1, result.count, startSec, endSec, r.count))
+            }
+        } else {
+            print(String(format: "[VAD-split] → no valid split points (or all rejected) — using full chunk (%d split candidates, %d qualifying)", splitPoints.count, splitPoints.count))
+        }
+
+        return result
     }
 
     private func checkForSpeakerInterrupt(config: LivePipelineConfig) async {

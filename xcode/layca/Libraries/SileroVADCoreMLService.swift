@@ -133,6 +133,15 @@ actor SileroVADCoreMLService {
             }
             hopStart = hopEnd
         }
+
+        // Debug: log all hop P-values as a compact timeline
+        if !observations.isEmpty {
+            let pValues = observations.map { String(format: "%.2f", $0.probability) }.joined(separator: " ")
+            let durationSec = Double(samples.count) / sampleRate
+            print(String(format: "[VAD-split] %.2fs chunk — %d hops @ %.0fHz (hopSize=%d)", durationSec, observations.count, sampleRate, hopSize))
+            print("[VAD-split] P-values: \(pValues)")
+        }
+
         return observations
     }
 
