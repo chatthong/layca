@@ -3,7 +3,7 @@
 > **The Ultimate Offline Polyglot Meeting Secretary**
 
 **Project Codename:** `Layca-Core`  
-**Version:** 0.5.3 (Live Audio + CoreML VAD + CoreML Speaker Diarization + Automatic Queued Whisper Message Transcription + Quality Guardrails)  
+**Version:** 0.5.4 (Two-Pass VAD Sub-Chunking + Speaker-ID Sensitivity + iPadOS Split Layout)  
 **Platforms:** iOS, iPadOS, macOS, tvOS, visionOS  
 **Core Philosophy:** Offline-first after model setup, privacy-first, chat-first UX
 
@@ -47,6 +47,8 @@
   - Bundled VAD model in app resources (offline-first), with network/cache fallback
   - Bundled speaker model in app resources (offline-first), with network/cache fallback
   - Chunk merge + persistence + reactive chat updates
+- **Two-pass VAD sub-chunking:** after each chunk is cut, a dedicated second Silero VAD instance re-runs on the chunk's raw samples at 32 ms hops, finds breath-pause boundaries (silence ≥ 0.3s, prob < 0.30), and splits into sub-chunks (min 0.8s each). Each sub-chunk becomes its own chat bubble. Runs concurrently with speaker identification.
+- **Speaker-ID sensitivity improvements:** tuned cosine thresholds (main 0.65, loose 0.52, new-candidate 0.58, immediate 0.40), adaptive probe window, turn-taking detection, 80ms interrupt timeout, fixed sample-rate mismatch, eliminated 1.6s blind window, weighted EMA embedding accumulation.
 - **Current transcription mode:**
   - Message transcription runs automatically in a serial queue (one-by-one) as chunks are produced.
 
@@ -69,7 +71,8 @@ Documents/
 
 ## 3. UI/UX Strategy: Chat-First 💬
 
-- **iOS/iPadOS shell:** custom swipeable drawer sidebar (`Layca Chat`, `Settings`, `Recent Chats`) with fixed top actions (`Search`, `New Chat`) and a chat-header sidebar toggle button.
+- **iOS shell:** custom swipeable drawer sidebar (`Layca Chat`, `Settings`, `Recent Chats`) with fixed top actions (`Search`, `New Chat`) and a chat-header sidebar toggle button.
+- **iPadOS shell:** `NavigationSplitView` split layout on `.regular` horizontal size class; falls back to drawer on compact.
 - **visionOS/tvOS shell:** `TabView` with `Layca Chat`, `Library`, `Settings`, plus a dedicated `New Chat` action tab.
 - **iOS-family visual style:** plain `systemBackground` chat/settings canvas + native material cards; iOS/iPadOS sidebar uses a dark workspace surface with material controls.
 - **macOS shell:** native `NavigationSplitView` workspace with sidebar sections (`Layca Chat`, `Settings`) and a `Recent Chats` list.
@@ -101,11 +104,11 @@ Documents/
 1. **Track 1: Input + Waveform**
    - Capture stream, emit waveform ticks (~0.05s).
    - Keep session master audio file (`session_full.m4a`).
-2. **Track 2: VAD slicer**
-   - Detect speech/silence, cut message chunk after sustained silence.
-   - Current defaults: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
-   - Speaker-aware boundary cut runs near real-time during active speech.
-   - Boundary uses `1.0s` backtrack from detected speaker switch point, with a stability guard (needs enough speech context before split).
+2. **Track 2: VAD slicer — two passes**
+   - **Pass 1 (live, coarse):** detect speech/silence, cut chunk after sustained silence.
+   - Defaults: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `12s`.
+   - Speaker-aware boundary cut runs near real-time during active speech (1.0s backtrack + stability guard).
+   - **Pass 2 (per-chunk, fine):** after each chunk is cut, re-run Silero VAD (`intraChunkVAD`) on the chunk's raw samples at 32ms hops to find breath-pause sub-boundaries (silence ≥ 0.3s, prob < 0.30). Split into sub-chunks (min 0.8s). Each sub-chunk becomes its own transcript event.
 3. **Track 3: Speaker branch**
    - CoreML speaker embedding extraction + cosine matching / new speaker assignment.
    - Fallback branch uses amplitude + zero-crossing-rate + RMS signature matching.
@@ -249,6 +252,8 @@ Documents/
 - Add explicit playback/transcription progress state per tapped bubble.
 - Add VAD confidence/debug telemetry for tuning thresholds in production.
 - Add playback UX polish (selected-row highlight / progress / interruption policy).
+- Add configurable VAD/speaker sensitivity tuning in Settings.
+- SwiftData migration (blocked on `TranscriptRow.avatarPalette: [Color]` — SwiftUI.Color not Codable).
 
 ---
 

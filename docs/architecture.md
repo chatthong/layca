@@ -25,9 +25,10 @@
    - Prompt uses strict verbatim instructions (`Never translate`, `Never summarize`, `Never rewrite`).
 4. Live pipeline runs concurrent tracks:
    - waveform/input stream
-   - CoreML Silero VAD chunk slicing
-   - CoreML speaker diarization branch
+   - CoreML Silero VAD chunk slicing (pass 1: live coarse detection)
+   - CoreML speaker diarization branch (tuned thresholds + turn-taking + adaptive probe)
    - merge branch
+5. After each chunk is cut, a second VAD pass (`intraChunkVAD`) finds breath-pause sub-boundaries concurrently with speaker identification; each sub-chunk becomes a separate transcript event (chat bubble).
 5. Transcript item is appended to store.
 6. Chat list updates reactively.
 7. Chunk duration deducts credit.
@@ -40,7 +41,8 @@
 - Pipeline internals are production-style backend services.
 - Audio capture uses real `AVAudioEngine`.
 - App shell is platform-aware:
-  - iOS/iPadOS uses a custom drawer sidebar (`iosDrawerLayout`) with global right-swipe open/left-swipe close and a chat-header sidebar toggle.
+  - iOS uses a custom drawer sidebar (`iosDrawerLayout`) with global right-swipe open/left-swipe close and a chat-header sidebar toggle.
+  - iPadOS (`.regular` horizontal size class) uses `NavigationSplitView` split layout (`ipadSplitLayout`).
   - iOS sidebar swipe-open is recognized from anywhere on the detail surface, including transcript bubble regions.
   - iOS/iPadOS sidebar contains fixed top actions (`Search`, `New Chat`), workspace rows (`Layca Chat`, `Settings`), and a scrollable `Recent Chats` list.
   - visionOS/tvOS currently use `TabView`/`TabSection` fallback with a `New Chat` action tab.
@@ -50,7 +52,13 @@
   - Selecting `Settings` presents one modal settings sheet with an internal multi-step navigation stack (no nested settings sheets).
   - macOS Chat detail toolbar uses inline title rename plus a trailing native control group (`Play` + `More`).
 - VAD uses native CoreML Silero (`silero-vad-unified-256ms-v6.0.0.mlmodelc`) with bundled offline model.
+  - **Two-pass sub-chunking:** a dedicated `intraChunkVAD` (second `SileroVADCoreMLService` instance) re-runs VAD at 32 ms hops on completed chunks, splits at breath-pause boundaries (silence ≥ 0.3s, prob < 0.30), minimum sub-chunk 0.8s; runs concurrently with `identifySpeaker` via `async let`.
 - Speaker branch uses native CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) with bundled offline model.
+  - Thresholds tuned Sprint 1–2: main `0.65`, loose `0.52`, new-candidate `0.58`, immediate `0.40`.
+  - Turn-taking detection at `0.45` after 500ms silence; adaptive probe window 0.8s for established speakers.
+  - `checkForInterrupt` with consecutive-window tracking and 80ms timeout guard.
+  - Sample-rate mismatch fixed: source `sampleRate` passed explicitly to interrupt inference.
+  - Eliminated 1.6s blind window at chunk start via `lastKnownSpeakerEmbedding` fallback.
 - Speaker fallback now uses a multi-feature signature (amplitude + zero-crossing-rate + RMS energy) with tunable threshold when CoreML speaker model is unavailable.
 - Runtime model asset sources are organized under `Models/RuntimeAssets/`.
 - Whisper transcription runs automatically through a serial queue (`whisper.cpp`) as chunks are produced.
@@ -82,6 +90,9 @@
 - On some iPhones, first CoreML encoder run may log ANE/CoreML plan-build warnings before succeeding.
 - If ggml GPU decode init fails, runtime falls back to CPU decode and logs reason.
 - Chunk slicing defaults keep silence boundaries (`silence cutoff 1.2s`, `minimum chunk 3.2s`, `max chunk 12s`) and add near-real-time speaker-change boundary cuts with `1.0s` backtrack plus stability guard.
+- Post-chunk two-pass VAD splits completed chunks into sub-chunks at breath-pause boundaries; each sub-chunk gets its own `TranscriptRow` and chat bubble.
+- Chat UI: consecutive same-speaker sub-chunk bubbles use "continuation" styling — 8pt color dot avatar, hidden speaker-name/timestamp header, 2pt top padding — to reduce visual noise while preserving speaker identity via color accent and VoiceOver labels.
+- `@Published var liveSpeakerID: String?` on `AppBackend` tracks the active speaker during recording; `RecordingSpectrumBubble` reflects the current speaker's color.
 - Chunk playback is gated off while recording to avoid audio-session conflicts.
 - `startNewChat()` is draft-reset behavior (does not create a persisted session until recording starts).
 - First recording from draft creates a new persisted session title (`chat N`).

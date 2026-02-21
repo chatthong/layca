@@ -14,20 +14,33 @@
 - Produce amplitude ticks for UI waveform bars.
 - Keep master session recording path alive.
 
-### Track 2: Slicer (VAD-like)
+### Track 2: Slicer (VAD — two passes)
 - Buffer frames while speech is active.
-- Primary detector: CoreML Silero VAD probability output.
-- Fallback detector: amplitude threshold when VAD is unavailable.
+- **Pass 1 (live, coarse):** CoreML Silero VAD probability output; fallback to amplitude threshold when VAD unavailable.
 - End chunk when silence reaches threshold (`1.2s` by default).
 - Message-chunk guardrails:
   - minimum chunk duration: `3.2s`
   - maximum chunk duration: `12s`
-  - near-real-time speaker-change boundary cut is also applied while speech is active
+  - near-real-time speaker-change boundary cut applied while speech is active
   - boundary cut uses `1.0s` backtrack from detected speaker-change point
-  - stability guard requires enough speech context before boundary split (prevents over-aggressive cuts that degrade speaker ID)
+  - stability guard requires enough speech context before boundary split
+- **Pass 2 (post-chunk, fine — two-pass VAD sub-chunking):** after each chunk is cut, a dedicated second `SileroVADCoreMLService` instance (`intraChunkVAD`) re-runs VAD on the chunk's raw samples at 32 ms hops.
+  - Finds silence regions where probability < `0.30` spanning ≥ `0.3s` (breath pause boundaries).
+  - Splits chunk at silence midpoints into sub-chunks; minimum sub-chunk size `0.8s`.
+  - Each sub-chunk becomes its own `PipelineTranscriptEvent` → its own chat bubble.
+  - `intraChunkVAD` LSTM state is reset before each pass; runs concurrently with speaker identification.
+  - Falls back to single full-chunk event if no valid split points found.
 
 ### Track 3: Dual AI Branch
 - Branch A: speaker embedding extraction from CoreML WeSpeaker (`wespeaker_v2.mlmodelc`) and cosine-similarity matching for session speaker labels.
+  - Cosine similarity thresholds (tuned Sprint 1–2): main `0.65`, loose `0.52`, new-candidate `0.58`, immediate-switch `0.40`.
+  - Minimum 2.5s segment guard before assigning new speaker.
+  - Adaptive probe window: `0.8s` for speakers seen ≥ 5 times (tighter for known voices).
+  - Turn-taking detection: lower threshold `0.45` applied when silence gap ≥ `500ms` precedes chunk.
+  - Weighted EMA for pending embedding accumulation.
+  - `checkForSpeakerInterrupt` receives correct source sample rate (fixed Sprint 1 sample-rate mismatch bug).
+  - Eliminated 1.6s blind window at chunk start via `lastKnownSpeakerEmbedding` fallback.
+  - 80ms `withTaskGroup` timeout on interrupt inference to keep pipeline responsive.
 - Branch B: deferred transcription marker (placeholder text persisted per message until queue worker transcribes it).
 - Speaker branch fallback: amplitude + zero-crossing-rate + RMS signature matching when speaker CoreML model is unavailable.
 
@@ -92,6 +105,11 @@
 - Manual `Transcribe Again` remains blocked during active recording and shows `Stop recording before running Transcribe Again.`.
 - If offsets are missing or invalid, bubble remains non-playable.
 
+## Real-Time Speaker Feed
+- `@Published var liveSpeakerID: String?` on `AppBackend` tracks the speaker active during the current chunk.
+- `PipelineEvent.liveSpeaker(String?)` emitted by `applyTrailingSpeakerObservation` and `resetActiveChunkSpeakerTracking`.
+- `RecordingSpectrumBubble` and the live segment area reflect the current speaker's avatar color in real time.
+
 ## Current vs Planned
-- **Current:** real `AVAudioEngine` input + native CoreML Silero VAD + native CoreML speaker diarization + reactive message pipeline + message playback + automatic queued Whisper transcription with auto language detection, no translation, and quality guardrails.
-- **Planned:** add per-bubble processing/progress state and retry controls for debug workflows.
+- **Current:** real `AVAudioEngine` input + native CoreML Silero VAD (two-pass: live coarse + per-chunk fine sub-chunking) + native CoreML speaker diarization (tuned thresholds, turn-taking, adaptive probe) + reactive message pipeline + message playback + automatic queued Whisper transcription with auto language detection, no translation, and quality guardrails.
+- **Planned:** add per-bubble processing/progress state and retry controls for debug workflows; add configurable VAD/speaker sensitivity tuning in settings.

@@ -266,6 +266,48 @@
   - `Models/Domain/TranscriptRow.swift`
 - Moved runtime model assets to `Models/RuntimeAssets/`.
 
+### Sprint 1–3: Speaker-ID Sensitivity + Real-Time Detection
+- `App/AppBackend.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`, `Features/Chat/ChatTabView.swift`, `Views/Components/RecordingSpectrumBubble.swift`
+- **Bug fixes:**
+  - B1: Fixed sample-rate mismatch in `checkForSpeakerInterrupt` (was defaulting to 16kHz; now passes `frame.sampleRate` from AVAudioEngine, typically 44.1kHz).
+  - B2: Eliminated 1.6s blind window at chunk start using `lastKnownSpeakerEmbedding` fallback when `activeChunkSpeakerID` is nil.
+  - B3: Weighted EMA accumulation for pending embeddings.
+- **Threshold tuning:**
+  - Main similarity: `0.72` → `0.65`
+  - Loose similarity: `0.60` → `0.52`
+  - New-candidate threshold: `0.55` → `0.58`
+  - Immediate-switch threshold: `0.40` (new — bypasses 2-chunk gate for high-confidence speaker change)
+  - Minimum segment guard before new speaker assignment: `2.5s`
+- **Accuracy features:**
+  - T2: Bypass 2-chunk confirmation gate when cosine similarity < `0.40` (immediate switch).
+  - T3: Adaptive probe window — shrinks to `0.8s` for speakers observed ≥ 5 times.
+  - F1: Turn-taking detection — lowers speaker-match threshold to `0.45` after ≥ `500ms` silence.
+  - M3: 80ms `withTaskGroup` timeout on `checkForSpeakerInterrupt` to prevent pipeline back-pressure.
+- **Real-time speaker feed:**
+  - F2: `PipelineEvent.liveSpeaker(String?)` + `@Published var liveSpeakerID` on `AppBackend`.
+  - F3: `RecordingSpectrumBubble` renders in the current speaker's avatar color.
+  - F4: `speakerID` added to `transcriptUpdateSignature` to trigger reliable bubble redraws on speaker change.
+- **Chat UI:**
+  - UI1: Spring bubble insertion animation (`.asymmetric` transition, `spring(response:0.38, dampingFraction:0.82)`).
+  - UI2: Auto-scroll enabled when first live segment appears during recording.
+  - UI3: 3pt speaker-color left border `Capsule` accent on every transcript bubble.
+  - UI4: Speaker-change separator pill (hairline + color dot + speaker name label) between different-speaker turns.
+
+### Sprint 4: Two-Pass VAD Sub-Chunking + iPadOS Split Layout
+- `App/AppBackend.swift`, `Libraries/SileroVADCoreMLService.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`, `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`
+- **Two-pass VAD sub-chunking:**
+  - `intraChunkVAD`: dedicated second `SileroVADCoreMLService` instance, never used for live streaming.
+  - `splitIntoSubChunksByVAD(samples:sampleRate:)`: re-runs VAD on completed chunks at 32ms hops; finds silence regions ≥ 0.3s (probability < 0.30); splits at silence midpoints; rejects splits that leave any sub-chunk < 0.8s; falls back to single full-range if no valid splits.
+  - `processChunk` now runs `identifySpeaker` and `splitIntoSubChunksByVAD` concurrently (`async let`), then emits one `PipelineTranscriptEvent` per sub-chunk with proportionally scaled timestamps.
+  - `SileroVADCoreMLService.reset()` called before each sub-chunking pass to clear LSTM state.
+  - Result: breath-pause boundaries become chat bubble separators, producing natural conversational pacing.
+- **Continuation bubble UI:**
+  - Consecutive same-speaker sub-chunk bubbles styled as "continuation": 8pt color dot replaces full 34pt avatar, speaker name/timestamp header hidden, 2pt top gap (vs 13pt default).
+  - VoiceOver announces "Continued: [speaker]" on hidden-header bubbles.
+  - Left-border color accent and spring animations preserved.
+- **iPadOS split layout:** `ContentView` detects `.regular` horizontal size class and renders `NavigationSplitView` (`ipadSplitLayout`) instead of the drawer overlay.
+- **`SpeakerDiarizationCoreMLService`:** `checkForInterrupt` with consecutive-window tracking and configurable immediate-interrupt threshold.
+
 ## Next Priority
 1. Add playback/transcription UX polish (playing-state indicator, active-bubble highlight, transcription-progress state).
 2. Improve recording-time `Transcribe Again` behavior so queued manual retries do not wait for stop.
