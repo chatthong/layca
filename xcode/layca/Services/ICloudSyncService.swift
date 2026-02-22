@@ -45,4 +45,65 @@ actor ICloudSyncService {
         fileManager.ubiquityIdentityToken != nil &&
         fileManager.url(forUbiquityContainerIdentifier: Self.containerID) != nil
     }
+
+    // MARK: - Push
+
+    /// Copies local session files to the iCloud container.
+    func push(sessionID: UUID, localDirectory: URL, includeAudio: Bool) async {
+        guard let iCloudSessions = containerSessionsURL else {
+            setStatus(.unavailable)
+            return
+        }
+
+        setStatus(.syncing)
+        let iCloudDir = iCloudSessions.appendingPathComponent(sessionID.uuidString, isDirectory: true)
+
+        do {
+            try fileManager.createDirectory(at: iCloudDir, withIntermediateDirectories: true)
+
+            let filesToCopy = ["session.json", "segments.json"]
+                + (includeAudio ? ["session_full.m4a"] : [])
+
+            let coordinator = NSFileCoordinator()
+            var coordinatorError: NSError?
+
+            for fileName in filesToCopy {
+                let source = localDirectory.appendingPathComponent(fileName)
+                let destination = iCloudDir.appendingPathComponent(fileName)
+                guard fileManager.fileExists(atPath: source.path) else { continue }
+
+                coordinator.coordinate(
+                    writingItemAt: destination,
+                    options: .forReplacing,
+                    error: &coordinatorError
+                ) { dest in
+                    try? fileManager.removeItem(at: dest)
+                    try? fileManager.copyItem(at: source, to: dest)
+                }
+
+                if let err = coordinatorError { throw err }
+            }
+
+            setStatus(.idle(lastSynced: Date()))
+        } catch {
+            setStatus(.error(error.localizedDescription))
+        }
+    }
+
+    /// Call after any session mutation. Waits 3s then pushes.
+    func schedulePush(sessionID: UUID, localDirectory: URL, includeAudio: Bool) {
+        debounceTask?.cancel()
+        debounceTask = Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            await push(sessionID: sessionID, localDirectory: localDirectory, includeAudio: includeAudio)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func setStatus(_ newStatus: ICloudSyncStatus) {
+        status = newStatus
+        onStatusChange?(newStatus)
+    }
 }
