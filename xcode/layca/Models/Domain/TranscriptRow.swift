@@ -4,13 +4,14 @@ struct TranscriptRow: Identifiable {
     let id: UUID
     let speakerID: String
     let speaker: String
-    let text: String
+    var text: String
     let time: String
     let language: String
     let avatarSymbol: String
     let avatarPaletteIndex: Int
     let startOffset: Double?
     let endOffset: Double?
+    var updatedAt: Date
 
     var avatarColor: Color {
         Self.palettes[avatarPaletteIndex % Self.palettes.count].first ?? .accentColor
@@ -36,7 +37,8 @@ struct TranscriptRow: Identifiable {
         avatarSymbol: String,
         avatarPaletteIndex: Int,
         startOffset: Double?,
-        endOffset: Double?
+        endOffset: Double?,
+        updatedAt: Date = Date()
     ) {
         self.id = id
         self.speakerID = speakerID
@@ -48,6 +50,7 @@ struct TranscriptRow: Identifiable {
         self.avatarPaletteIndex = avatarPaletteIndex
         self.startOffset = startOffset
         self.endOffset = endOffset
+        self.updatedAt = updatedAt
     }
 
     static func makeDemoRows(chatNumber: Int) -> [TranscriptRow] {

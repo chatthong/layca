@@ -1508,6 +1508,7 @@ actor SessionStore {
         let id: UUID
         var title: String
         let createdAt: Date
+        var updatedAt: Date
         var rows: [TranscriptRow]
         var speakers: [String: SpeakerProfile]
         var languageHints: [String]
@@ -1529,6 +1530,7 @@ actor SessionStore {
         let id: UUID
         let title: String
         let createdAt: Date
+        let updatedAt: Date?
         let languageHints: [String]
         let audioFileName: String
         let segmentsFileName: String
@@ -1548,6 +1550,7 @@ actor SessionStore {
         let avatarColorHex: String?
         let startOffset: Double?
         let endOffset: Double?
+        let updatedAt: Date?
     }
 
     private struct LegacySegmentSnapshot: Codable {
@@ -1607,6 +1610,7 @@ actor SessionStore {
             id: id,
             title: title,
             createdAt: Date(),
+            updatedAt: Date(),
             rows: [],
             speakers: [:],
             languageHints: languageHints,
@@ -1632,6 +1636,7 @@ actor SessionStore {
         }
 
         session.status = status
+        session.updatedAt = Date()
         sessions[sessionID] = session
         persistSessionMetadata(for: session)
     }
@@ -1643,6 +1648,7 @@ actor SessionStore {
         }
 
         session.languageHints = languageHints
+        session.updatedAt = Date()
         sessions[sessionID] = session
         persistSessionMetadata(for: session)
     }
@@ -1654,6 +1660,7 @@ actor SessionStore {
         }
 
         session.title = title
+        session.updatedAt = Date()
         sessions[sessionID] = session
         persistSessionMetadata(for: session)
     }
@@ -1768,6 +1775,7 @@ actor SessionStore {
 
         session.rows.append(row)
         session.durationSeconds = max(session.durationSeconds, event.endOffset)
+        session.updatedAt = Date()
         persistSegmentsSnapshot(for: session)
         persistSessionMetadata(for: session)
         sessions[sessionID] = session
@@ -1799,8 +1807,10 @@ actor SessionStore {
             avatarSymbol: existing.avatarSymbol,
             avatarPaletteIndex: existing.avatarPaletteIndex,
             startOffset: existing.startOffset,
-            endOffset: existing.endOffset
+            endOffset: existing.endOffset,
+            updatedAt: Date()
         )
+        session.updatedAt = Date()
 
         persistSegmentsSnapshot(for: session)
         sessions[sessionID] = session
@@ -1845,6 +1855,7 @@ actor SessionStore {
             avatarSymbol: profile.avatarSymbol
         )
 
+        let now = Date()
         for index in session.rows.indices where session.rows[index].speakerID == speakerID {
             let existing = session.rows[index]
             session.rows[index] = TranscriptRow(
@@ -1857,9 +1868,11 @@ actor SessionStore {
                 avatarSymbol: existing.avatarSymbol,
                 avatarPaletteIndex: existing.avatarPaletteIndex,
                 startOffset: existing.startOffset,
-                endOffset: existing.endOffset
+                endOffset: existing.endOffset,
+                updatedAt: now
             )
         }
+        session.updatedAt = now
 
         persistSegmentsSnapshot(for: session)
         persistSessionMetadata(for: session)
@@ -1898,7 +1911,8 @@ actor SessionStore {
             avatarSymbol: targetProfile.avatarSymbol,
             avatarPaletteIndex: targetPaletteIndex,
             startOffset: existing.startOffset,
-            endOffset: existing.endOffset
+            endOffset: existing.endOffset,
+            updatedAt: existing.updatedAt
         )
 
         persistSegmentsSnapshot(for: session)
@@ -2016,6 +2030,7 @@ actor SessionStore {
             id: sessionID,
             title: metadata?.title ?? "Chat",
             createdAt: metadata?.createdAt ?? fallbackCreatedAt,
+            updatedAt: metadata?.updatedAt ?? .distantPast,
             rows: rows,
             speakers: speakers,
             languageHints: metadata?.languageHints ?? [],
@@ -2036,6 +2051,7 @@ actor SessionStore {
     private func loadSessionMetadata(at url: URL) -> (
         title: String,
         createdAt: Date,
+        updatedAt: Date?,
         languageHints: [String],
         durationSeconds: Double,
         status: SessionStatus,
@@ -2054,6 +2070,7 @@ actor SessionStore {
         return (
             title: snapshot.title,
             createdAt: snapshot.createdAt,
+            updatedAt: snapshot.updatedAt,
             languageHints: snapshot.languageHints,
             durationSeconds: snapshot.durationSeconds,
             status: SessionStatus(rawValue: snapshot.status) ?? .ready,
@@ -2093,7 +2110,8 @@ actor SessionStore {
                     avatarSymbol: profile.avatarSymbol,
                     avatarPaletteIndex: Self.speakerColorPalette.firstIndex(of: profile.colorHex) ?? 0,
                     startOffset: snapshot.startOffset,
-                    endOffset: snapshot.endOffset
+                    endOffset: snapshot.endOffset,
+                    updatedAt: snapshot.updatedAt ?? .distantPast
                 )
             }
         }
@@ -2183,6 +2201,7 @@ actor SessionStore {
             id: session.id,
             title: session.title,
             createdAt: session.createdAt,
+            updatedAt: session.updatedAt,
             languageHints: session.languageHints,
             audioFileName: URL(fileURLWithPath: session.audioFilePath).lastPathComponent,
             segmentsFileName: URL(fileURLWithPath: session.segmentsFilePath).lastPathComponent,
@@ -2214,7 +2233,8 @@ actor SessionStore {
                 avatarSymbol: row.avatarSymbol,
                 avatarColorHex: session.speakers[row.speakerID]?.colorHex,
                 startOffset: row.startOffset,
-                endOffset: row.endOffset
+                endOffset: row.endOffset,
+                updatedAt: row.updatedAt
             )
         }
 
