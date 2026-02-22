@@ -255,11 +255,8 @@ Extract Color from TranscriptRow ✅ RESOLVED
 
 ## 🟡 Medium — Audio Pipeline Improvements (Queued)
 
-- [ ] **Auto-retranscribe from M4A on session end** · `App/AppBackend.swift`
-  - Root cause of "Transcribe Again gives better results": live path sends raw PCM (noisy) to Whisper; M4A path sends AAC-decoded audio (naturally noise-filtered by codec). Prompts and Whisper params are identical — purely audio quality difference
-  - Fix: after `masterRecorder.stop()` resolves and M4A is finalized, automatically queue all transcript rows via `queueAutomaticQualityRetranscription(rowID:sessionID:)` — reuses existing M4A path with no new infrastructure
-  - Skip if session has 0 rows; existing "Queued for Transcribe Again..." UI handles busy state
-  - Effort: S · Agent: `swift-engineer` · ⏳ Queued Sprint 7
+- [x] **Auto-retranscribe from M4A on session end** · `App/AppBackend.swift`
+  - ✅ Superseded by Sprint 8 (2026-02-23): per-row chunk-file architecture now writes/transcribes via AAC M4A chunk files directly (`row.chunkURL`), removing the need for a post-stop quality pass.
 
 ---
 

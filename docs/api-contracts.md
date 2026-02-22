@@ -81,7 +81,7 @@
 - Adds/removes language code used to build pre-flight prompt.
 
 ### `playTranscriptChunk(_ row: TranscriptRow) -> Void`
-- Plays one transcript row chunk from the active session audio file.
+- Plays one transcript row chunk from `row.chunkURL` when available (Sprint 8+), with legacy fallback to session audio + offsets.
 - Requires valid row offsets (`startOffset`, `endOffset`) and recording must be stopped.
 - When active, backend publishes playback countdown (`transcriptChunkPlaybackRemainingText`) and segment-range subtitle (`transcriptChunkPlaybackRangeText`, `mm:ss → mm:ss`) for recorder player mode.
 - If constraints are not met, call is a no-op.
@@ -142,7 +142,7 @@
 
 ### macOS
 - Recording permission is requested through `AVAudioApplication.requestRecordPermission`.
-- If denied, backend throws `MasterRecorderError.microphonePermissionDenied`.
+- If denied, backend surfaces `LiveAudioInputError.microphonePermissionDenied`.
 - UI is expected to offer a deep-link action to Privacy & Security > Microphone.
 
 ### iOS-family
@@ -192,24 +192,27 @@
 
 ### `transcribe(audioURL:startOffset:endOffset:preferredLanguageCode:initialPrompt:) async throws -> WhisperTranscriptionResult`
 - Loads chunk audio, resamples to 16kHz, and runs `whisper.cpp`.
+- Used as the legacy fallback path for pre-Sprint 8 sessions (`session_full.m4a` + offsets).
 - Runtime acceleration can be controlled by environment variables:
   - `LAYCA_ENABLE_WHISPER_COREML_ENCODER`
   - `LAYCA_ENABLE_WHISPER_GGML_GPU_DECODE`
 - App-managed runtime settings override env defaults in normal app flow.
 - Runtime logs resolved mode (`Model`, `CoreML`, `ggml GPU`) and falls back to CPU decode when ggml GPU decode init fails.
 
-### `transcribe(samples:sourceSampleRate:preferredLanguageCode:initialPrompt:) async throws -> WhisperTranscriptionResult`
-- Transcribes in-memory chunk PCM and resamples to 16kHz internally.
-- Used by backend automatic queue worker so chunk inference does not depend on reading from the active recording file.
+### `transcribe(chunkAudioURL:preferredLanguageCode:initialPrompt:) async throws -> WhisperTranscriptionResult`
+- Reads a per-row chunk file (`chunks/chunk-<rowID>.m4a`), resamples to 16kHz, and runs `whisper.cpp`.
+- Primary backend path for automatic queued transcription in Sprint 8+.
 
 ## SessionStore
 
 ### `createSession(title:languageHints:) throws -> UUID`
-- Creates session files (`session_full.m4a`, `segments.json`, `session.json`) and runtime row.
+- Creates session storage (`segments.json`, `session.json`, `chunks/`) and runtime row.
+- `session_full.m4a` is legacy-compatible and may be absent for Sprint 8+ sessions.
 
 ### `appendTranscript(sessionID:event:) -> Void`
 - Appends transcript row, updates duration, persists `segments.json` + `session.json` snapshots.
 - Persists `startOffset`/`endOffset` on each row for chunk playback.
+- Row `chunkURL` is persisted shortly after append once `ChunkAudioWriter` finishes writing the chunk file.
 - Stores deferred placeholder text until queued automatic transcription updates row text.
 
 ### `updateTranscriptRow(sessionID:rowID:text:language:) -> Void`

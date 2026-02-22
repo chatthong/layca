@@ -33,9 +33,9 @@
 5. Transcript item is appended to store.
 6. Chat list updates reactively.
 7. Chunk duration deducts credit.
-8. Transcript rows persist chunk `startOffset`/`endOffset`.
-9. `ICloudSyncService.schedulePush` is debounced 3s then copies `session.json` + `segments.json` (+ audio if enabled) to iCloud container via `NSFileCoordinator`. `NSMetadataQuery` fires on remote change → pull + per-row last-write-wins merge → write merged result to both local and iCloud.
-10. Backend queues chunk transcription automatically (one-by-one) and updates bubbles reactively.
+8. Transcript rows persist timeline `startOffset`/`endOffset`; Sprint 8+ also writes per-row chunk audio and persists `chunkURL`.
+9. `ICloudSyncService.schedulePush` is debounced 3s then copies `session.json` + `segments.json` (+ audio if enabled, including `chunks/*.m4a`) to iCloud container via `NSFileCoordinator`. `NSMetadataQuery` fires on remote change → pull + per-row last-write-wins merge → write merged result to both local and iCloud.
+10. Backend queues chunk transcription automatically (one-by-one) from chunk file URLs and updates bubbles reactively.
 11. User can tap a transcript bubble to play that chunk when recording is stopped.
 
 ## Current Implementation Note
@@ -64,6 +64,7 @@
 - Speaker fallback now uses a multi-feature signature (amplitude + zero-crossing-rate + RMS energy) with tunable threshold when CoreML speaker model is unavailable.
 - Runtime model asset sources are organized under `Models/RuntimeAssets/`.
 - Whisper transcription runs automatically through a serial queue (`whisper.cpp`) as chunks are produced.
+- Sprint 8+ writes each bubble to its own chunk file (`chunks/chunk-<rowID>.m4a`) and queues Whisper from `row.chunkURL` for parity with retranscribe quality.
 - Automatic transcription runs with Whisper auto language detection (`preferredLanguageCode = "auto"`) and `translate = false`.
 - Whisper prompt template is built from Language Focus + context keywords.
 - If output appears to echo the prompt text, the backend reruns inference without prompt.
@@ -97,6 +98,7 @@
 - Chat UI: consecutive same-speaker sub-chunk bubbles use "continuation" styling — 8pt color dot avatar, hidden speaker-name/timestamp header, 2pt top padding — to reduce visual noise while preserving speaker identity via color accent and VoiceOver labels.
 - `@Published var liveSpeakerID: String?` on `AppBackend` tracks the active speaker during recording; `RecordingSpectrumBubble` reflects the current speaker's color.
 - Chunk playback is gated off while recording to avoid audio-session conflicts.
+- Per-message playback prefers `row.chunkURL`; legacy sessions without chunk files fall back to `session_full.m4a` + offsets.
 - `startNewChat()` is draft-reset behavior (does not create a persisted session until recording starts).
 - First recording from draft creates a new persisted session title (`chat N`).
 - iOS chat header keeps sidebar toggle before chat title and uses a trailing native control group (`Play` + `More`).
@@ -120,7 +122,7 @@
 - Forced `TH` / `EN` manual retries validate script output; backend retries once without prompt on mismatch, then keeps existing text when mismatch persists.
 - Manual low-confidence retries keep existing text silently (no red warning banner).
 - `SessionStore` persists both `session.json` (session metadata) and `segments.json` (row snapshots) and reloads from disk at startup. Both files include `updatedAt: Date` timestamps for iCloud merge.
-- `ICloudSyncService` actor: mirrors sessions to `iCloud~com~cropbinary~layca/Documents/Sessions/{UUID}/`. Push is debounced 3s via `schedulePush`; pull uses per-row last-write-wins merge (higher `updatedAt` wins, remote-only rows appended). `NSMetadataQuery` watches ubiquitous Documents scope for remote changes. `syncAll` uploads all sessions on toggle-enable and app launch. Status exposed via `AppBackend.iCloudSyncStatus: ICloudSyncStatus`. Audio sync (`session_full.m4a`) is user-optional, default off.
+- `ICloudSyncService` actor: mirrors sessions to `iCloud~com~cropbinary~layca/Documents/Sessions/{UUID}/`. Push is debounced 3s via `schedulePush`; pull uses per-row last-write-wins merge (higher `updatedAt` wins, remote-only rows appended). `NSMetadataQuery` watches ubiquitous Documents scope for remote changes. `syncAll` uploads all sessions on toggle-enable and app launch. Status exposed via `AppBackend.iCloudSyncStatus: ICloudSyncStatus`. Audio sync is user-optional, default off, and includes legacy `session_full.m4a` plus Sprint 8 `chunks/*.m4a`.
 - `AppSettingsStore` persists user setting values (including `mainTimerDisplayStyleRawValue`) and compatibility metadata (`activeSessionID`, `chatCounter`) through relaunch; startup still forces draft mode.
 - Session rows support `Rename`, `Share this chat`, `Delete` via context menu (Library where present, and macOS `Recent Chats` sidebar).
 - macOS sidebar `Recent Chats` rows support the same context menu action group.

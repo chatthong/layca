@@ -24,7 +24,7 @@
 - `title: String`
 - `createdAt: Date`
 - `languageHints: [String]`
-- `audioFilePath: String`
+- `audioFilePath: String` (legacy fallback path for pre-Sprint 8 `session_full.m4a`)
 - `segmentsFilePath: String`
 - `metadataFilePath: String`
 - `durationSeconds: Double`
@@ -38,9 +38,10 @@
 - `time: String` (`HH:mm:ss`)
 - `language: String` (e.g., `EN`, `TH`)
 - `avatarSymbol: String`
-- `avatarPalette: [Color]`
-- `startOffset: Double?` (seconds in `session_full.m4a`)
-- `endOffset: Double?` (seconds in `session_full.m4a`)
+- `avatarPaletteIndex: Int`
+- `startOffset: Double?` (seconds in session timeline)
+- `endOffset: Double?` (seconds in session timeline)
+- `chunkURL: URL?` (per-row audio file path; session-relative in JSON, resolved at runtime)
 - `text` initially stores deferred placeholder (`Message queued for automatic transcription...`) and is replaced by queued automatic Whisper result.
 - Placeholder rows are deleted when transcription is unusable/no-speech.
 
@@ -69,9 +70,12 @@
 Documents/
 └── Sessions/
     └── {UUID}/
-        ├── session_full.m4a
+        ├── chunks/
+        │   ├── chunk-{rowUUID}.m4a
+        │   └── ...
         ├── session.json
         └── segments.json
+        └── session_full.m4a   (legacy sessions and optional sync compatibility)
 ```
 
 ## Data Lifecycle
@@ -81,7 +85,8 @@ Documents/
 4. On each merged transcript event:
    - append row to session runtime store
    - refresh session duration
-   - keep row message offsets for playback
+   - keep row message offsets for ordering/timeline
+   - write chunk audio file and persist row `chunkURL`
    - rewrite `session.json` metadata snapshot
    - rewrite `segments.json` snapshot
 5. On each queued transcription update:
@@ -105,4 +110,5 @@ Documents/
 - Transcript updates are append-only during a running session.
 - UI consumes state reactively from backend-published session snapshots.
 - Transcript message playback is valid only for rows with non-nil offsets where `endOffset > startOffset`.
+- Sprint 8+ per-message playback prefers `row.chunkURL`; offsets remain required for timeline ordering and legacy fallback.
 - Session list, chat title, transcript rows, and speaker metadata are restored after app relaunch; active selection defaults to draft mode.

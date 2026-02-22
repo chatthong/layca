@@ -185,14 +185,27 @@ actor WhisperGGMLCoreMLService {
     }
 
     func transcribe(
-        samples: [Float],
-        sourceSampleRate: Double,
+        chunkAudioURL: URL,
         preferredLanguageCode: String,
         initialPrompt: String?,
         focusLanguageCodes: [String] = []
     ) async throws -> WhisperTranscriptionResult {
         let ctx = try await ensureContext()
-        let samples16k = Self.resampleTo16k(samples: samples, sourceSampleRate: sourceSampleRate)
+        let file = try AVAudioFile(
+            forReading: chunkAudioURL,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        guard file.length > 0 else {
+            throw WhisperGGMLCoreMLError.noAudioSamples
+        }
+
+        let endOffset = Double(file.length) / file.processingFormat.sampleRate
+        let samples16k = try Self.loadSamples(
+            from: chunkAudioURL,
+            startOffset: 0,
+            endOffset: endOffset
+        )
         guard !samples16k.isEmpty else {
             throw WhisperGGMLCoreMLError.noAudioSamples
         }

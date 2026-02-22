@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct TranscriptRow: Identifiable {
@@ -11,6 +12,8 @@ struct TranscriptRow: Identifiable {
     let avatarPaletteIndex: Int
     let startOffset: Double?
     let endOffset: Double?
+    /// Optional per-bubble audio file (Sprint 8+). Legacy sessions leave this nil.
+    var chunkURL: URL?
     var updatedAt: Date
 
     var avatarColor: Color {
@@ -38,6 +41,7 @@ struct TranscriptRow: Identifiable {
         avatarPaletteIndex: Int,
         startOffset: Double?,
         endOffset: Double?,
+        chunkURL: URL? = nil,
         updatedAt: Date = Date()
     ) {
         self.id = id
@@ -50,7 +54,60 @@ struct TranscriptRow: Identifiable {
         self.avatarPaletteIndex = avatarPaletteIndex
         self.startOffset = startOffset
         self.endOffset = endOffset
+        self.chunkURL = chunkURL
         self.updatedAt = updatedAt
+    }
+
+    /// Persists chunk audio as a session-relative URL (e.g. `chunks/chunk-<uuid>.m4a`) when possible.
+    /// Falls back to the original value to avoid data loss if the file is outside the session directory.
+    func persistedChunkURL(relativeTo sessionDirectory: URL) -> URL? {
+        Self.persistedChunkURL(chunkURL, relativeTo: sessionDirectory)
+    }
+
+    /// Resolves a stored relative chunk URL against `sessionDirectory` for runtime file access.
+    /// Absolute URLs pass through unchanged for backward/forward compatibility during migration.
+    func resolvedChunkURL(relativeTo sessionDirectory: URL) -> URL? {
+        Self.resolvedChunkURL(chunkURL, relativeTo: sessionDirectory)
+    }
+
+    static func persistedChunkURL(_ url: URL?, relativeTo sessionDirectory: URL) -> URL? {
+        guard let url else { return nil }
+
+        // Already relative/non-file URL; persist as-is (JSON will store the relative string).
+        guard url.isFileURL else { return url }
+
+        // Preserve relative file URLs or URLs that already carry a base relationship.
+        if url.baseURL != nil {
+            let relative = url.relativeString.trimmingCharacters(in: .whitespacesAndNewlines)
+            return relative.isEmpty ? nil : URL(string: relative)
+        }
+
+        let sessionPath = sessionDirectory.standardizedFileURL.path
+        let urlPath = url.standardizedFileURL.path
+        let sessionPrefix = sessionPath.hasSuffix("/") ? sessionPath : sessionPath + "/"
+
+        guard urlPath.hasPrefix(sessionPrefix) else {
+            return url
+        }
+
+        let relativePath = String(urlPath.dropFirst(sessionPrefix.count))
+        return relativePath.isEmpty ? nil : URL(string: relativePath)
+    }
+
+    static func resolvedChunkURL(_ storedURL: URL?, relativeTo sessionDirectory: URL) -> URL? {
+        guard let storedURL else { return nil }
+
+        if storedURL.isFileURL, storedURL.baseURL == nil {
+            return storedURL
+        }
+
+        if let scheme = storedURL.scheme, !scheme.isEmpty {
+            return storedURL
+        }
+
+        let relative = storedURL.relativeString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !relative.isEmpty else { return nil }
+        return sessionDirectory.appendingPathComponent(relative)
     }
 
     static func makeDemoRows(chatNumber: Int) -> [TranscriptRow] {

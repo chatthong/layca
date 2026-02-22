@@ -16,6 +16,7 @@ actor ICloudSyncService {
 
     // MARK: - State
     private var metadataQuery: NSMetadataQuery?
+    private var metadataQueryUpdateObserver: NSObjectProtocol?
     private var debounceTask: Task<Void, Never>?
     private(set) var status: ICloudSyncStatus = .idle(lastSynced: nil)
     var onStatusChange: ((ICloudSyncStatus) -> Void)?
@@ -89,6 +90,10 @@ actor ICloudSyncService {
                 if let err = coordinatorError { throw err }
             }
 
+            if includeAudio {
+                try pushChunkAudioFiles(localDirectory: localDirectory, iCloudDirectory: iCloudDir)
+            }
+
             setStatus(.idle(lastSynced: Date()))
         } catch {
             setStatus(.error(error.localizedDescription))
@@ -134,6 +139,7 @@ actor ICloudSyncService {
         var avatarColorHex: String?
         var startOffset: Double?
         var endOffset: Double?
+        var chunkURL: URL?
     }
 
     // MARK: - Merge Helpers
@@ -165,7 +171,7 @@ actor ICloudSyncService {
 
     // MARK: - Pull
 
-    func pull(sessionID: UUID, localDirectory: URL) async {
+    func pull(sessionID: UUID, localDirectory: URL, includeAudio: Bool) async {
         guard let iCloudSessions = containerSessionsURL else { return }
         let iCloudDir = iCloudSessions.appendingPathComponent(sessionID.uuidString, isDirectory: true)
         guard fileManager.fileExists(atPath: iCloudDir.path) else { return }
@@ -230,6 +236,10 @@ actor ICloudSyncService {
                 if let err = coordError { throw err }
             }
 
+            if includeAudio {
+                try pullAudioFiles(iCloudDirectory: iCloudDir, localDirectory: localDirectory)
+            }
+
             setStatus(.idle(lastSynced: Date()))
         } catch {
             setStatus(.error(error.localizedDescription))
@@ -241,10 +251,23 @@ actor ICloudSyncService {
     func startMonitoring(localSessionsDirectory: URL, includeAudio: Bool) {
         let query = NSMetadataQuery()
         query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
-        query.predicate = NSPredicate(format: "%K LIKE '*.json'", NSMetadataItemFSNameKey)
+        if includeAudio {
+            query.predicate = NSPredicate(
+                format: "%K LIKE '*.json' OR %K LIKE '*.m4a'",
+                NSMetadataItemFSNameKey,
+                NSMetadataItemFSNameKey
+            )
+        } else {
+            query.predicate = NSPredicate(format: "%K LIKE '*.json'", NSMetadataItemFSNameKey)
+        }
         self.metadataQuery = query
 
-        NotificationCenter.default.addObserver(
+        if let observer = metadataQueryUpdateObserver {
+            NotificationCenter.default.removeObserver(observer)
+            metadataQueryUpdateObserver = nil
+        }
+
+        metadataQueryUpdateObserver = NotificationCenter.default.addObserver(
             forName: .NSMetadataQueryDidUpdate,
             object: query,
             queue: .main
@@ -269,7 +292,10 @@ actor ICloudSyncService {
         Task { @MainActor in
             query.stop()
         }
-        NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidUpdate, object: query)
+        if let observer = metadataQueryUpdateObserver {
+            NotificationCenter.default.removeObserver(observer)
+            metadataQueryUpdateObserver = nil
+        }
         metadataQuery = nil
     }
 
@@ -278,19 +304,30 @@ actor ICloudSyncService {
         localSessionsDirectory: URL,
         includeAudio: Bool
     ) async {
-        guard let items = notification.userInfo?[NSMetadataQueryUpdateChangedItemsKey]
-                as? [NSMetadataItem] else { return }
+        let changedItems = notification.userInfo?[NSMetadataQueryUpdateChangedItemsKey]
+            as? [NSMetadataItem] ?? []
+        let addedItems = notification.userInfo?[NSMetadataQueryUpdateAddedItemsKey]
+            as? [NSMetadataItem] ?? []
+        let items = changedItems + addedItems
+        guard !items.isEmpty else { return }
+
+        var sessionIDsToPull = Set<UUID>()
 
         for item in items {
             guard let path = item.value(forAttribute: NSMetadataItemPathKey) as? String else { continue }
+            if !includeAudio && path.hasSuffix(".m4a") { continue }
             let url = URL(fileURLWithPath: path)
             let components = url.pathComponents
             guard let sessionsIdx = components.firstIndex(of: "Sessions"),
                   components.indices.contains(sessionsIdx + 1),
                   let sessionID = UUID(uuidString: components[sessionsIdx + 1]) else { continue }
 
+            sessionIDsToPull.insert(sessionID)
+        }
+
+        for sessionID in sessionIDsToPull {
             let localDir = localSessionsDirectory.appendingPathComponent(sessionID.uuidString, isDirectory: true)
-            await pull(sessionID: sessionID, localDirectory: localDir)
+            await pull(sessionID: sessionID, localDirectory: localDir, includeAudio: includeAudio)
         }
     }
 
@@ -316,5 +353,109 @@ actor ICloudSyncService {
     private func setStatus(_ newStatus: ICloudSyncStatus) {
         status = newStatus
         onStatusChange?(newStatus)
+    }
+
+    private func pushChunkAudioFiles(localDirectory: URL, iCloudDirectory: URL) throws {
+        let localChunksDir = localDirectory.appendingPathComponent("chunks", isDirectory: true)
+        guard fileManager.fileExists(atPath: localChunksDir.path) else { return }
+
+        let iCloudChunksDir = iCloudDirectory.appendingPathComponent("chunks", isDirectory: true)
+        try fileManager.createDirectory(at: iCloudChunksDir, withIntermediateDirectories: true)
+
+        let enumerator = fileManager.enumerator(
+            at: localChunksDir,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        let coordinator = NSFileCoordinator()
+        while let source = enumerator?.nextObject() as? URL {
+            let values = try source.resourceValues(forKeys: [.isRegularFileKey])
+            guard values.isRegularFile == true,
+                  source.pathExtension.lowercased() == "m4a" else { continue }
+
+            let relativePath = source.path.replacingOccurrences(of: localChunksDir.path + "/", with: "")
+            let destination = iCloudChunksDir.appendingPathComponent(relativePath)
+            try fileManager.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+
+            var coordinatorError: NSError?
+            var copyError: Error?
+            coordinator.coordinate(
+                writingItemAt: destination,
+                options: .forReplacing,
+                error: &coordinatorError
+            ) { dest in
+                do {
+                    try? fileManager.removeItem(at: dest)
+                    try fileManager.copyItem(at: source, to: dest)
+                } catch {
+                    copyError = error
+                }
+            }
+
+            if let err = coordinatorError { throw err }
+            if let err = copyError { throw err }
+        }
+    }
+
+    private func pullAudioFiles(iCloudDirectory: URL, localDirectory: URL) throws {
+        let legacyAudio = iCloudDirectory.appendingPathComponent("session_full.m4a")
+        if fileManager.fileExists(atPath: legacyAudio.path) {
+            let localLegacyAudio = localDirectory.appendingPathComponent("session_full.m4a")
+            try fileManager.createDirectory(at: localDirectory, withIntermediateDirectories: true)
+            try coordinateCopyFromICloud(source: legacyAudio, destination: localLegacyAudio)
+        }
+
+        let iCloudChunksDir = iCloudDirectory.appendingPathComponent("chunks", isDirectory: true)
+        guard fileManager.fileExists(atPath: iCloudChunksDir.path) else { return }
+
+        let localChunksDir = localDirectory.appendingPathComponent("chunks", isDirectory: true)
+        try fileManager.createDirectory(at: localChunksDir, withIntermediateDirectories: true)
+
+        let enumerator = fileManager.enumerator(
+            at: iCloudChunksDir,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        while let remoteFile = enumerator?.nextObject() as? URL {
+            let values = try remoteFile.resourceValues(forKeys: [.isRegularFileKey])
+            guard values.isRegularFile == true,
+                  remoteFile.pathExtension.lowercased() == "m4a" else { continue }
+
+            let relativePath = remoteFile.path.replacingOccurrences(of: iCloudChunksDir.path + "/", with: "")
+            let localFile = localChunksDir.appendingPathComponent(relativePath)
+            try fileManager.createDirectory(
+                at: localFile.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try coordinateCopyFromICloud(source: remoteFile, destination: localFile)
+        }
+    }
+
+    private func coordinateCopyFromICloud(source: URL, destination: URL) throws {
+        let coordinator = NSFileCoordinator()
+        var coordinatorError: NSError?
+        var copyError: Error?
+        coordinator.coordinate(
+            readingItemAt: source,
+            options: .withoutChanges,
+            writingItemAt: destination,
+            options: .forReplacing,
+            error: &coordinatorError
+        ) { remoteSrc, localDest in
+            do {
+                try? fileManager.removeItem(at: localDest)
+                try fileManager.copyItem(at: remoteSrc, to: localDest)
+            } catch {
+                copyError = error
+            }
+        }
+
+        if let err = coordinatorError { throw err }
+        if let err = copyError { throw err }
     }
 }

@@ -57,22 +57,26 @@
 
 - **Current runtime persistence:** actor-based `SessionStore` + filesystem snapshots (`session.json`, `segments.json`) with startup reload.
 - **Current settings persistence:** `UserDefaults`-backed app settings snapshot (language focus, credits, iCloud toggle, audio sync toggle, Whisper runtime profile/toggles, main-timer display style, active-session metadata compatibility, chat counter).
-- **iCloud sync:** `ICloudSyncService` actor mirrors local sessions to the iCloud ubiquitous container (`iCloud.com.cropbinary.layca`). Sync is metadata-only by default; audio (`session_full.m4a`) is optional via user toggle. Conflict resolution uses per-row last-write-wins via `updatedAt` timestamps on `TranscriptRow` and `StoredSession`. `NSMetadataQuery` watches for remote changes; `NSFileCoordinator` handles safe coordinated reads/writes.
+- **iCloud sync:** `ICloudSyncService` actor mirrors local sessions to the iCloud ubiquitous container (`iCloud.com.cropbinary.layca`). Sync is metadata-only by default; audio sync is optional via user toggle (legacy `session_full.m4a` plus Sprint 8 `chunks/*.m4a`). Conflict resolution uses per-row last-write-wins via `updatedAt` timestamps on `TranscriptRow` and `StoredSession`. `NSMetadataQuery` watches for remote changes; `NSFileCoordinator` handles safe coordinated reads/writes.
 - **Planned long-term persistence:** `SwiftData`.
 
 ```text
 Documents/
 └── Sessions/
     └── {UUID}/
-        ├── session_full.m4a
+        ├── chunks/
+        │   ├── chunk-{rowUUID}.m4a
+        │   └── ...
         ├── session.json       ← includes updatedAt for sync merge
         └── segments.json      ← each row includes updatedAt for sync merge
+        └── session_full.m4a   ← legacy compatibility (may be absent in Sprint 8+)
 
 iCloud container (iCloud.com.cropbinary.layca):
 └── Documents/Sessions/{UUID}/
         ├── session.json
         ├── segments.json
-        └── session_full.m4a   ← only when "Include audio" enabled
+        ├── chunks/chunk-{rowUUID}.m4a   ← Sprint 8+, when "Include audio" enabled
+        └── session_full.m4a             ← legacy sessions / compatibility
 ```
 
 ---
@@ -111,7 +115,7 @@ iCloud container (iCloud.com.cropbinary.layca):
 
 1. **Track 1: Input + Waveform**
    - Capture stream, emit waveform ticks (~0.05s).
-   - Keep session master audio file (`session_full.m4a`).
+   - Sprint 8+: write per-row chunk audio files (`chunks/chunk-<rowID>.m4a`) after transcript rows are appended.
 2. **Track 2: VAD slicer — two passes**
    - **Pass 1 (live, coarse):** detect speech/silence, cut chunk after sustained silence.
    - Defaults: silence cutoff `1.2s`, minimum chunk `3.2s`, max chunk `6s`.
@@ -167,7 +171,7 @@ iCloud container (iCloud.com.cropbinary.layca):
 
 #### Storage, Update, and Sync
 - `App/AppBackend.swift`, `Services/ICloudSyncService.swift`
-- `SessionStore` creates `session_full.m4a` + `segments.json` + `session.json`.
+- `SessionStore` creates `segments.json` + `session.json` + `chunks/` (legacy `session_full.m4a` remains compatible for older sessions).
 - Appends transcript rows, persists segment snapshots, and keeps stable speaker profile (color/avatar) per session.
 - Session metadata (title/status/language hints/duration/speakers) is persisted in `session.json` and reloaded on app launch.
 - `TranscriptRow` and `StoredSession` both carry `updatedAt: Date` for sync merge; old JSON files use `.distantPast` fallback (always lose merge safely).
@@ -187,7 +191,7 @@ iCloud container (iCloud.com.cropbinary.layca):
 - Draft idle state shows starter copy instead of timer (`Tap to start record` on iOS/iPadOS, `Click to start record` on macOS).
 - Saved chats show accumulated session duration while idle, and resumed recording continues from prior duration.
 - Language tag in bubble uses pipeline language code; speaker style is session-stable.
-- Chat bubble tap plays that message range from `session_full.m4a`.
+- Chat bubble tap plays that message from the row's chunk file (`row.chunkURL`) when available, with legacy `session_full.m4a` fallback for older sessions.
 - While transcript chunk playback is active (player mode), recorder controls switch to playback state on iOS/iPadOS and macOS:
   - action button changes to `Stop`
   - recorder tint changes to green (recording still uses red)

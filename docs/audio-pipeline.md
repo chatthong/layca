@@ -3,7 +3,8 @@
 ## Capture
 - Recorder is represented by a live stream track in backend.
 - Waveform values are emitted every ~`0.05s` for UI visualizer updates.
-- Session audio file path is reserved as `Documents/Sessions/{UUID}/session_full.m4a`.
+- Sprint 8+ writes finalized per-row chunk audio files to `Documents/Sessions/{UUID}/chunks/chunk-<rowID>.m4a`.
+- Legacy sessions may still contain `session_full.m4a`.
 - Recording start is gated by runtime microphone permission.
 - On macOS, app signing must include sandbox audio-input entitlement for TCC registration.
 - On macOS, toolbar styling/navigation (native SwiftUI toolbar composition) is UI-only and does not change capture/transcription behavior.
@@ -12,7 +13,7 @@
 
 ### Track 1: Input + Visualizer
 - Produce amplitude ticks for UI waveform bars.
-- Keep master session recording path alive.
+- Feed live PCM into the VAD/speaker pipeline (no separate master recorder).
 
 ### Track 2: Slicer (VAD — two passes)
 - Buffer frames while speech is active.
@@ -63,20 +64,22 @@
 
 ## Persistence + UI
 1. Append event to session store.
-2. Write `segments.json` snapshot.
-3. Keep message `startOffset`/`endOffset` for transcript-row playback.
-4. Deduct usage credit from message duration.
-5. Push reactive update to Chat bubble list.
+2. Write per-row chunk audio (`chunks/chunk-<rowID>.m4a`) and persist row `chunkURL`.
+3. Write `segments.json` snapshot.
+4. Keep message `startOffset`/`endOffset` for ordering/timeline/export.
+5. Deduct usage credit from message duration.
+6. Push reactive update to Chat bubble list.
 
 ## Message Playback Path
 - Chat bubble taps call backend message playback.
-- Playback seeks into `session_full.m4a` at row `startOffset`, then auto-stops at `endOffset`.
+- Sprint 8+ playback uses `row.chunkURL` directly (`AVAudioPlayer(contentsOf:)`) for per-message playback.
+- Legacy fallback still seeks into `session_full.m4a` using row offsets when `chunkURL == nil`.
 - Playback mode (when a chunk is playing) updates recorder UI on iOS/iPadOS and macOS:
   - action control changes from `Record` to `Stop`
   - recorder tint switches green (recording mode still uses red)
   - subtitle switches from session date to segment range (`mm:ss → mm:ss`)
 - Pressing the recorder action while playback is active stops playback (does not start recording).
-- Message transcription runs automatically from backend queue (`whisper.cpp`) and updates row text in storage/UI.
+- Message transcription runs automatically from backend queue (`whisper.cpp`) by reading each row's chunk file URL and updates row text in storage/UI.
 - Whisper decode is configured for original-language transcript output:
   - `preferredLanguageCode = "auto"` (language auto-detect)
   - `translate = false` (never translate)
@@ -113,5 +116,5 @@
 - `RecordingSpectrumBubble` and the live segment area reflect the current speaker's avatar color in real time.
 
 ## Current vs Planned
-- **Current:** real `AVAudioEngine` input (iOS: `preferredIOBufferDuration=0.02s` for tighter VAD alignment) + native CoreML Silero VAD (two-pass: live coarse + per-chunk fine sub-chunking; thresholds 0.20 prob / 0.15s pause / 0.5s min sub-chunk) + native CoreML speaker diarization (tuned thresholds, turn-taking, adaptive probe, proper `lastKnownSpeakerEmbedding` seeding) + reactive message pipeline + message playback + automatic queued Whisper transcription (adaptive single/multi-segment by chunk length) with auto language detection, no translation, and quality guardrails.
+- **Current:** real `AVAudioEngine` input (iOS: `preferredIOBufferDuration=0.02s` for tighter VAD alignment) + native CoreML Silero VAD (two-pass: live coarse + per-chunk fine sub-chunking; thresholds 0.20 prob / 0.15s pause / 0.5s min sub-chunk) + native CoreML speaker diarization (tuned thresholds, turn-taking, adaptive probe, proper `lastKnownSpeakerEmbedding` seeding) + reactive message pipeline + per-row chunk-file audio (`chunks/chunk-<rowID>.m4a`) + automatic queued Whisper transcription from chunk URLs (adaptive single/multi-segment by chunk length) with auto language detection, no translation, and quality guardrails.
 - **Planned:** add per-bubble processing/progress state and retry controls for debug workflows; add configurable VAD/speaker sensitivity tuning in settings.
