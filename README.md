@@ -3,7 +3,7 @@
 > **The Ultimate Offline Polyglot Meeting Secretary**
 
 **Project Codename:** `Layca-Core`  
-**Version:** 0.5.4 (Two-Pass VAD Sub-Chunking + Speaker-ID Sensitivity + iPadOS Split Layout)  
+**Version:** 0.5.5 (iCloud Drive Sync + Two-Pass VAD Sub-Chunking + Speaker-ID Sensitivity)  
 **Platforms:** iOS, iPadOS, macOS, tvOS, visionOS  
 **Core Philosophy:** Offline-first after model setup, privacy-first, chat-first UX
 
@@ -56,7 +56,8 @@
 ### C. Data Layer
 
 - **Current runtime persistence:** actor-based `SessionStore` + filesystem snapshots (`session.json`, `segments.json`) with startup reload.
-- **Current settings persistence:** `UserDefaults`-backed app settings snapshot (language focus, credits, iCloud toggle, Whisper runtime profile/toggles, main-timer display style, active-session metadata compatibility, chat counter).
+- **Current settings persistence:** `UserDefaults`-backed app settings snapshot (language focus, credits, iCloud toggle, audio sync toggle, Whisper runtime profile/toggles, main-timer display style, active-session metadata compatibility, chat counter).
+- **iCloud sync:** `ICloudSyncService` actor mirrors local sessions to the iCloud ubiquitous container (`iCloud.com.cropbinary.layca`). Sync is metadata-only by default; audio (`session_full.m4a`) is optional via user toggle. Conflict resolution uses per-row last-write-wins via `updatedAt` timestamps on `TranscriptRow` and `StoredSession`. `NSMetadataQuery` watches for remote changes; `NSFileCoordinator` handles safe coordinated reads/writes.
 - **Planned long-term persistence:** `SwiftData`.
 
 ```text
@@ -64,8 +65,14 @@ Documents/
 └── Sessions/
     └── {UUID}/
         ├── session_full.m4a
+        ├── session.json       ← includes updatedAt for sync merge
+        └── segments.json      ← each row includes updatedAt for sync merge
+
+iCloud container (iCloud.com.cropbinary.layca):
+└── Documents/Sessions/{UUID}/
         ├── session.json
-        └── segments.json
+        ├── segments.json
+        └── session_full.m4a   ← only when "Include audio" enabled
 ```
 
 ---
@@ -158,16 +165,16 @@ Documents/
 - Runtime prints one-line acceleration status:
   - `[Whisper] Model: Fast/Normal/Pro, CoreML encoder: ON/OFF, ggml GPU decode: ON/OFF`
 
-#### Storage, Update, and Sync Hooks
-- `App/AppBackend.swift`
+#### Storage, Update, and Sync
+- `App/AppBackend.swift`, `Services/ICloudSyncService.swift`
 - `SessionStore` creates `session_full.m4a` + `segments.json` + `session.json`.
 - Appends transcript rows, persists segment snapshots, and keeps stable speaker profile (color/avatar) per session.
 - Session metadata (title/status/language hints/duration/speakers) is persisted in `session.json` and reloaded on app launch.
-- User settings/state are persisted in `UserDefaults` and restored on app launch.
+- `TranscriptRow` and `StoredSession` both carry `updatedAt: Date` for sync merge; old JSON files use `.distantPast` fallback (always lose merge safely).
+- User settings/state are persisted in `UserDefaults` and restored on app launch (includes `isICloudSyncEnabled`, `isAudioSyncEnabled`).
 - Active session restore is intentionally overridden at startup so UI opens in draft mode.
-- Persisted settings include Whisper acceleration/model preferences (CoreML toggle, GPU toggle, model profile) plus main timer display style (`Friendly` / `Hybrid` / `Professional`).
 - Session deletion removes runtime state and filesystem assets (`Documents/Sessions/{UUID}`).
-- Credit deduction per message and iCloud-sync hook point are included.
+- **iCloud sync** (`ICloudSyncService` actor): debounced push (3s) after every session write; `NSMetadataQuery` watches remote changes and triggers pull+merge; `syncAll` uploads all sessions on toggle-enable and app launch. Sync status exposed as `@Published var iCloudSyncStatus: ICloudSyncStatus` on `AppBackend` (`.idle`, `.syncing`, `.error`, `.unavailable`). Settings UI shows audio toggle + live Sync Status section with "Sync Now" button.
 
 #### App Orchestration + UI Wiring
 - `App/AppBackend.swift`, `App/ContentView.swift`, `Features/Chat/ChatTabView.swift`, `Views/Mac/MacProWorkspaceView.swift`
@@ -250,11 +257,12 @@ Documents/
 
 ### Next
 
-- Add explicit playback/transcription progress state per tapped bubble.
-- Add VAD confidence/debug telemetry for tuning thresholds in production.
-- Add playback UX polish (selected-row highlight / progress / interruption policy).
-- Add configurable VAD/speaker sensitivity tuning in Settings.
-- SwiftData migration (blocked on `TranscriptRow.avatarPalette: [Color]` — SwiftUI.Color not Codable).
+- StoreKit 2 IAP (`com.layca.base` $14.99 + `com.layca.pro` $24.99 one-time).
+- On-device LLM summary (Qwen 2.5 7B/12B via MLX Swift) — Pro tier unlock.
+- Full-text search across sessions (in-memory index → SwiftData predicate queries).
+- Apple Shortcuts + Control Center widget (`AppIntent` conformance).
+- Speaker profile persistence across sessions (`profiles.json` + embedding match at session start).
+- SwiftData persistence layer (migration unblocked — `TranscriptRow.avatarPalette` already refactored).
 
 ---
 

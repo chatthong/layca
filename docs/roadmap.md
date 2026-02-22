@@ -293,6 +293,19 @@
   - UI3: 3pt speaker-color left border `Capsule` accent on every transcript bubble.
   - UI4: Speaker-change separator pill (hairline + color dot + speaker name label) between different-speaker turns.
 
+### Sprint 6: iCloud Drive Sync
+- `Services/ICloudSyncService.swift` (new), `App/AppBackend.swift`, `Models/Domain/TranscriptRow.swift`, `Features/Share/SettingsSheetFlowView.swift`, `xcode/layca/layca-macos.entitlements`
+- **Architecture:** `ICloudSyncService` actor owns all iCloud logic. Local `Documents/Sessions/` remains source of truth; iCloud container (`iCloud.com.cropbinary.layca`) is a sync mirror.
+- **Data model:** `TranscriptRow` gets `var updatedAt: Date` (and `var text` for in-place edits). `StoredSession` + `SessionMetadataSnapshot` + `SegmentSnapshot` all carry `updatedAt: Date?` (optional for backward compat; old JSON files decode to `.distantPast` and safely lose merge).
+- **Merge logic:** Per-row last-write-wins by `updatedAt`. `mergeSegments` unions rows by UUID — remote row wins on tie. `mergeMetadata` takes the session with the higher `updatedAt`. Remote-only rows are appended (new rows from other device). No tombstones (deleted rows reappear if present remotely — acceptable edge case post-launch).
+- **Push:** `push(sessionID:localDirectory:includeAudio:)` copies `session.json` + `segments.json` (+ `session_full.m4a` when audio sync enabled) via `NSFileCoordinator .forReplacing`. `schedulePush` debounces 3s.
+- **Pull:** `pull(sessionID:localDirectory:)` reads remote via `NSFileCoordinator readingItemAt:writingItemAt:`, decodes into lightweight `SyncSessionMeta` / `SyncSegment` mirrors, merges, writes back to both local and iCloud.
+- **Monitoring:** `NSMetadataQuery` (ubiquitous Documents scope) fires on remote change → `handleQueryUpdate` extracts session UUID from path → `pull`. `syncAll` iterates all local sessions and pushes on toggle-enable and app launch.
+- **AppBackend:** `@Published var iCloudSyncStatus: ICloudSyncStatus` (`.idle(lastSynced:)`, `.syncing`, `.error`, `.unavailable`). `@Published var isAudioSyncEnabled`. `scheduleSyncIfEnabled(sessionID:)` called after every session write. `isICloudSyncEnabled` didSet starts/stops monitoring + initial `syncAll`. `syncNow()` for manual trigger.
+- **Settings UI:** `SettingsCloudAndPurchasesStepView` — "Include audio files" toggle (shown only when sync on, with "50–150 MB" caption), Sync Status section (idle/syncing/error/unavailable states, "Sync Now" button).
+- **macOS entitlements:** `com.apple.developer.icloud-container-identifiers` + `com.apple.developer.ubiquity-container-identifiers` added (currently commented out pending Apple Developer enrollment).
+- **Note:** Requires Xcode manual step — add iCloud Documents capability + container `iCloud.com.cropbinary.layca` in Signing & Capabilities. Also add `Services/ICloudSyncService.swift` to Xcode target membership.
+
 ### Sprint 5: Multi-Speaker Chunk Transcription Bug Fix
 - `App/AppBackend.swift`, `Libraries/SpeakerDiarizationCoreMLService.swift`, `Libraries/WhisperGGMLCoreMLService.swift`
 - **Root cause:** 5 compounding bugs caused 9–12s multi-speaker chunks (3–4 speakers, dense turn-taking) to transcribe only the last utterance ~2–5% of the time. Investigated in parallel by ml-inference-lead, swift-engineer, and audio-processing-lead.
@@ -319,12 +332,13 @@
 - **`SpeakerDiarizationCoreMLService`:** `checkForInterrupt` with consecutive-window tracking and configurable immediate-interrupt threshold.
 
 ## Next Priority
-1. Add playback/transcription UX polish (playing-state indicator, active-bubble highlight, transcription-progress state).
-2. Improve recording-time `Transcribe Again` behavior so queued manual retries do not wait for stop.
-3. Add resilience/recovery for interrupted recording or processing.
-4. Add optional SwiftData mirror/index layer for long-term search/filter use cases.
-5. Add configurable VAD/speaker sensitivity tuning in settings.
-6. Validate multi-speaker chunk fix in production recordings (Thai group, conference calls) to confirm 2–5% tail-only rate drops to near zero.
+1. **StoreKit 2 IAP** — `com.layca.base` ($14.99) + `com.layca.pro` ($24.99) one-time. Monetization gate.
+2. **On-device LLM summary** — Qwen 2.5 7B/12B via MLX Swift. Pro tier unlock. User prompt field + format picker.
+3. **Apple Developer Program enrollment** — required to activate iCloud sync + App Store submission.
+4. **Full-text search** — in-memory index across all `TranscriptRow.text` values; UI in sidebar.
+5. **Speaker profile persistence** — `profiles.json` + embedding match at session start (unblocked).
+6. **SwiftData persistence layer** — migration now unblocked (`TranscriptRow` is Codable-ready).
+7. Validate multi-speaker chunk fix in production recordings (Thai group, conference calls).
 
 ## Quality Gates
 - Keep record disabled when credit pre-flight fails.

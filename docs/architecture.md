@@ -17,6 +17,7 @@
 6. Storage Layer (`SessionStore` + filesystem)
 7. Settings Persistence (`AppSettingsStore` + `UserDefaults`)
 8. Playback + Export layer (implemented/partial)
+9. iCloud Sync Layer (`Services/ICloudSyncService.swift`)
 
 ## Runtime Flow
 1. App boots, reloads persisted settings + session snapshots, and opens draft mode (`activeSessionID = nil`).
@@ -33,7 +34,7 @@
 6. Chat list updates reactively.
 7. Chunk duration deducts credit.
 8. Transcript rows persist chunk `startOffset`/`endOffset`.
-9. Optional sync hook runs.
+9. `ICloudSyncService.schedulePush` is debounced 3s then copies `session.json` + `segments.json` (+ audio if enabled) to iCloud container via `NSFileCoordinator`. `NSMetadataQuery` fires on remote change → pull + per-row last-write-wins merge → write merged result to both local and iCloud.
 10. Backend queues chunk transcription automatically (one-by-one) and updates bubbles reactively.
 11. User can tap a transcript bubble to play that chunk when recording is stopped.
 
@@ -118,7 +119,8 @@
 - Manual retranscribe execution is currently gated during active recording and runs after recording stops.
 - Forced `TH` / `EN` manual retries validate script output; backend retries once without prompt on mismatch, then keeps existing text when mismatch persists.
 - Manual low-confidence retries keep existing text silently (no red warning banner).
-- `SessionStore` persists both `session.json` (session metadata) and `segments.json` (row snapshots) and reloads from disk at startup.
+- `SessionStore` persists both `session.json` (session metadata) and `segments.json` (row snapshots) and reloads from disk at startup. Both files include `updatedAt: Date` timestamps for iCloud merge.
+- `ICloudSyncService` actor: mirrors sessions to `iCloud~com~cropbinary~layca/Documents/Sessions/{UUID}/`. Push is debounced 3s via `schedulePush`; pull uses per-row last-write-wins merge (higher `updatedAt` wins, remote-only rows appended). `NSMetadataQuery` watches ubiquitous Documents scope for remote changes. `syncAll` uploads all sessions on toggle-enable and app launch. Status exposed via `AppBackend.iCloudSyncStatus: ICloudSyncStatus`. Audio sync (`session_full.m4a`) is user-optional, default off.
 - `AppSettingsStore` persists user setting values (including `mainTimerDisplayStyleRawValue`) and compatibility metadata (`activeSessionID`, `chatCounter`) through relaunch; startup still forces draft mode.
 - Session rows support `Rename`, `Share this chat`, `Delete` via context menu (Library where present, and macOS `Recent Chats` sidebar).
 - macOS sidebar `Recent Chats` rows support the same context menu action group.
@@ -160,6 +162,8 @@ xcode/layca/
 │   └── Shared/
 │       ├── LiquidBackdrop.swift
 │       └── View+PlatformCompatibility.swift
+├── Services/
+│   └── ICloudSyncService.swift       ← iCloud sync actor (push/pull/merge/NSMetadataQuery)
 ├── Libraries/
 │   ├── SileroVADCoreMLService.swift
 │   ├── SpeakerDiarizationCoreMLService.swift
