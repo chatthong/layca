@@ -2247,6 +2247,17 @@ actor SessionStore {
         let url = URL(fileURLWithPath: session.segmentsFilePath)
         try? data.write(to: url, options: .atomic)
     }
+
+    // MARK: - iCloud sync helpers
+
+    func sessionsDirectoryURL() -> URL {
+        sessionsDirectory
+    }
+
+    func sessionDirectory(for sessionID: UUID) -> URL? {
+        guard sessions[sessionID] != nil else { return nil }
+        return sessionsDirectory.appendingPathComponent(sessionID.uuidString, isDirectory: true)
+    }
 }
 
 enum MainTimerDisplayStyle: String, CaseIterable, Codable, Sendable {
@@ -2285,6 +2296,7 @@ struct PersistedAppSettings: Codable, Equatable {
     var totalHours: Double
     var usedHours: Double
     var isICloudSyncEnabled: Bool
+    var isAudioSyncEnabled: Bool
     var whisperCoreMLEncoderEnabled: Bool
     var whisperGGMLGPUDecodeEnabled: Bool
     var whisperModelProfileRawValue: String
@@ -2300,6 +2312,7 @@ struct PersistedAppSettings: Codable, Equatable {
         case totalHours
         case usedHours
         case isICloudSyncEnabled
+        case isAudioSyncEnabled
         case whisperCoreMLEncoderEnabled
         case whisperGGMLGPUDecodeEnabled
         case whisperModelProfileRawValue
@@ -2316,6 +2329,7 @@ struct PersistedAppSettings: Codable, Equatable {
         totalHours: Double,
         usedHours: Double,
         isICloudSyncEnabled: Bool,
+        isAudioSyncEnabled: Bool = false,
         whisperCoreMLEncoderEnabled: Bool = AppBackend.defaultWhisperCoreMLEncoderEnabledForCurrentDevice(),
         whisperGGMLGPUDecodeEnabled: Bool = AppBackend.defaultWhisperGPUDecodeEnabledForCurrentDevice(),
         whisperModelProfileRawValue: String = AppBackend.defaultWhisperModelProfileForCurrentDevice().rawValue,
@@ -2330,6 +2344,7 @@ struct PersistedAppSettings: Codable, Equatable {
         self.totalHours = totalHours
         self.usedHours = usedHours
         self.isICloudSyncEnabled = isICloudSyncEnabled
+        self.isAudioSyncEnabled = isAudioSyncEnabled
         self.whisperCoreMLEncoderEnabled = whisperCoreMLEncoderEnabled
         self.whisperGGMLGPUDecodeEnabled = whisperGGMLGPUDecodeEnabled
         self.whisperModelProfileRawValue = whisperModelProfileRawValue
@@ -2347,6 +2362,7 @@ struct PersistedAppSettings: Codable, Equatable {
         totalHours = try container.decode(Double.self, forKey: .totalHours)
         usedHours = try container.decode(Double.self, forKey: .usedHours)
         isICloudSyncEnabled = try container.decode(Bool.self, forKey: .isICloudSyncEnabled)
+        isAudioSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .isAudioSyncEnabled) ?? false
         whisperCoreMLEncoderEnabled =
             try container.decodeIfPresent(Bool.self, forKey: .whisperCoreMLEncoderEnabled)
             ?? AppBackend.defaultWhisperCoreMLEncoderEnabledForCurrentDevice()
@@ -2372,6 +2388,7 @@ struct PersistedAppSettings: Codable, Equatable {
         try container.encode(totalHours, forKey: .totalHours)
         try container.encode(usedHours, forKey: .usedHours)
         try container.encode(isICloudSyncEnabled, forKey: .isICloudSyncEnabled)
+        try container.encode(isAudioSyncEnabled, forKey: .isAudioSyncEnabled)
         try container.encode(whisperCoreMLEncoderEnabled, forKey: .whisperCoreMLEncoderEnabled)
         try container.encode(whisperGGMLGPUDecodeEnabled, forKey: .whisperGGMLGPUDecodeEnabled)
         try container.encode(whisperModelProfileRawValue, forKey: .whisperModelProfileRawValue)
@@ -2465,8 +2482,23 @@ final class AppBackend: ObservableObject {
     }
 
     @Published var isICloudSyncEnabled = true {
+        didSet {
+            persistSettingsIfNeeded()
+            if isICloudSyncEnabled {
+                Task {
+                    let localDir = await sessionStore.sessionsDirectoryURL()
+                    await syncService.syncAll(localSessionsDirectory: localDir, includeAudio: isAudioSyncEnabled)
+                    await syncService.startMonitoring(localSessionsDirectory: localDir, includeAudio: isAudioSyncEnabled)
+                }
+            } else {
+                Task { await syncService.stopMonitoring() }
+            }
+        }
+    }
+    @Published var isAudioSyncEnabled = false {
         didSet { persistSettingsIfNeeded() }
     }
+    @Published var iCloudSyncStatus: ICloudSyncStatus = .idle(lastSynced: nil)
     @Published var whisperCoreMLEncoderEnabled = AppBackend.defaultWhisperCoreMLEncoderEnabledForCurrentDevice() {
         didSet {
             persistSettingsIfNeeded()
@@ -2505,6 +2537,13 @@ final class AppBackend: ObservableObject {
     private let preflightService = PreflightService()
     private let pipeline = LiveSessionPipeline()
     private let sessionStore = SessionStore()
+    private lazy var syncService: ICloudSyncService = {
+        ICloudSyncService(sessionStore: sessionStore) { [weak self] status in
+            Task { @MainActor [weak self] in
+                self?.iCloudSyncStatus = status
+            }
+        }
+    }()
     private let settingsStore: AppSettingsStore
     private let masterRecorder = MasterAudioRecorder()
     private let whisperTranscriber = WhisperGGMLCoreMLService()
@@ -2608,6 +2647,11 @@ final class AppBackend: ObservableObject {
         chatCounter = max(chatCounter, inferredCounter, sessions.count)
 
         persistSettingsIfNeeded()
+
+        if isICloudSyncEnabled {
+            let localDir = await sessionStore.sessionsDirectoryURL()
+            await syncService.startMonitoring(localSessionsDirectory: localDir, includeAudio: isAudioSyncEnabled)
+        }
     }
 
     func toggleLanguageFocus(_ code: String) {
@@ -2663,6 +2707,7 @@ final class AppBackend: ObservableObject {
         Task {
             await sessionStore.renameSession(sessionID: activeSessionID, title: trimmed)
             await refreshSessionsFromStore()
+            scheduleSyncIfEnabled(sessionID: activeSessionID)
         }
     }
 
@@ -2675,6 +2720,7 @@ final class AppBackend: ObservableObject {
         Task {
             await sessionStore.renameSession(sessionID: session.id, title: trimmed)
             await refreshSessionsFromStore()
+            scheduleSyncIfEnabled(sessionID: session.id)
         }
     }
 
@@ -2772,6 +2818,7 @@ final class AppBackend: ObservableObject {
             )
             await refreshSessionsFromStore()
             preflightStatusMessage = nil
+            scheduleSyncIfEnabled(sessionID: sessionID)
         }
     }
 
@@ -2789,6 +2836,7 @@ final class AppBackend: ObservableObject {
             )
             await refreshSessionsFromStore()
             preflightStatusMessage = nil
+            scheduleSyncIfEnabled(sessionID: sessionID)
         }
     }
 
@@ -2957,6 +3005,7 @@ final class AppBackend: ObservableObject {
                 languageHints: config.languageCodes
             )
             await sessionStore.setSessionStatus(.recording, for: sessionID)
+            scheduleSyncIfEnabled(sessionID: sessionID)
 
             let stream = await pipeline.start(
                 config: LivePipelineConfig(
@@ -3836,11 +3885,7 @@ final class AppBackend: ObservableObject {
                 return
             }
 
-            if isICloudSyncEnabled {
-                Task.detached {
-                    try? await Task.sleep(nanoseconds: 120_000_000)
-                }
-            }
+            scheduleSyncIfEnabled(sessionID: sessionID)
 
         case .liveSpeaker(let speakerID):
             liveSpeakerID = speakerID
@@ -3884,6 +3929,23 @@ final class AppBackend: ObservableObject {
         }
     }
 
+    // MARK: - iCloud Sync
+
+    private func scheduleSyncIfEnabled(sessionID: UUID) {
+        guard isICloudSyncEnabled else { return }
+        let includeAudio = isAudioSyncEnabled
+        Task {
+            guard let localDir = await sessionStore.sessionDirectory(for: sessionID) else { return }
+            await syncService.schedulePush(sessionID: sessionID, localDirectory: localDir, includeAudio: includeAudio)
+        }
+    }
+
+    func syncNow() async {
+        guard isICloudSyncEnabled else { return }
+        let localDir = await sessionStore.sessionsDirectoryURL()
+        await syncService.syncAll(localSessionsDirectory: localDir, includeAudio: isAudioSyncEnabled)
+    }
+
     private func transcriptWithRecordingOffsetApplied(_ transcript: PipelineTranscriptEvent) -> PipelineTranscriptEvent {
         guard currentRecordingBaseOffset > 0 else {
             return transcript
@@ -3917,6 +3979,7 @@ final class AppBackend: ObservableObject {
         }
         usedHours = min(max(persisted.usedHours, 0), totalHours)
         isICloudSyncEnabled = persisted.isICloudSyncEnabled
+        isAudioSyncEnabled = persisted.isAudioSyncEnabled
         whisperCoreMLEncoderEnabled = persisted.whisperCoreMLEncoderEnabled
         whisperGGMLGPUDecodeEnabled = persisted.whisperGGMLGPUDecodeEnabled
         whisperModelProfile = WhisperModelProfile(rawValue: persisted.whisperModelProfileRawValue)
@@ -3941,6 +4004,7 @@ final class AppBackend: ObservableObject {
             totalHours: totalHours,
             usedHours: usedHours,
             isICloudSyncEnabled: isICloudSyncEnabled,
+            isAudioSyncEnabled: isAudioSyncEnabled,
             whisperCoreMLEncoderEnabled: whisperCoreMLEncoderEnabled,
             whisperGGMLGPUDecodeEnabled: whisperGGMLGPUDecodeEnabled,
             whisperModelProfileRawValue: whisperModelProfile.rawValue,

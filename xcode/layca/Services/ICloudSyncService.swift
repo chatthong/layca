@@ -20,9 +20,14 @@ actor ICloudSyncService {
     private(set) var status: ICloudSyncStatus = .idle(lastSynced: nil)
     var onStatusChange: ((ICloudSyncStatus) -> Void)?
 
-    init(fileManager: FileManager = .default, sessionStore: SessionStore) {
+    init(
+        fileManager: FileManager = .default,
+        sessionStore: SessionStore,
+        onStatusChange: ((ICloudSyncStatus) -> Void)? = nil
+    ) {
         self.fileManager = fileManager
         self.sessionStore = sessionStore
+        self.onStatusChange = onStatusChange
     }
 
     // MARK: - Container URL
