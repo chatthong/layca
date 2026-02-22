@@ -231,6 +231,81 @@ actor ICloudSyncService {
         }
     }
 
+    // MARK: - Monitoring
+
+    func startMonitoring(localSessionsDirectory: URL, includeAudio: Bool) {
+        let query = NSMetadataQuery()
+        query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
+        query.predicate = NSPredicate(format: "%K LIKE '*.json'", NSMetadataItemFSNameKey)
+        self.metadataQuery = query
+
+        NotificationCenter.default.addObserver(
+            forName: .NSMetadataQueryDidUpdate,
+            object: query,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            Task {
+                await self.handleQueryUpdate(
+                    notification: notification,
+                    localSessionsDirectory: localSessionsDirectory,
+                    includeAudio: includeAudio
+                )
+            }
+        }
+
+        Task { @MainActor in
+            query.start()
+        }
+    }
+
+    func stopMonitoring() {
+        guard let query = metadataQuery else { return }
+        Task { @MainActor in
+            query.stop()
+        }
+        NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidUpdate, object: query)
+        metadataQuery = nil
+    }
+
+    private func handleQueryUpdate(
+        notification: Notification,
+        localSessionsDirectory: URL,
+        includeAudio: Bool
+    ) async {
+        guard let items = notification.userInfo?[NSMetadataQueryUpdateChangedItemsKey]
+                as? [NSMetadataItem] else { return }
+
+        for item in items {
+            guard let path = item.value(forAttribute: NSMetadataItemPathKey) as? String else { continue }
+            let url = URL(fileURLWithPath: path)
+            let components = url.pathComponents
+            guard let sessionsIdx = components.firstIndex(of: "Sessions"),
+                  components.indices.contains(sessionsIdx + 1),
+                  let sessionID = UUID(uuidString: components[sessionsIdx + 1]) else { continue }
+
+            let localDir = localSessionsDirectory.appendingPathComponent(sessionID.uuidString, isDirectory: true)
+            await pull(sessionID: sessionID, localDirectory: localDir)
+        }
+    }
+
+    func syncAll(localSessionsDirectory: URL, includeAudio: Bool) async {
+        guard isAvailable else {
+            setStatus(.unavailable)
+            return
+        }
+        setStatus(.syncing)
+        let contents = (try? fileManager.contentsOfDirectory(
+            at: localSessionsDirectory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        for url in contents {
+            guard let sessionID = UUID(uuidString: url.lastPathComponent) else { continue }
+            await push(sessionID: sessionID, localDirectory: url, includeAudio: includeAudio)
+        }
+        setStatus(.idle(lastSynced: Date()))
+    }
+
     // MARK: - Helpers
 
     private func setStatus(_ newStatus: ICloudSyncStatus) {
