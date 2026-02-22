@@ -100,6 +100,137 @@ actor ICloudSyncService {
         }
     }
 
+    // MARK: - Merge Types (lightweight Codable mirrors)
+
+    private struct SyncSessionMeta: Codable {
+        let id: UUID
+        var title: String
+        var updatedAt: Date?
+        var speakers: [String: SyncSpeakerProfile]?
+        var durationSeconds: Double?
+        var status: String?
+    }
+
+    private struct SyncSpeakerProfile: Codable {
+        let label: String
+        let colorHex: String
+        let avatarSymbol: String
+    }
+
+    private struct SyncSegment: Codable {
+        let id: UUID?
+        var text: String
+        var speaker: String
+        var speakerID: String
+        var updatedAt: Date?
+        var time: String?
+        var language: String
+        var avatarSymbol: String?
+        var avatarColorHex: String?
+        var startOffset: Double?
+        var endOffset: Double?
+    }
+
+    // MARK: - Merge Helpers
+
+    private func mergeSegments(local: [SyncSegment], remote: [SyncSegment]) -> [SyncSegment] {
+        var merged: [UUID: SyncSegment] = [:]
+        for seg in local  { if let id = seg.id { merged[id] = seg } }
+        for seg in remote {
+            guard let id = seg.id else { continue }
+            if let existing = merged[id] {
+                let localDate = existing.updatedAt ?? .distantPast
+                let remoteDate = seg.updatedAt ?? .distantPast
+                if remoteDate >= localDate { merged[id] = seg }
+            } else {
+                merged[id] = seg
+            }
+        }
+        let localIDs = local.compactMap(\.id)
+        let remoteOnlyIDs = remote.compactMap(\.id).filter { !localIDs.contains($0) }
+        let orderedIDs = localIDs + remoteOnlyIDs
+        return orderedIDs.compactMap { merged[$0] }
+    }
+
+    private func mergeMetadata(local: SyncSessionMeta, remote: SyncSessionMeta) -> SyncSessionMeta {
+        let localDate = local.updatedAt ?? .distantPast
+        let remoteDate = remote.updatedAt ?? .distantPast
+        return remoteDate > localDate ? remote : local
+    }
+
+    // MARK: - Pull
+
+    func pull(sessionID: UUID, localDirectory: URL) async {
+        guard let iCloudSessions = containerSessionsURL else { return }
+        let iCloudDir = iCloudSessions.appendingPathComponent(sessionID.uuidString, isDirectory: true)
+        guard fileManager.fileExists(atPath: iCloudDir.path) else { return }
+
+        setStatus(.syncing)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+
+        do {
+            let localMetaURL  = localDirectory.appendingPathComponent("session.json")
+            let remoteMetaURL = iCloudDir.appendingPathComponent("session.json")
+
+            if fileManager.fileExists(atPath: localMetaURL.path),
+               fileManager.fileExists(atPath: remoteMetaURL.path) {
+                let coordinator = NSFileCoordinator()
+                var coordError: NSError?
+                coordinator.coordinate(
+                    readingItemAt: remoteMetaURL, options: .withoutChanges,
+                    writingItemAt: localMetaURL,  options: .forReplacing,
+                    error: &coordError
+                ) { remoteSrc, localDest in
+                    guard let localData  = try? Data(contentsOf: localDest),
+                          let remoteData = try? Data(contentsOf: remoteSrc),
+                          let localMeta  = try? decoder.decode(SyncSessionMeta.self, from: localData),
+                          let remoteMeta = try? decoder.decode(SyncSessionMeta.self, from: remoteData)
+                    else { return }
+                    let merged = mergeMetadata(local: localMeta, remote: remoteMeta)
+                    if let out = try? encoder.encode(merged) {
+                        try? out.write(to: localDest, options: .atomic)
+                        try? out.write(to: remoteSrc, options: .atomic)
+                    }
+                }
+                if let err = coordError { throw err }
+            }
+
+            let localSegsURL  = localDirectory.appendingPathComponent("segments.json")
+            let remoteSegsURL = iCloudDir.appendingPathComponent("segments.json")
+
+            if fileManager.fileExists(atPath: localSegsURL.path),
+               fileManager.fileExists(atPath: remoteSegsURL.path) {
+                let coordinator = NSFileCoordinator()
+                var coordError: NSError?
+                coordinator.coordinate(
+                    readingItemAt: remoteSegsURL, options: .withoutChanges,
+                    writingItemAt: localSegsURL,  options: .forReplacing,
+                    error: &coordError
+                ) { remoteSrc, localDest in
+                    guard let localData   = try? Data(contentsOf: localDest),
+                          let remoteData  = try? Data(contentsOf: remoteSrc),
+                          let localSegs   = try? decoder.decode([SyncSegment].self, from: localData),
+                          let remoteSegs  = try? decoder.decode([SyncSegment].self, from: remoteData)
+                    else { return }
+                    let merged = mergeSegments(local: localSegs, remote: remoteSegs)
+                    if let out = try? encoder.encode(merged) {
+                        try? out.write(to: localDest, options: .atomic)
+                        try? out.write(to: remoteSrc, options: .atomic)
+                    }
+                }
+                if let err = coordError { throw err }
+            }
+
+            setStatus(.idle(lastSynced: Date()))
+        } catch {
+            setStatus(.error(error.localizedDescription))
+        }
+    }
+
     // MARK: - Helpers
 
     private func setStatus(_ newStatus: ICloudSyncStatus) {
