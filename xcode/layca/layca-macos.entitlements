@@ -8,13 +8,24 @@
 	<true/>
 	<key>com.apple.security.files.user-selected.read-only</key>
 	<true/>
-	<key>com.apple.developer.icloud-container-identifiers</key>
+
+	<!-- ============================================================
+	     iCloud SYNC — DISABLED (no Apple Developer enrollment yet)
+	     TO RE-ENABLE:
+	       1. Enroll in Apple Developer Program (developer.apple.com)
+	       2. In Xcode: target layca → Signing & Capabilities
+	              → + Capability → iCloud → check "iCloud Documents"
+	              → container: iCloud.com.cropbinary.layca
+	       3. Remove these XML comment tags (the 4 lines below)
+	     ============================================================ -->
+	<!-- <key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
 		<string>iCloud.com.cropbinary.layca</string>
 	</array>
 	<key>com.apple.developer.ubiquity-container-identifiers</key>
 	<array>
 		<string>iCloud.com.cropbinary.layca</string>
-	</array>
+	</array> -->
+
 </dict>
 </plist>
