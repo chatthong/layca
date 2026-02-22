@@ -18,6 +18,8 @@ struct SettingsTabView: View {
     let groupedFocusLanguages: [LanguageRegionGroup]
 
     @Binding var isICloudSyncEnabled: Bool
+    @Binding var isAudioSyncEnabled: Bool
+    let iCloudSyncStatus: ICloudSyncStatus
     @Binding var whisperCoreMLEncoderEnabled: Bool
     @Binding var whisperGGMLGPUDecodeEnabled: Bool
     @Binding var whisperModelProfile: WhisperModelProfile
@@ -30,6 +32,7 @@ struct SettingsTabView: View {
 
     let onToggleLanguage: (String) -> Void
     let onRestorePurchases: () -> Void
+    let onSyncNow: () -> Void
 
     var body: some View {
         SettingsSheetFlowView(
@@ -40,6 +43,8 @@ struct SettingsTabView: View {
             filteredFocusLanguages: filteredFocusLanguages,
             groupedFocusLanguages: groupedFocusLanguages,
             isICloudSyncEnabled: $isICloudSyncEnabled,
+            isAudioSyncEnabled: $isAudioSyncEnabled,
+            iCloudSyncStatus: iCloudSyncStatus,
             whisperCoreMLEncoderEnabled: $whisperCoreMLEncoderEnabled,
             whisperGGMLGPUDecodeEnabled: $whisperGGMLGPUDecodeEnabled,
             whisperModelProfile: $whisperModelProfile,
@@ -51,6 +56,7 @@ struct SettingsTabView: View {
             restoreStatusMessage: restoreStatusMessage,
             onToggleLanguage: onToggleLanguage,
             onRestorePurchases: onRestorePurchases,
+            onSyncNow: onSyncNow,
             showsMicrophoneMenu: false,
             microphonePermissionState: .unknown,
             onRequestMicrophoneAccess: {},
@@ -113,6 +119,8 @@ struct SettingsSheetFlowView: View {
     let groupedFocusLanguages: [LanguageRegionGroup]
 
     @Binding var isICloudSyncEnabled: Bool
+    @Binding var isAudioSyncEnabled: Bool
+    let iCloudSyncStatus: ICloudSyncStatus
     @Binding var whisperCoreMLEncoderEnabled: Bool
     @Binding var whisperGGMLGPUDecodeEnabled: Bool
     @Binding var whisperModelProfile: WhisperModelProfile
@@ -125,6 +133,7 @@ struct SettingsSheetFlowView: View {
 
     let onToggleLanguage: (String) -> Void
     let onRestorePurchases: () -> Void
+    let onSyncNow: () -> Void
     let showsMicrophoneMenu: Bool
     let microphonePermissionState: SettingsMicrophonePermissionState
     let onRequestMicrophoneAccess: () -> Void
@@ -194,9 +203,12 @@ struct SettingsSheetFlowView: View {
                     case .cloudAndPurchases:
                         SettingsCloudAndPurchasesStepView(
                             isICloudSyncEnabled: $isICloudSyncEnabled,
+                            isAudioSyncEnabled: $isAudioSyncEnabled,
+                            iCloudSyncStatus: iCloudSyncStatus,
                             isRestoringPurchases: isRestoringPurchases,
                             restoreStatusMessage: restoreStatusMessage,
-                            onRestorePurchases: onRestorePurchases
+                            onRestorePurchases: onRestorePurchases,
+                            onSyncNow: onSyncNow
                         )
                         .applySettingsSubstepCloseControl {
                             dismiss()
@@ -647,14 +659,65 @@ private struct SettingsOfflineModelSwitchStepView: View {
 
 private struct SettingsCloudAndPurchasesStepView: View {
     @Binding var isICloudSyncEnabled: Bool
+    @Binding var isAudioSyncEnabled: Bool
+    let iCloudSyncStatus: ICloudSyncStatus
     let isRestoringPurchases: Bool
     let restoreStatusMessage: String?
     let onRestorePurchases: () -> Void
+    let onSyncNow: () -> Void
 
     var body: some View {
         SettingsStepContainer {
             Section("iCloud") {
                 Toggle("Sync sessions via iCloud", isOn: $isICloudSyncEnabled)
+
+                if isICloudSyncEnabled {
+                    Toggle(isOn: $isAudioSyncEnabled) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Include audio files")
+                            Text("Each session can be 50–150 MB")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.leading, 16)
+                }
+            }
+
+            if isICloudSyncEnabled {
+                Section("Sync Status") {
+                    HStack {
+                        switch iCloudSyncStatus {
+                        case .idle(let lastSynced):
+                            if let date = lastSynced {
+                                Text("Last synced: \(date.formatted(.relative(presentation: .named)))")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("Not yet synced")
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Sync Now", action: onSyncNow)
+                                .buttonStyle(.borderless)
+                        case .syncing:
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Syncing…")
+                                .foregroundStyle(.secondary)
+                        case .error(let msg):
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .foregroundStyle(.red)
+                            Text(msg)
+                                .foregroundStyle(.red)
+                                .font(.caption)
+                        case .unavailable:
+                            Image(systemName: "icloud.slash")
+                                .foregroundStyle(.secondary)
+                            Text("iCloud not available")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
 
             Section("Purchases") {

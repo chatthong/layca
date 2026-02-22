@@ -411,6 +411,8 @@ private extension ContentView {
             filteredFocusLanguages: filteredFocusLanguages,
             groupedFocusLanguages: groupedFocusLanguages,
             isICloudSyncEnabled: iCloudSyncBinding,
+            isAudioSyncEnabled: isAudioSyncBinding,
+            iCloudSyncStatus: backend.iCloudSyncStatus,
             whisperCoreMLEncoderEnabled: whisperCoreMLEncoderBinding,
             whisperGGMLGPUDecodeEnabled: whisperGGMLGPUDecodeBinding,
             whisperModelProfile: whisperModelProfileBinding,
@@ -421,7 +423,8 @@ private extension ContentView {
             isRestoringPurchases: backend.isRestoringPurchases,
             restoreStatusMessage: backend.restoreStatusMessage,
             onToggleLanguage: backend.toggleLanguageFocus,
-            onRestorePurchases: backend.restorePurchases
+            onRestorePurchases: backend.restorePurchases,
+            onSyncNow: { Task { await backend.syncNow() } }
         )
     }
 
@@ -491,6 +494,8 @@ private extension ContentView {
             filteredFocusLanguages: filteredFocusLanguages,
             groupedFocusLanguages: groupedFocusLanguages,
             isICloudSyncEnabled: iCloudSyncBinding,
+            isAudioSyncEnabled: isAudioSyncBinding,
+            iCloudSyncStatus: backend.iCloudSyncStatus,
             whisperCoreMLEncoderEnabled: whisperCoreMLEncoderBinding,
             whisperGGMLGPUDecodeEnabled: whisperGGMLGPUDecodeBinding,
             whisperModelProfile: whisperModelProfileBinding,
@@ -501,7 +506,8 @@ private extension ContentView {
             isRestoringPurchases: backend.isRestoringPurchases,
             restoreStatusMessage: backend.restoreStatusMessage,
             onToggleLanguage: backend.toggleLanguageFocus,
-            onRestorePurchases: backend.restorePurchases
+            onRestorePurchases: backend.restorePurchases,
+            onSyncNow: { Task { await backend.syncNow() } }
         )
     }
 
@@ -806,6 +812,13 @@ private extension ContentView {
         Binding(
             get: { backend.isICloudSyncEnabled },
             set: { backend.isICloudSyncEnabled = $0 }
+        )
+    }
+
+    var isAudioSyncBinding: Binding<Bool> {
+        Binding(
+            get: { backend.isAudioSyncEnabled },
+            set: { backend.isAudioSyncEnabled = $0 }
         )
     }
 

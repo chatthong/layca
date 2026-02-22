@@ -1055,6 +1055,8 @@ struct MacSettingsWorkspaceView: View {
     let filteredFocusLanguages: [FocusLanguage]
     let groupedFocusLanguages: [LanguageRegionGroup]
     @Binding var isICloudSyncEnabled: Bool
+    @Binding var isAudioSyncEnabled: Bool
+    let iCloudSyncStatus: ICloudSyncStatus
     @Binding var whisperCoreMLEncoderEnabled: Bool
     @Binding var whisperGGMLGPUDecodeEnabled: Bool
     @Binding var whisperModelProfile: WhisperModelProfile
@@ -1066,6 +1068,7 @@ struct MacSettingsWorkspaceView: View {
     let restoreStatusMessage: String?
     let onToggleLanguage: (String) -> Void
     let onRestorePurchases: () -> Void
+    let onSyncNow: () -> Void
     @State private var microphonePermission: AVAudioApplication.recordPermission = .undetermined
 
     var body: some View {
@@ -1077,6 +1080,8 @@ struct MacSettingsWorkspaceView: View {
             filteredFocusLanguages: filteredFocusLanguages,
             groupedFocusLanguages: groupedFocusLanguages,
             isICloudSyncEnabled: $isICloudSyncEnabled,
+            isAudioSyncEnabled: $isAudioSyncEnabled,
+            iCloudSyncStatus: iCloudSyncStatus,
             whisperCoreMLEncoderEnabled: $whisperCoreMLEncoderEnabled,
             whisperGGMLGPUDecodeEnabled: $whisperGGMLGPUDecodeEnabled,
             whisperModelProfile: $whisperModelProfile,
@@ -1088,6 +1093,7 @@ struct MacSettingsWorkspaceView: View {
             restoreStatusMessage: restoreStatusMessage,
             onToggleLanguage: onToggleLanguage,
             onRestorePurchases: onRestorePurchases,
+            onSyncNow: onSyncNow,
             showsMicrophoneMenu: true,
             microphonePermissionState: microphonePermissionState,
             onRequestMicrophoneAccess: requestMicrophoneAccess,
