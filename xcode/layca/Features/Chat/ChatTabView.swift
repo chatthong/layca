@@ -43,6 +43,7 @@ struct ChatTabView: View {
     let showsTopToolbar: Bool
     let showsBottomRecorderAccessory: Bool
     let showsMergedTabBarRecorderAccessory: Bool
+    let cancelRenameNonce: UUID
 
     @State private var titleDraft = ""
     @State private var isEditingTitle = false
@@ -91,7 +92,8 @@ struct ChatTabView: View {
         onSidebarToggle: (() -> Void)? = nil,
         showsTopToolbar: Bool = true,
         showsBottomRecorderAccessory: Bool = true,
-        showsMergedTabBarRecorderAccessory: Bool = false
+        showsMergedTabBarRecorderAccessory: Bool = false,
+        cancelRenameNonce: UUID = UUID()
     ) {
         self.isRecording = isRecording
         self.isTranscriptChunkPlaying = isTranscriptChunkPlaying
@@ -125,6 +127,7 @@ struct ChatTabView: View {
         self.showsTopToolbar = showsTopToolbar
         self.showsBottomRecorderAccessory = showsBottomRecorderAccessory
         self.showsMergedTabBarRecorderAccessory = showsMergedTabBarRecorderAccessory
+        self.cancelRenameNonce = cancelRenameNonce
     }
 
     var body: some View {
@@ -195,7 +198,7 @@ struct ChatTabView: View {
                 cancelTitleRename()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LaycaCancelTitleRenameEditing"))) { _ in
+        .onChange(of: cancelRenameNonce) { _, _ in
             if isEditingTitle {
                 cancelTitleRename()
             }

@@ -43,6 +43,7 @@ struct MacWorkspaceSidebarView: View {
     let shareTextForSession: (ChatSession) -> String
     let onSelectChatWorkspace: () -> Void
     let onCreateSession: () -> Void
+    let onWillInteract: () -> Void
 
     @State private var sessionPendingRename: ChatSession?
     @State private var renameDraft = ""
@@ -65,10 +66,7 @@ struct MacWorkspaceSidebarView: View {
         }
         .simultaneousGesture(
             TapGesture().onEnded {
-                NotificationCenter.default.post(
-                    name: Notification.Name("LaycaCancelTitleRenameEditing"),
-                    object: nil
-                )
+                onWillInteract()
             }
         )
         .alert("Rename Chat", isPresented: renameAlertBinding, actions: {
@@ -261,6 +259,7 @@ struct MacChatWorkspaceView: View {
     let onDeleteActiveSessionTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
     let onOpenSettingsTap: () -> Void
+    let cancelRenameNonce: UUID
     @State private var titleDraft = ""
     @State private var isEditingTitle = false
     @State private var isDeleteDialogPresented = false
@@ -359,7 +358,7 @@ struct MacChatWorkspaceView: View {
                 cancelTitleRename()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LaycaCancelTitleRenameEditing"))) { _ in
+        .onChange(of: cancelRenameNonce) { _, _ in
             if isEditingTitle {
                 cancelTitleRename()
             }

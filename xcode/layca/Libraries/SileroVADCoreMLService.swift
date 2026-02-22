@@ -48,6 +48,7 @@ actor SileroVADCoreMLService {
     private var audioBuffer: [Float] = []
     private var hiddenState: MLMultiArray?
     private var cellState: MLMultiArray?
+    private var reusableAudioInput: MLMultiArray?
 
     init(fileManager: FileManager = .default, rootDirectory: URL? = nil) {
         self.fileManager = fileManager
@@ -235,20 +236,23 @@ actor SileroVADCoreMLService {
 
         hiddenState = try makeZeroStateArray(size: Constants.stateSize)
         cellState = try makeZeroStateArray(size: Constants.stateSize)
+
+        if reusableAudioInput == nil {
+            reusableAudioInput = try MLMultiArray(
+                shape: [1, NSNumber(value: Constants.windowSamples)],
+                dataType: .float32
+            )
+        }
     }
 
     private func predict(window: [Float]) throws -> Float {
         guard window.count == Constants.windowSamples else {
             throw SileroVADCoreMLError.invalidInputShape
         }
-        guard let model, let hiddenState, let cellState else {
+        guard let model, let hiddenState, let cellState, let audioInput = reusableAudioInput else {
             return 0
         }
 
-        let audioInput = try MLMultiArray(
-            shape: [1, NSNumber(value: Constants.windowSamples)],
-            dataType: .float32
-        )
         fill(audioInput, with: window)
 
         let input = try MLDictionaryFeatureProvider(dictionary: [

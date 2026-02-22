@@ -132,15 +132,15 @@ Small fixes, high impact. Can be done in any order.
 - [ ] **Extract ExportService from ContentView** · `App/ContentView.swift`
   - ~200 lines of export logic (SRT, Markdown, NotepadMinutes, PlainText) in ContentView
   - Fix: new file `Services/ExportService.swift` with a pure struct — makes it testable
-  - Effort: M · Agent: `swift-engineer`
+  - Effort: M · Agent: `swift-engineer` · ⏳ In progress Sprint 7
 
 - [x] **Extract focusLanguages catalog** · `App/ContentView.swift`
   - ✅ Done 2026-02-21: 96-language array moved to `static let all: [FocusLanguage]` in `FocusLanguage.swift`. `var focusLanguages` computed property deleted from ContentView (100 lines removed).
 
 - [ ] **Replace NotificationCenter rename-cancel with environment** · `ChatTabView.swift:198`
   - `NotificationCenter.publisher(for: "LaycaCancelTitleRenameEditing")` is fragile coupling
-  - Fix: `@FocusedValue` or pass cancel closure via environment
-  - Effort: S · Agent: `swift-engineer`
+  - Fix: UUID nonce `@State` on ContentView, passed to ChatTabView + sidebar; `.onChange` replaces `.onReceive`
+  - Effort: S · Agent: `swift-engineer` · ⏳ Queued Sprint 7
 
 ---
 
@@ -235,4 +235,32 @@ Extract Color from TranscriptRow ✅ RESOLVED
 
 ---
 
-*Last updated: 2026-02-22 · Sprint 6 complete — iCloud Drive sync implemented (ICloudSyncService actor, per-row last-write-wins merge, audio toggle, Settings UI wired)*
+## 🟡 Medium — ML Model Improvements (Future Sprint)
+
+- [ ] **Re-export WeSpeaker CoreML model with batch=1** · `wespeaker_v2.mlmodelc`
+  - Current model has hardcoded batch=3 (`hasShapeFlexibility: "0"`). Rows 1 and 2 of both inputs are computed then immediately discarded by `slice_by_index` in the MIL graph
+  - Cost: 4.89 MB wasted per inference × ~4 calls/sec during recording = ~19.6 MB/sec unnecessary allocation
+  - Fix: re-export with `coremltools` using `ct.TensorType(shape=(1, 160000))`. Update `waveformBatch = 1` in `SpeakerDiarizationCoreMLService`, simplify `fillBatch`/`fillMask` to single-row
+  - Requires: original PyTorch WeSpeaker checkpoint + Python env with `coremltools>=8.3` + validation of embedding quality on new model
+  - Effort: M · Agent: `ml-inference-lead`
+
+- [ ] **Add thermal throttling to live pipeline** · `App/AppBackend.swift` + `LiveSessionPipeline`
+  - No thermal detection during long meetings — ANE/GPU throttling silently degrades Whisper accuracy
+  - Design: `ProcessInfo.thermalStateDidChangeNotification` observer in pipeline; 3 tiers: nominal/fair (full), serious (switch Whisper Normal/Q8, double interrupt window), critical (disable interrupt detection, switch Whisper Fast/Q5)
+  - Add `@Published var isThermallyThrottled: Bool` on AppBackend; UI shows subtle indicator when throttled
+  - Use 10-second hysteresis to prevent rapid toggling
+  - Effort: M · Agent: `ml-inference-lead`
+
+---
+
+## 🟡 Medium — Audio Pipeline Improvements (Queued)
+
+- [ ] **Auto-retranscribe from M4A on session end** · `App/AppBackend.swift`
+  - Root cause of "Transcribe Again gives better results": live path sends raw PCM (noisy) to Whisper; M4A path sends AAC-decoded audio (naturally noise-filtered by codec). Prompts and Whisper params are identical — purely audio quality difference
+  - Fix: after `masterRecorder.stop()` resolves and M4A is finalized, automatically queue all transcript rows via `queueAutomaticQualityRetranscription(rowID:sessionID:)` — reuses existing M4A path with no new infrastructure
+  - Skip if session has 0 rows; existing "Queued for Transcribe Again..." UI handles busy state
+  - Effort: S · Agent: `swift-engineer` · ⏳ Queued Sprint 7
+
+---
+
+*Last updated: 2026-02-22 · Sprint 7 in progress — ML audit (vDSP cosine, VAD pre-alloc, resetInterruptState fix, interrupt window 8192, route-change handling), ExportService extraction, NotificationCenter refactor queued*

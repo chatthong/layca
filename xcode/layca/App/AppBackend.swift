@@ -346,8 +346,32 @@ private struct CapturedAudioFrame: Sendable {
 private final class LiveAudioInputController {
     private let engine = AVAudioEngine()
     private var isStarted = false
+    private var isRestarting = false
+    private var onCapture: (@Sendable (CapturedAudioFrame) -> Void)?
+    private var configChangeObserver: (any NSObjectProtocol)?
+#if !os(macOS)
+    private var interruptionObserver: (any NSObjectProtocol)?
+    private var routeChangeObserver: (any NSObjectProtocol)?
+#endif
 
     func start(onCapture: @escaping @Sendable (CapturedAudioFrame) -> Void) throws {
+        self.onCapture = onCapture
+        try installTapAndStart(onCapture: onCapture)
+        registerNotificationObservers()
+    }
+
+    func stop() {
+        guard isStarted else {
+            return
+        }
+        removeNotificationObservers()
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        isStarted = false
+        onCapture = nil
+    }
+
+    private func installTapAndStart(onCapture: @escaping @Sendable (CapturedAudioFrame) -> Void) throws {
         let inputNode = engine.inputNode
         let outputFormat = inputNode.outputFormat(forBus: 0)
 
@@ -377,14 +401,131 @@ private final class LiveAudioInputController {
         isStarted = true
     }
 
-    func stop() {
-        guard isStarted else {
+    // MARK: - Notification Observers
+
+    private func registerNotificationObservers() {
+        let nc = NotificationCenter.default
+
+        configChangeObserver = nc.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleConfigurationChange()
+            }
+        }
+
+#if !os(macOS)
+        interruptionObserver = nc.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: nil
+        ) { [weak self] notification in
+            Task { @MainActor in
+                self?.handleInterruption(notification)
+            }
+        }
+
+        routeChangeObserver = nc.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: nil
+        ) { [weak self] notification in
+            Task { @MainActor in
+                self?.handleRouteChange(notification)
+            }
+        }
+#endif
+    }
+
+    private func removeNotificationObservers() {
+        let nc = NotificationCenter.default
+        if let observer = configChangeObserver {
+            nc.removeObserver(observer)
+            configChangeObserver = nil
+        }
+#if !os(macOS)
+        if let observer = interruptionObserver {
+            nc.removeObserver(observer)
+            interruptionObserver = nil
+        }
+        if let observer = routeChangeObserver {
+            nc.removeObserver(observer)
+            routeChangeObserver = nil
+        }
+#endif
+    }
+
+    private func restartEngine(reason: String) {
+        guard isStarted, !isRestarting, let onCapture else {
+            if isRestarting {
+                print("[AudioInput] Skipping restart (\(reason)) — restart already in progress")
+            }
             return
         }
+        isRestarting = true
+        print("[AudioInput] \(reason) — restarting tap")
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-        isStarted = false
+        do {
+            try installTapAndStart(onCapture: onCapture)
+            print("[AudioInput] Engine restarted after \(reason)")
+        } catch {
+            print("[AudioInput] Failed to restart after \(reason): \(error.localizedDescription)")
+            isStarted = false
+        }
+        isRestarting = false
     }
+
+    private func handleConfigurationChange() {
+        restartEngine(reason: "engine configuration change")
+    }
+
+#if !os(macOS)
+    private func handleInterruption(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+            return
+        }
+
+        switch type {
+        case .began:
+            print("[AudioInput] Audio session interrupted — engine paused")
+        case .ended:
+            guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else {
+                return
+            }
+            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+            if options.contains(.shouldResume) {
+                restartEngine(reason: "interruption ended")
+            } else {
+                print("[AudioInput] Interruption ended without shouldResume flag")
+            }
+        @unknown default:
+            break
+        }
+    }
+
+    private func handleRouteChange(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
+            return
+        }
+
+        let inputName = AVAudioSession.sharedInstance().currentRoute.inputs.first?.portName ?? "none"
+        print("[AudioInput] Route changed: reason=\(reason.rawValue) input=\(inputName)")
+
+        switch reason {
+        case .oldDeviceUnavailable, .newDeviceAvailable:
+            restartEngine(reason: "route change to \(inputName)")
+        default:
+            break
+        }
+    }
+#endif
 
     private static func captureFrame(from buffer: AVAudioPCMBuffer) -> CapturedAudioFrame? {
         guard let channelData = buffer.floatChannelData else {
@@ -499,7 +640,7 @@ actor LiveSessionPipeline {
     private var lastKnownSpeakerEmbedding: [Float]?
     private var interruptCheckSampleRate: Double = 16_000
     private var lastChunkDurationSeconds: Double = 0
-    private let interruptCheckWindowSize = 4_096
+    private let interruptCheckWindowSize = 8_192
     private var chunkCounter = 0
     private var runToken = UUID()
     private var vadState: VADState = .loading
@@ -560,7 +701,7 @@ actor LiveSessionPipeline {
         if let config = activeConfig, !activeChunkFrames.isEmpty {
             await processChunk(activeChunkFrames, config: config)
             activeChunkFrames.removeAll(keepingCapacity: false)
-            resetActiveChunkSpeakerTracking()
+            await resetActiveChunkSpeakerTracking()
         }
 
         continuation?.yield(.stopped)
@@ -571,7 +712,7 @@ actor LiveSessionPipeline {
         elapsedSeconds = 0
         waveformBuffer = Array(repeating: 0.03, count: 18)
         silenceSeconds = 0
-        resetActiveChunkSpeakerTracking()
+        await resetActiveChunkSpeakerTracking()
         chunkCounter = 0
         speakerEmbeddings.removeAll()
         speakerObservationCounts.removeAll()
@@ -593,7 +734,7 @@ actor LiveSessionPipeline {
         waveformBuffer = Array(repeating: 0.03, count: 18)
         activeChunkFrames = []
         silenceSeconds = 0
-        resetActiveChunkSpeakerTracking()
+        await resetActiveChunkSpeakerTracking()
         chunkCounter = 0
         runToken = UUID()
         vadState = .loading
@@ -723,7 +864,7 @@ actor LiveSessionPipeline {
                 activeChunkFrames.removeAll(keepingCapacity: true)
                 silenceSeconds = 0
                 await processChunk(chunk, config: config)
-                resetActiveChunkSpeakerTracking()
+                await resetActiveChunkSpeakerTracking()
             }
         }
     }
@@ -1234,12 +1375,13 @@ actor LiveSessionPipeline {
         chunk.contains(where: \.isSpeech)
     }
 
-    private func resetActiveChunkSpeakerTracking() {
+    private func resetActiveChunkSpeakerTracking() async {
         activeChunkSpeakerID = nil
         speakerChangeCandidate = nil
         speechSecondsSinceLastSpeakerProbe = 0
         interruptCheckSampleAccumulator.removeAll(keepingCapacity: true)
         interruptCheckSampleRate = 16_000
+        await speakerDiarizer.resetInterruptState()
         // lastKnownSpeakerEmbedding is intentionally preserved across silence/max-duration
         // chunk boundaries: the same speaker is likely continuing, so the first interrupt
         // window of the new chunk has a valid reference without waiting 1.6 s for a probe.
@@ -3036,6 +3178,9 @@ final class AppBackend: ObservableObject {
         streamTask = nil
         do {
             try await masterRecorder.stop()
+            if let sid = activeSessionID {
+                schedulePostRecordingQualityPass(sessionID: sid, rows: activeTranscriptRows)
+            }
         } catch {
             preflightStatusMessage = error.localizedDescription
         }
@@ -3457,6 +3602,23 @@ final class AppBackend: ObservableObject {
             !transcribingRowIDs.isEmpty ||
             !queuedChunkTranscriptions.isEmpty ||
             !queuedManualRetranscriptions.isEmpty
+    }
+
+    /// Re-queues all rows with valid audio offsets for transcription from the finalized M4A file.
+    /// The M4A path (AAC-decoded audio) produces higher quality results than the raw PCM used
+    /// during live transcription. Called automatically after each recording session ends.
+    private func schedulePostRecordingQualityPass(sessionID: UUID, rows: [TranscriptRow]) {
+        // Only re-queue rows that never received real transcription text (still showing
+        // the "queued for automatic transcription" placeholder). Rows with actual text
+        // are left untouched — re-queuing them would disrupt the UI for no user benefit.
+        let eligibleRows = rows.filter { row in
+            guard let start = row.startOffset, let end = row.endOffset, end > start else { return false }
+            return isAutoTranscriptionPlaceholder(row.text)
+        }
+        guard !eligibleRows.isEmpty else { return }
+        for row in eligibleRows {
+            queueAutomaticQualityRetranscription(rowID: row.id, sessionID: sessionID)
+        }
     }
 
     private func queueAutomaticQualityRetranscription(rowID: UUID, sessionID: UUID) {

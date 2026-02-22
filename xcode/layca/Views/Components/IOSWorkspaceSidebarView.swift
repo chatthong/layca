@@ -36,6 +36,7 @@ struct IOSWorkspaceSidebarView: View {
     let shareTextForSession: (ChatSession) -> String
     let onSelectChatWorkspace: () -> Void
     let onCreateSession: () -> Void
+    let onWillInteract: (() -> Void)?
 
     @State private var sessionPendingRename: ChatSession?
     @State private var renameDraft = ""
@@ -105,10 +106,7 @@ struct IOSWorkspaceSidebarView: View {
         }
         .simultaneousGesture(
             TapGesture().onEnded {
-                NotificationCenter.default.post(
-                    name: Notification.Name("LaycaCancelTitleRenameEditing"),
-                    object: nil
-                )
+                onWillInteract?()
             }
         )
     }

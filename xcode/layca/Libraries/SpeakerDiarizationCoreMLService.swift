@@ -1,5 +1,6 @@
 import Foundation
 import CoreML
+import Accelerate
 
 enum SpeakerDiarizationCoreMLError: LocalizedError {
     case invalidRemoteURL
@@ -462,15 +463,15 @@ actor SpeakerDiarizationCoreMLService {
             return -1
         }
 
+        // Embeddings are L2-normalized by normalize(), so cos(a,b) = a·b.
+        // Fall back to full formula only if norms deviate from 1.0 (defensive).
         var dot: Float = 0
+        vDSP_dotpr(a, 1, b, 1, &dot, vDSP_Length(length))
+
         var aNorm: Float = 0
         var bNorm: Float = 0
-
-        for index in 0..<length {
-            dot += a[index] * b[index]
-            aNorm += a[index] * a[index]
-            bNorm += b[index] * b[index]
-        }
+        vDSP_dotpr(a, 1, a, 1, &aNorm, vDSP_Length(length))
+        vDSP_dotpr(b, 1, b, 1, &bNorm, vDSP_Length(length))
 
         let denominator = sqrt(aNorm) * sqrt(bNorm)
         guard denominator > 0 else {
