@@ -165,11 +165,8 @@ These unlock monetization and long-term user retention. Work in order.
   - `ControlWidget` for iOS 18 lock screen / Control Center
   - Effort: M · Agent: `swift-engineer`
 
-- [ ] **Implement iCloud sync (CloudKit)** · `App/AppBackend.swift`
-  - Sync: session.json + segments.json metadata only (not M4A audio — too large)
-  - Use `NSUbiquitousKeyValueStore` for small data or `NSPersistentCloudKitContainer` with SwiftData
-  - Toggle already exists in Settings — wire it to actual sync behavior
-  - Effort: L · Agent: `swift-engineer`
+- [x] **Implement iCloud sync (iCloud Drive)** · `Services/ICloudSyncService.swift` + `App/AppBackend.swift`
+  - ✅ Done 2026-02-22: iCloud Drive (ubiquitous container) approach — no CloudKit, no third-party. `ICloudSyncService` actor: push/pull/merge/NSMetadataQuery. Per-row last-write-wins via `updatedAt` on `TranscriptRow` and `StoredSession`. Audio sync user-toggle (default OFF). `iCloudSyncStatus` + `isAudioSyncEnabled` wired through AppBackend + Settings UI. macOS entitlements updated. Smoke test on real devices still needed (Task 11).
 
 - [ ] **Speaker profile persistence across sessions** · ~~blocked by: Extract Color from TranscriptRow~~ (blocker resolved ✅)
   - Persist speaker voice embeddings + user-assigned names in shared `profiles.json`
@@ -238,4 +235,4 @@ Extract Color from TranscriptRow ✅ RESOLVED
 
 ---
 
-*Last updated: 2026-02-22 · Sprint 5 complete — multi-speaker chunk transcription bug fixed (5 root causes resolved across WhisperGGMLCoreMLService, SpeakerDiarizationCoreMLService, AppBackend)*
+*Last updated: 2026-02-22 · Sprint 6 complete — iCloud Drive sync implemented (ICloudSyncService actor, per-row last-write-wins merge, audio toggle, Settings UI wired)*
