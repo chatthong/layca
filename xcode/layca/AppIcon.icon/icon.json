@@ -1,0 +1,50 @@
+{
+  "fill" : {
+    "solid" : "display-p3:0.40068,0.70694,1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "glass" : false,
+          "image-name" : "kkk.png",
+          "name" : "kkk",
+          "opacity" : 0.9,
+          "position" : {
+            "scale" : 0.22,
+            "translation-in-points" : [
+              0,
+              188.4375
+            ]
+          }
+        },
+        {
+          "glass" : false,
+          "image-name" : "33.png",
+          "name" : "33",
+          "position" : {
+            "scale" : 0.21,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
