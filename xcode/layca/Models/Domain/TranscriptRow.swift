@@ -60,17 +60,17 @@ struct TranscriptRow: Identifiable {
 
     /// Persists chunk audio as a session-relative URL (e.g. `chunks/chunk-<uuid>.m4a`) when possible.
     /// Falls back to the original value to avoid data loss if the file is outside the session directory.
-    func persistedChunkURL(relativeTo sessionDirectory: URL) -> URL? {
+    nonisolated func persistedChunkURL(relativeTo sessionDirectory: URL) -> URL? {
         Self.persistedChunkURL(chunkURL, relativeTo: sessionDirectory)
     }
 
     /// Resolves a stored relative chunk URL against `sessionDirectory` for runtime file access.
     /// Absolute URLs pass through unchanged for backward/forward compatibility during migration.
-    func resolvedChunkURL(relativeTo sessionDirectory: URL) -> URL? {
+    nonisolated func resolvedChunkURL(relativeTo sessionDirectory: URL) -> URL? {
         Self.resolvedChunkURL(chunkURL, relativeTo: sessionDirectory)
     }
 
-    static func persistedChunkURL(_ url: URL?, relativeTo sessionDirectory: URL) -> URL? {
+    nonisolated static func persistedChunkURL(_ url: URL?, relativeTo sessionDirectory: URL) -> URL? {
         guard let url else { return nil }
 
         // Already relative/non-file URL; persist as-is (JSON will store the relative string).
@@ -94,7 +94,7 @@ struct TranscriptRow: Identifiable {
         return relativePath.isEmpty ? nil : URL(string: relativePath)
     }
 
-    static func resolvedChunkURL(_ storedURL: URL?, relativeTo sessionDirectory: URL) -> URL? {
+    nonisolated static func resolvedChunkURL(_ storedURL: URL?, relativeTo sessionDirectory: URL) -> URL? {
         guard let storedURL else { return nil }
 
         if storedURL.isFileURL, storedURL.baseURL == nil {

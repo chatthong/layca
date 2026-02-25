@@ -860,7 +860,6 @@ struct ChatTabView: View {
                 // speaker's speech at breath-pause boundaries.
                 let isContinuation = index > 0
                     && liveChatItems[index - 1].speakerID == item.speakerID
-                    && item.speakerID != nil
 
                 HStack(alignment: .top, spacing: 10) {
                     avatarView(for: item, isContinuation: isContinuation)

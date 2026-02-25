@@ -22,6 +22,7 @@ enum SpeakerDiarizationCoreMLError: LocalizedError {
 actor SpeakerDiarizationCoreMLService {
     /// Tracks consecutive windows where embedding distance exceeds the interrupt threshold.
     private var consecutiveInterruptWindows: Int = 0
+    private static let diagnosticLoggingEnabled = true
 
     private struct Constants {
         static let modelDirectoryName = "wespeaker_v2.mlmodelc"
@@ -46,6 +47,25 @@ actor SpeakerDiarizationCoreMLService {
     private let rootDirectory: URL
     private var model: MLModel?
 
+    private func diag(_ message: @autoclosure () -> String) {
+        guard Self.diagnosticLoggingEnabled else {
+            return
+        }
+        print("[SpeakerDiarizer] \(message())")
+    }
+
+    private func fmt3(_ value: Double) -> String {
+        String(format: "%.3f", value)
+    }
+
+    private func fmt3(_ value: Float) -> String {
+        String(format: "%.3f", Double(value))
+    }
+
+    private func fmt4(_ value: Float) -> String {
+        String(format: "%.4f", Double(value))
+    }
+
     init(fileManager: FileManager = .default, rootDirectory: URL? = nil) {
         self.fileManager = fileManager
 
@@ -66,6 +86,7 @@ actor SpeakerDiarizationCoreMLService {
         let configuration = MLModelConfiguration()
         configuration.computeUnits = .all
         model = try MLModel(contentsOf: modelURL, configuration: configuration)
+        diag("model ready at \(modelURL.path)")
     }
 
     func reset() {
@@ -74,12 +95,17 @@ actor SpeakerDiarizationCoreMLService {
 
     func embedding(for samples: [Float], sampleRate: Double) throws -> [Float]? {
         guard let model else {
+            diag("embedding skipped: model not ready")
             return nil
         }
 
         let converted = Self.resampleTo16k(samples: samples, sourceSampleRate: sampleRate)
         let trimmed = Self.trimSilenceEdges(converted, threshold: 0.003)
         guard trimmed.count >= Constants.minSamplesForInference else {
+            diag(
+                "embedding=nil tooShort sr=\(fmt3(sampleRate)) " +
+                "raw=\(samples.count) 16k=\(converted.count) trimmed=\(trimmed.count) min=\(Constants.minSamplesForInference)"
+            )
             return nil
         }
 
@@ -119,6 +145,7 @@ actor SpeakerDiarizationCoreMLService {
 
     private func ensureModelDirectory() async throws -> URL {
         if let bundled = bundledModelDirectory() {
+            diag("using bundled model at \(bundled.path)")
             return bundled
         }
 
@@ -126,6 +153,7 @@ actor SpeakerDiarizationCoreMLService {
         let modelDirectory = rootDirectory.appendingPathComponent(Constants.modelDirectoryName, isDirectory: true)
 
         if hasAllRequiredFiles(at: modelDirectory) {
+            diag("using cached model at \(modelDirectory.path)")
             return modelDirectory
         }
 
@@ -155,6 +183,7 @@ actor SpeakerDiarizationCoreMLService {
             try data.write(to: destinationURL, options: .atomic)
         }
 
+        diag("downloaded model to \(modelDirectory.path)")
         return modelDirectory
     }
 
@@ -360,6 +389,7 @@ actor SpeakerDiarizationCoreMLService {
         sampleRate: Double = 16_000
     ) -> Bool {
         guard model != nil else {
+            diag("interrupt-check skipped: model not ready")
             return false
         }
 
@@ -371,7 +401,15 @@ actor SpeakerDiarizationCoreMLService {
             tail = audioBuffer
         }
 
-        guard let windowEmbedding = try? embeddingDirect(for: tail, sampleRate: sampleRate) else {
+        // 44.1/48 kHz tap buffers can produce <1,600 samples after resampling when the
+        // interrupt window is only 4,096 source samples. Use the same relaxed minimum as
+        // extractWindowEmbedding so interrupt detection doesn't silently disable itself.
+        guard let windowEmbedding = try? embeddingDirect(
+            for: tail,
+            sampleRate: sampleRate,
+            minimumSamples: 1_200
+        ) else {
+            diag("interrupt-check embedding=nil tail=\(tail.count) sr=\(fmt3(sampleRate))")
             return false
         }
 
@@ -381,6 +419,7 @@ actor SpeakerDiarizationCoreMLService {
         // Very high confidence: immediate interrupt.
         if distance > 0.5 {
             consecutiveInterruptWindows = 0
+            diag("interrupt-check sim=\(fmt3(similarity)) dist=\(fmt4(distance)) -> interrupt(immediate)")
             return true
         }
 
@@ -388,12 +427,18 @@ actor SpeakerDiarizationCoreMLService {
             consecutiveInterruptWindows += 1
             if consecutiveInterruptWindows >= 2 {
                 consecutiveInterruptWindows = 0
+                diag("interrupt-check sim=\(fmt3(similarity)) dist=\(fmt4(distance)) -> interrupt(confirm)")
                 return true
             }
+            diag(
+                "interrupt-check sim=\(fmt3(similarity)) dist=\(fmt4(distance)) " +
+                "-> pending(\(consecutiveInterruptWindows))/2"
+            )
             return false
         }
 
         consecutiveInterruptWindows = 0
+        diag("interrupt-check sim=\(fmt3(similarity)) dist=\(fmt4(distance)) -> stable")
         return false
     }
 

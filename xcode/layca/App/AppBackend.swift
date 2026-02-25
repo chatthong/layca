@@ -216,8 +216,11 @@ private final class LiveAudioInputController {
             object: engine,
             queue: nil
         ) { [weak self] _ in
-            Task { @MainActor in
-                self?.handleConfigurationChange()
+            guard let self else {
+                return
+            }
+            Task { @MainActor [self] in
+                self.handleConfigurationChange()
             }
         }
 
@@ -227,8 +230,11 @@ private final class LiveAudioInputController {
             object: AVAudioSession.sharedInstance(),
             queue: nil
         ) { [weak self] notification in
-            Task { @MainActor in
-                self?.handleInterruption(notification)
+            guard let self else {
+                return
+            }
+            Task { @MainActor [self] in
+                self.handleInterruption(notification)
             }
         }
 
@@ -237,8 +243,11 @@ private final class LiveAudioInputController {
             object: AVAudioSession.sharedInstance(),
             queue: nil
         ) { [weak self] notification in
-            Task { @MainActor in
-                self?.handleRouteChange(notification)
+            guard let self else {
+                return
+            }
+            Task { @MainActor [self] in
+                self.handleRouteChange(notification)
             }
         }
 #endif
@@ -445,14 +454,18 @@ actor LiveSessionPipeline {
     private var lastKnownSpeakerEmbedding: [Float]?
     private var interruptCheckSampleRate: Double = 16_000
     private var lastChunkDurationSeconds: Double = 0
-    private let interruptCheckWindowSize = 8_192
+    // Keep interrupt checks frequent enough for rapid turn-taking.
+    // Sprint 7 increased this to 8_192, but `SpeakerDiarizationCoreMLService.checkForInterrupt`
+    // still analyzes only the last 4_096 samples and requires consecutive detections,
+    // which effectively halves boundary-check cadence and can collapse chunks to one speaker.
+    private let interruptCheckWindowSize = 4_096
     private var chunkCounter = 0
     private var runToken = UUID()
     private var vadState: VADState = .loading
     private var speakerState: SpeakerState = .loading
     private let sileroVAD = SileroVADCoreMLService()
     private let intraChunkVAD = SileroVADCoreMLService()
-    private let speakerDiarizer = SpeakerDiarizationCoreMLService()
+    let speakerDiarizer = SpeakerDiarizationCoreMLService()
 
     private let speechThreshold: Double = 0.06
     private let vadSpeechThreshold: Float = 0.5
@@ -468,6 +481,10 @@ actor LiveSessionPipeline {
     private let minSpeakerBoundaryChunkSeconds: Double = 1.6
     private let speakerSimilarityThreshold: Float = 0.65
     private let speakerLooseSimilarityThreshold: Float = 0.52
+    // Assignment should be stricter than probe/boundary detection.
+    // A too-loose assignment threshold causes mixed/noisy chunks to be absorbed into
+    // the first speaker embedding, collapsing many people into "Speaker A".
+    private let speakerAssignmentLooseSimilarityThreshold: Float = 0.62
     private let newSpeakerCandidateSimilarity: Float = 0.58
     private let immediatNewSpeakerSimilarityThreshold: Float = 0.40
     private let pendingChunksBeforeNewSpeaker = 2
@@ -478,7 +495,30 @@ actor LiveSessionPipeline {
     private let turnTakingSilenceThreshold: Double = 0.5
     private let turnTakingSimilarityThreshold: Float = 0.45
     private let speakerFallbackThreshold: Double = 0.015
+    // 80ms is too aggressive on some devices (especially while Whisper/CoreML is warming up),
+    // causing interrupt detections to be computed but discarded before the pipeline can apply them.
+    private let interruptInferenceTimeoutNanoseconds: UInt64 = 250_000_000
+    private let speakerDiagnosticLoggingEnabled = true
     private let deferredTranscriptPlaceholder = "Message queued for automatic transcription..."
+
+    private func speakerDiag(_ message: @autoclosure () -> String) {
+        guard speakerDiagnosticLoggingEnabled else {
+            return
+        }
+        print("[SpeakerDiag] \(message())")
+    }
+
+    private func fmt3(_ value: Double) -> String {
+        String(format: "%.3f", value)
+    }
+
+    private func fmt3(_ value: Float) -> String {
+        String(format: "%.3f", Double(value))
+    }
+
+    private func fmt4(_ value: Double) -> String {
+        String(format: "%.4f", value)
+    }
 
     func start(config: LivePipelineConfig) -> AsyncStream<PipelineEvent> {
         AsyncStream(bufferingPolicy: .bufferingNewest(500)) { continuation in
@@ -596,11 +636,13 @@ actor LiveSessionPipeline {
                 return
             }
             speakerState = .ready
+            speakerDiag("diarizer state -> ready")
         } catch {
             guard isRunning, token == runToken else {
                 return
             }
             speakerState = .fallback
+            speakerDiag("diarizer prepare failed -> fallback (\(error.localizedDescription))")
         }
     }
 
@@ -868,13 +910,17 @@ actor LiveSessionPipeline {
         // fall back to the last known embedding from the previous chunk so that
         // the first 1.6 s of a new chunk is not a blind window.
         let referenceEmbedding: [Float]
+        let referenceSource: String
         if let currentLabel = activeChunkSpeakerID,
            let embedding = speakerEmbeddings[currentLabel] {
             referenceEmbedding = embedding
+            referenceSource = "active:\(currentLabel)"
         } else if let fallback = lastKnownSpeakerEmbedding {
             referenceEmbedding = fallback
+            referenceSource = "lastKnown"
         } else {
             interruptCheckSampleAccumulator.removeAll(keepingCapacity: true)
+            speakerDiag("interrupt-check skipped (no reference embedding)")
             return
         }
 
@@ -893,12 +939,15 @@ actor LiveSessionPipeline {
                 )
             }
             group.addTask {
-                try? await Task.sleep(nanoseconds: 80_000_000) // 80ms
+                try? await Task.sleep(nanoseconds: self.interruptInferenceTimeoutNanoseconds)
                 return nil  // timeout sentinel
             }
             for await result in group {
                 group.cancelAll()
-                return result ?? false
+                if let result {
+                    return result
+                }
+                return false
             }
             return false
         }
@@ -916,6 +965,10 @@ actor LiveSessionPipeline {
         )
 
         let boundaryTimestamp = last.timestamp
+        speakerDiag(
+            "interrupt boundary -> cut at t=\(fmt3(boundaryTimestamp))s " +
+            "bufferSamples=\(buffer.count) sr=\(fmt3(interruptCheckSampleRate)) ref=\(referenceSource)"
+        )
         await speakerDiarizer.resetInterruptState()
         await cutChunkForSpeakerBoundary(
             config: config,
@@ -944,6 +997,8 @@ actor LiveSessionPipeline {
         guard let currentSpeaker = activeChunkSpeakerID else {
             if case let .existingLabel(label) = observation {
                 activeChunkSpeakerID = label
+                lastKnownSpeakerEmbedding = speakerEmbeddings[label]
+                speakerDiag("probe assigned active speaker -> \(label) (seeded lastKnown)")
             }
             speakerChangeCandidate = nil
             return
@@ -1030,12 +1085,14 @@ actor LiveSessionPipeline {
         case .existingLabel(let label):
             activeChunkSpeakerID = label
             lastKnownSpeakerEmbedding = speakerEmbeddings[label]
+            speakerDiag("trailing observation -> existing \(label)")
             continuation?.yield(.liveSpeaker(label))
         case .newCandidate:
             activeChunkSpeakerID = nil
             // lastKnownSpeakerEmbedding is preserved: it was seeded in checkForSpeakerInterrupt
             // with the interrupting speaker's embedding so interrupt detection is not blind
             // during the ~1.6 s warmup before evaluateSpeakerBoundary assigns a label.
+            speakerDiag("trailing observation -> newCandidate (active speaker cleared)")
             continuation?.yield(.liveSpeaker(nil))
         }
     }
@@ -1088,20 +1145,27 @@ actor LiveSessionPipeline {
                 let sampleRate = chunk.first?.sampleRate ?? 16_000
                 guard let embedding = try await speakerDiarizer.embedding(for: samples, sampleRate: sampleRate),
                       !embedding.isEmpty else {
+                    speakerDiag(
+                        "probe(ML) embedding=nil -> fallback " +
+                        "chunk=\(fmt3(chunkDuration(for: chunk)))s speech=\(fmt3(speechDuration(for: chunk)))s samples=\(samples.count)"
+                    )
                     return probeSpeakerObservationFallback(chunk: chunk)
                 }
                 return probeSpeakerObservation(from: embedding)
             } catch {
                 // Probe errors must not degrade the primary speaker detector.
+                speakerDiag("probe(ML) error -> fallback (\(error.localizedDescription))")
                 return probeSpeakerObservationFallback(chunk: chunk)
             }
         case .loading, .fallback:
+            speakerDiag("probe(\(speakerState == .loading ? "loading" : "fallback")) -> fallback")
             return probeSpeakerObservationFallback(chunk: chunk)
         }
     }
 
     private func probeSpeakerObservation(from embedding: [Float]) -> ProbeSpeakerObservation? {
         guard let closest = closestSpeaker(for: embedding) else {
+            speakerDiag("probe(ML) no known speakers yet -> nil")
             return nil
         }
 
@@ -1109,6 +1173,7 @@ actor LiveSessionPipeline {
         // threshold so the probe more readily returns .newCandidate, enabling
         // faster speaker boundary detection at natural turn boundaries.
         let effectiveSimilarityThreshold: Float
+        let usedTurnTakingThreshold = hadSignificantSilenceBeforeChunk
         if hadSignificantSilenceBeforeChunk {
             effectiveSimilarityThreshold = turnTakingSimilarityThreshold
             hadSignificantSilenceBeforeChunk = false
@@ -1117,8 +1182,16 @@ actor LiveSessionPipeline {
         }
 
         if closest.similarity >= effectiveSimilarityThreshold {
+            speakerDiag(
+                "probe(ML) closest=\(closest.label) sim=\(fmt3(closest.similarity)) " +
+                "threshold=\(fmt3(effectiveSimilarityThreshold)) mode=\(usedTurnTakingThreshold ? "turn" : "normal") -> existing"
+            )
             return .existingLabel(closest.label)
         }
+        speakerDiag(
+            "probe(ML) closest=\(closest.label) sim=\(fmt3(closest.similarity)) " +
+            "threshold=\(fmt3(effectiveSimilarityThreshold)) mode=\(usedTurnTakingThreshold ? "turn" : "normal") -> newCandidate"
+        )
         return .newCandidate
     }
 
@@ -1152,8 +1225,16 @@ actor LiveSessionPipeline {
             (abs(currentSignature.rmsEnergy - signature.rmsEnergy) * 0.20)
 
         if distance <= speakerFallbackThreshold {
+            speakerDiag(
+                "probe(fallback) current=\(currentSpeaker) distance=\(fmt4(distance)) " +
+                "threshold=\(fmt4(speakerFallbackThreshold)) -> existing"
+            )
             return .existingLabel(currentSpeaker)
         }
+        speakerDiag(
+            "probe(fallback) current=\(currentSpeaker) distance=\(fmt4(distance)) " +
+            "threshold=\(fmt4(speakerFallbackThreshold)) -> newCandidate"
+        )
         return .newCandidate
     }
 
@@ -1193,6 +1274,10 @@ actor LiveSessionPipeline {
     }
 
     private func identifySpeaker(chunk: [AudioFrame]) async -> String {
+        let totalSeconds = chunkDuration(for: chunk)
+        let speechSeconds = speechDuration(for: chunk)
+        let samplesCount = chunk.reduce(0) { $0 + $1.samples.count }
+
         switch speakerState {
         case .ready:
             do {
@@ -1200,14 +1285,27 @@ actor LiveSessionPipeline {
                 let sampleRate = chunk.first?.sampleRate ?? 16_000
                 if let embedding = try await speakerDiarizer.embedding(for: samples, sampleRate: sampleRate),
                    !embedding.isEmpty {
+                    speakerDiag(
+                        "identify(ML) embedding ok chunk=\(fmt3(totalSeconds))s speech=\(fmt3(speechSeconds))s " +
+                        "samples=\(samplesCount)"
+                    )
                     return assignSpeaker(from: embedding)
                 }
+                speakerDiag(
+                    "identify(ML) embedding=nil -> fallback chunk=\(fmt3(totalSeconds))s " +
+                    "speech=\(fmt3(speechSeconds))s samples=\(samplesCount)"
+                )
                 return identifySpeakerFallback(chunk: chunk)
             } catch {
                 speakerState = .fallback
+                speakerDiag("identify(ML) error -> fallback and pin state=fallback (\(error.localizedDescription))")
                 return identifySpeakerFallback(chunk: chunk)
             }
         case .loading, .fallback:
+            speakerDiag(
+                "identify(\(speakerState == .loading ? "loading" : "fallback")) -> fallback " +
+                "chunk=\(fmt3(totalSeconds))s speech=\(fmt3(speechSeconds))s samples=\(samplesCount)"
+            )
             return identifySpeakerFallback(chunk: chunk)
         }
     }
@@ -1216,26 +1314,37 @@ actor LiveSessionPipeline {
         guard !speakerEmbeddings.isEmpty else {
             pendingSpeakerEmbedding = nil
             pendingSpeakerChunks = 0
-            return createSpeakerLabel(with: embedding)
+            let label = createSpeakerLabel(with: embedding)
+            speakerDiag("assign(ML) first speaker -> \(label) chunk=\(fmt3(lastChunkDurationSeconds))s")
+            return label
         }
 
         guard let closest = closestSpeaker(for: embedding) else {
             pendingSpeakerEmbedding = nil
             pendingSpeakerChunks = 0
-            return createSpeakerLabel(with: embedding)
+            let label = createSpeakerLabel(with: embedding)
+            speakerDiag("assign(ML) no closest -> \(label) chunk=\(fmt3(lastChunkDurationSeconds))s")
+            return label
         }
 
         if closest.similarity >= speakerSimilarityThreshold {
             pendingSpeakerEmbedding = nil
             pendingSpeakerChunks = 0
             updateSpeaker(label: closest.label, with: embedding)
+            speakerDiag(
+                "assign(ML) existing(main) label=\(closest.label) sim=\(fmt3(closest.similarity)) " +
+                "threshold=\(fmt3(speakerSimilarityThreshold))"
+            )
             return closest.label
         }
 
-        if closest.similarity >= speakerLooseSimilarityThreshold {
+        if closest.similarity >= speakerAssignmentLooseSimilarityThreshold {
             pendingSpeakerEmbedding = nil
             pendingSpeakerChunks = 0
-            updateSpeaker(label: closest.label, with: embedding)
+            speakerDiag(
+                "assign(ML) existing(loose,no-update) label=\(closest.label) sim=\(fmt3(closest.similarity)) " +
+                "threshold=\(fmt3(speakerAssignmentLooseSimilarityThreshold))"
+            )
             return closest.label
         }
 
@@ -1243,6 +1352,10 @@ actor LiveSessionPipeline {
             pendingSpeakerEmbedding = nil
             pendingSpeakerChunks = 0
             updateSpeaker(label: closest.label, with: embedding)
+            speakerDiag(
+                "assign(ML) max-speakers reached -> reuse \(closest.label) sim=\(fmt3(closest.similarity)) " +
+                "count=\(speakerEmbeddings.count)"
+            )
             return closest.label
         }
 
@@ -1252,10 +1365,20 @@ actor LiveSessionPipeline {
             pendingSpeakerEmbedding = nil
             pendingSpeakerChunks = 0
             if lastChunkDurationSeconds >= minSegmentDurationForNewSpeaker {
-                return createSpeakerLabel(with: embedding)
+                let label = createSpeakerLabel(with: embedding)
+                speakerDiag(
+                    "assign(ML) new(immediate) sim=\(fmt3(closest.similarity)) < \(fmt3(immediatNewSpeakerSimilarityThreshold)) " +
+                    "chunk=\(fmt3(lastChunkDurationSeconds))s -> \(label)"
+                )
+                return label
             }
-            // Segment too short — assign to closest but don't accumulate pending.
-            updateSpeaker(label: closest.label, with: embedding)
+            // Segment too short — keep continuity but avoid contaminating the closest
+            // speaker embedding with a likely different/interruption voice.
+            speakerDiag(
+                "assign(ML) immediate-new blocked (short chunk,no-update) -> reuse \(closest.label) " +
+                "sim=\(fmt3(closest.similarity)) chunk=\(fmt3(lastChunkDurationSeconds))s " +
+                "min=\(fmt3(minSegmentDurationForNewSpeaker))s"
+            )
             return closest.label
         }
 
@@ -1280,14 +1403,25 @@ actor LiveSessionPipeline {
             pendingSpeakerChunks = 0
             // Suppress new speaker creation for very short segments (coughs, interjections).
             if lastChunkDurationSeconds < minSegmentDurationForNewSpeaker {
-                updateSpeaker(label: closest.label, with: embedding)
+                speakerDiag(
+                    "assign(ML) pending-new confirmed but blocked (short chunk,no-update) -> reuse \(closest.label) " +
+                    "sim=\(fmt3(closest.similarity)) chunk=\(fmt3(lastChunkDurationSeconds))s"
+                )
                 return closest.label
             }
-            return createSpeakerLabel(with: embedding)
+            let label = createSpeakerLabel(with: embedding)
+            speakerDiag(
+                "assign(ML) new(pending) closest=\(closest.label) sim=\(fmt3(closest.similarity)) -> \(label)"
+            )
+            return label
         }
 
-        // Keep continuity while candidate is warming up.
-        updateSpeaker(label: closest.label, with: embedding)
+        // Keep continuity while candidate is warming up, but do not update the closest
+        // speaker embedding yet. Updating here blends speakers before confirmation.
+        speakerDiag(
+            "assign(ML) warmup(no-update) -> reuse \(closest.label) sim=\(fmt3(closest.similarity)) " +
+            "pending=\(pendingSpeakerChunks)/\(pendingChunksBeforeNewSpeaker) chunk=\(fmt3(lastChunkDurationSeconds))s"
+        )
         return closest.label
     }
 
@@ -1335,6 +1469,7 @@ actor LiveSessionPipeline {
         let label = "Speaker \(Character(scalar))"
         speakerEmbeddings[label] = normalize(embedding)
         speakerObservationCounts[label] = 1
+        speakerDiag("createSpeakerLabel -> \(label) (total=\(speakerEmbeddings.count))")
         return label
     }
 
@@ -1359,6 +1494,10 @@ actor LiveSessionPipeline {
 
         if let closest = closestFallbackSpeaker(for: signature) {
             if closest.distance <= speakerFallbackThreshold || fallbackSpeakerEmbeddings.count >= maxSpeakersPerSession {
+                speakerDiag(
+                    "identify(fallback) reuse \(closest.label) distance=\(fmt4(closest.distance)) " +
+                    "threshold=\(fmt4(speakerFallbackThreshold)) signatures=\(fallbackSpeakerEmbeddings.count)"
+                )
                 return closest.label
             }
         }
@@ -1367,6 +1506,10 @@ actor LiveSessionPipeline {
         let scalar = UnicodeScalar(65 + min(nextIndex, 25)) ?? "Z".unicodeScalars.first!
         let label = "Speaker \(Character(scalar))"
         fallbackSpeakerEmbeddings[label] = signature
+        speakerDiag(
+            "identify(fallback) create \(label) amp=\(fmt3(averageAmplitude)) " +
+            "zcr=\(fmt3(averageZCR)) rms=\(fmt4(rmsEnergy))"
+        )
         return label
     }
 
@@ -1844,11 +1987,11 @@ actor SessionStore {
             return
         }
 
-        guard let rowIndex = session.rows.firstIndex(where: { $0.id == rowID }),
-              let targetProfile = session.speakers[targetSpeakerID]
-        else {
+        guard let rowIndex = session.rows.firstIndex(where: { $0.id == rowID }) else {
             return
         }
+
+        let targetProfile = speakerProfile(for: targetSpeakerID, in: &session.speakers)
 
         let existing = session.rows[rowIndex]
         guard existing.speakerID != targetSpeakerID else {
@@ -2376,6 +2519,247 @@ struct PersistedAppSettings: Codable, Equatable {
     }
 }
 
+actor PostSaveSpeakerClassifier {
+    private struct PendingCandidate {
+        let embedding: [Float]
+        let chunks: Int
+    }
+
+    private let diarizer: SpeakerDiarizationCoreMLService
+    private var diarizerReady = false
+
+    init(diarizer: SpeakerDiarizationCoreMLService) {
+        self.diarizer = diarizer
+    }
+    private var speakerEmbeddingsBySession: [UUID: [String: [Float]]] = [:]
+    private var speakerObservationCountsBySession: [UUID: [String: Int]] = [:]
+    private var pendingCandidateBySession: [UUID: PendingCandidate] = [:]
+
+    private let speakerSimilarityThreshold: Float = 0.72
+    private let speakerLooseSimilarityThreshold: Float = 0.62
+    private let newSpeakerCandidateSimilarity: Float = 0.58
+    private let immediateNewSpeakerSimilarityThreshold: Float = 0.50
+    private let pendingChunksBeforeNewSpeaker = 2
+    private let minSegmentDurationForNewSpeaker: Double = 1.0
+    private let maxSpeakersPerSession = 8
+
+    func classify(
+        sessionID: UUID,
+        samples: [Float],
+        sampleRate: Double,
+        durationSeconds: Double
+    ) async -> String? {
+        guard !samples.isEmpty, sampleRate > 0 else {
+            return nil
+        }
+
+        if !diarizerReady {
+            do {
+                try await diarizer.prepareIfNeeded()
+                diarizerReady = true
+            } catch {
+                return nil
+            }
+        }
+
+        guard let embedding = try? await diarizer.embedding(for: samples, sampleRate: sampleRate),
+              !embedding.isEmpty
+        else {
+            return nil
+        }
+
+        return assign(
+            sessionID: sessionID,
+            embedding: embedding,
+            durationSeconds: durationSeconds
+        )
+    }
+
+    private func assign(
+        sessionID: UUID,
+        embedding: [Float],
+        durationSeconds: Double
+    ) -> String {
+        var speakerEmbeddings = speakerEmbeddingsBySession[sessionID] ?? [:]
+        var observationCounts = speakerObservationCountsBySession[sessionID] ?? [:]
+
+        defer {
+            speakerEmbeddingsBySession[sessionID] = speakerEmbeddings
+            speakerObservationCountsBySession[sessionID] = observationCounts
+        }
+
+        guard !speakerEmbeddings.isEmpty else {
+            pendingCandidateBySession[sessionID] = nil
+            return createSpeakerLabel(in: &speakerEmbeddings, counts: &observationCounts, with: embedding)
+        }
+
+        guard let closest = closestSpeaker(for: embedding, in: speakerEmbeddings) else {
+            pendingCandidateBySession[sessionID] = nil
+            return createSpeakerLabel(in: &speakerEmbeddings, counts: &observationCounts, with: embedding)
+        }
+
+        if closest.similarity >= speakerSimilarityThreshold {
+            pendingCandidateBySession[sessionID] = nil
+            updateSpeaker(
+                label: closest.label,
+                with: embedding,
+                in: &speakerEmbeddings,
+                counts: &observationCounts
+            )
+            return closest.label
+        }
+
+        // Keep loose matches for continuity, but avoid updating the centroid.
+        if closest.similarity >= speakerLooseSimilarityThreshold {
+            pendingCandidateBySession[sessionID] = nil
+            return closest.label
+        }
+
+        if speakerEmbeddings.count >= maxSpeakersPerSession {
+            pendingCandidateBySession[sessionID] = nil
+            return closest.label
+        }
+
+        if closest.similarity < immediateNewSpeakerSimilarityThreshold {
+            pendingCandidateBySession[sessionID] = nil
+            if durationSeconds >= minSegmentDurationForNewSpeaker {
+                return createSpeakerLabel(in: &speakerEmbeddings, counts: &observationCounts, with: embedding)
+            }
+            return closest.label
+        }
+
+        if let pending = pendingCandidateBySession[sessionID],
+           cosineSimilarity(pending.embedding, embedding) >= newSpeakerCandidateSimilarity {
+            let newWeight = 1.0 / Float(pending.chunks + 1)
+            let oldWeight = 1.0 - newWeight
+            let averaged = zip(pending.embedding, embedding).map { old, new in
+                old * oldWeight + new * newWeight
+            }
+            pendingCandidateBySession[sessionID] = PendingCandidate(
+                embedding: normalize(averaged),
+                chunks: pending.chunks + 1
+            )
+        } else {
+            pendingCandidateBySession[sessionID] = PendingCandidate(
+                embedding: normalize(embedding),
+                chunks: 1
+            )
+        }
+
+        if let pending = pendingCandidateBySession[sessionID],
+           pending.chunks >= pendingChunksBeforeNewSpeaker,
+           durationSeconds >= minSegmentDurationForNewSpeaker {
+            pendingCandidateBySession[sessionID] = nil
+            return createSpeakerLabel(in: &speakerEmbeddings, counts: &observationCounts, with: pending.embedding)
+        }
+
+        // Ambiguous candidate: keep continuity but do not update embeddings yet.
+        return closest.label
+    }
+
+    private func closestSpeaker(
+        for embedding: [Float],
+        in speakerEmbeddings: [String: [Float]]
+    ) -> (label: String, similarity: Float)? {
+        var best: (label: String, similarity: Float)?
+
+        for (label, reference) in speakerEmbeddings {
+            let similarity = cosineSimilarity(embedding, reference)
+            if let currentBest = best {
+                if similarity > currentBest.similarity {
+                    best = (label, similarity)
+                }
+            } else {
+                best = (label, similarity)
+            }
+        }
+
+        return best
+    }
+
+    private func updateSpeaker(
+        label: String,
+        with embedding: [Float],
+        in speakerEmbeddings: inout [String: [Float]],
+        counts: inout [String: Int]
+    ) {
+        guard let current = speakerEmbeddings[label] else {
+            speakerEmbeddings[label] = normalize(embedding)
+            counts[label] = 1
+            return
+        }
+
+        let previousCount = counts[label] ?? 1
+        let newCount = previousCount + 1
+        let length = min(current.count, embedding.count)
+        var merged = current
+
+        for index in 0..<length {
+            let weighted = (current[index] * Float(previousCount)) + embedding[index]
+            merged[index] = weighted / Float(newCount)
+        }
+
+        speakerEmbeddings[label] = normalize(merged)
+        counts[label] = newCount
+    }
+
+    private func createSpeakerLabel(
+        in speakerEmbeddings: inout [String: [Float]],
+        counts: inout [String: Int],
+        with embedding: [Float]
+    ) -> String {
+        let nextIndex = speakerEmbeddings.count
+        let scalar = UnicodeScalar(65 + min(nextIndex, 25)) ?? "Z".unicodeScalars.first!
+        let label = "Speaker \(Character(scalar))"
+        speakerEmbeddings[label] = normalize(embedding)
+        counts[label] = 1
+        return label
+    }
+
+    private func cosineSimilarity(_ lhs: [Float], _ rhs: [Float]) -> Float {
+        let length = min(lhs.count, rhs.count)
+        guard length > 0 else {
+            return -1
+        }
+
+        var dot: Float = 0
+        var lhsNorm: Float = 0
+        var rhsNorm: Float = 0
+
+        for index in 0..<length {
+            let left = lhs[index]
+            let right = rhs[index]
+            dot += left * right
+            lhsNorm += left * left
+            rhsNorm += right * right
+        }
+
+        guard lhsNorm > 0, rhsNorm > 0 else {
+            return -1
+        }
+
+        return dot / (sqrt(lhsNorm) * sqrt(rhsNorm))
+    }
+
+    private func normalize(_ vector: [Float]) -> [Float] {
+        guard !vector.isEmpty else {
+            return vector
+        }
+
+        var sumSquares: Float = 0
+        for value in vector {
+            sumSquares += value * value
+        }
+
+        let length = sqrt(sumSquares)
+        guard length > 0 else {
+            return vector
+        }
+
+        return vector.map { $0 / length }
+    }
+}
+
 struct AppSettingsStore {
     private let userDefaults: UserDefaults
     private let storageKey: String
@@ -2540,6 +2924,9 @@ final class AppBackend: ObservableObject {
     }()
     private let settingsStore: AppSettingsStore
     private let chunkWriter = ChunkAudioWriter()
+    private lazy var postSaveSpeakerClassifier = PostSaveSpeakerClassifier(
+        diarizer: pipeline.speakerDiarizer
+    )
     private let whisperTranscriber = WhisperGGMLCoreMLService()
 
     private var streamTask: Task<Void, Never>?
@@ -4089,6 +4476,25 @@ final class AppBackend: ObservableObject {
                         rowID: adjustedTranscript.id,
                         chunkURL: chunkURL
                     )
+
+                    let postSaveDuration = max(
+                        adjustedTranscript.endOffset - adjustedTranscript.startOffset,
+                        0
+                    )
+                    if let finalSpeakerID = await self.postSaveSpeakerClassifier.classify(
+                        sessionID: sessionID,
+                        samples: adjustedTranscript.samples,
+                        sampleRate: adjustedTranscript.sampleRate,
+                        durationSeconds: postSaveDuration
+                    ),
+                       finalSpeakerID != adjustedTranscript.speakerID {
+                        await self.sessionStore.changeTranscriptRowSpeaker(
+                            sessionID: sessionID,
+                            rowID: adjustedTranscript.id,
+                            targetSpeakerID: finalSpeakerID
+                        )
+                    }
+
                     await self.refreshSessionsFromStore()
 
                     await MainActor.run {
