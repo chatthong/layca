@@ -574,7 +574,9 @@ struct MacChatWorkspaceView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         List {
-                            ForEach(liveChatItems, id: \.id) { item in
+                            ForEach(Array(liveChatItems.enumerated()), id: \.element.id) { index, item in
+                                let isLastInRun = index == liveChatItems.count - 1
+                                    || liveChatItems[index + 1].speakerID != item.speakerID
                                 TranscriptBubbleOptionButton(
                                     item: item,
                                     liveChatItems: liveChatItems,
@@ -592,12 +594,27 @@ struct MacChatWorkspaceView: View {
                                     onChangeSpeaker: onChangeSpeaker,
                                     onRetranscribeTranscript: onRetranscribeTranscript
                                 ) {
-                                    transcriptRow(
-                                        for: item,
-                                        isTranscribing: transcribingRowIDs.contains(item.id),
-                                        isQueued: queuedRetranscriptionRowIDs.contains(item.id),
-                                        isPlaybackActive: item.id == activePlaybackRowID
-                                    )
+                                    HStack(alignment: .top, spacing: 10) {
+                                        if isLastInRun {
+                                            let imageName = item.avatarImageName ?? {
+                                                let hash = item.speakerID.unicodeScalars.reduce(0) { $0 &* 31 &+ Int($1.value) }
+                                                return "avatar_\(abs(hash) % 24 + 1)"
+                                            }()
+                                            SVGAvatarView(name: imageName, size: 34)
+                                                .overlay(Circle().stroke(.white.opacity(0.6), lineWidth: 0.8))
+                                                .shadow(color: .black.opacity(0.12), radius: 7, x: 0, y: 4)
+                                        } else {
+                                            Color.clear
+                                                .frame(width: 34, height: 1)
+                                                .accessibilityHidden(true)
+                                        }
+                                        transcriptRow(
+                                            for: item,
+                                            isTranscribing: transcribingRowIDs.contains(item.id),
+                                            isQueued: queuedRetranscriptionRowIDs.contains(item.id),
+                                            isPlaybackActive: item.id == activePlaybackRowID
+                                        )
+                                    }
                                 }
                                 .id(item.id)
                                 .onAppear {
