@@ -13,26 +13,21 @@ struct SVGAvatarView: View {
     }
 
     var body: some View {
-        Group {
-            if let image = SVGAvatarCache.shared.image(named: name) {
-                // platformImage() returns concrete Image so .resizable() resolves.
-                // Putting #if canImport inside a @ViewBuilder makes the branch type
-                // opaque (some View), which loses .resizable() — helper avoids that.
-                platformImage(image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                // Placeholder while SVG is being rendered — plain grey circle.
-                Circle()
-                    .fill(Color(.systemGray4))
-            }
+        if let image = SVGAvatarCache.shared.image(named: name) {
+            platformImage(image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+        } else {
+            Circle()
+                .fill(Color(.systemGray4))
+                .frame(width: size, height: size)
         }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
     }
 
-    // MARK: - Helpers
-
+    // Returns a concrete Image type so .resizable() resolves correctly.
+    // #if inside @ViewBuilder makes the result opaque (some View), losing Image modifiers.
     private func platformImage(_ image: PlatformImage) -> Image {
 #if canImport(UIKit)
         Image(uiImage: image)
