@@ -113,6 +113,7 @@
 			);
 			name = layca;
 			packageProductDependencies = (
+				D73670352F500E9E00BDD3BB /* SVGKit */,
 			);
 			productName = layca;
 			productReference = D7BE3AA92F38D7A2000297EC /* layca.app */;
@@ -196,6 +197,9 @@
 			);
 			mainGroup = D7BE3AA02F38D7A2000297EC;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D73670342F500E9E00BDD3BB /* XCRemoteSwiftPackageReference "SVGKit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D7BE3AAA2F38D7A2000297EC /* Products */;
 			projectDirPath = "";
@@ -660,6 +664,22 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D73670352F500E9E00BDD3BB /* SVGKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D73670342F500E9E00BDD3BB /* XCRemoteSwiftPackageReference "SVGKit" */;
+			productName = SVGKit;
+		};
+		D73670342F500E9E00BDD3BB /* XCRemoteSwiftPackageReference "SVGKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SVGKit/SVGKit";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = D7BE3AA12F38D7A2000297EC /* Project object */;
 }
