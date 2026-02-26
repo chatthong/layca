@@ -23,7 +23,7 @@ final class SVGAvatarCache {
     func image(named name: String) -> PlatformImage? {
         if let hit = cache[name] { return hit }
         guard let asset = NSDataAsset(name: name) else { return nil }
-        guard let svg = SVGKImage(data: asset.data, withOptions: nil) else { return nil }
+        guard let svg = SVGKImage(data: asset.data) else { return nil }
         svg.size = CGSize(width: 72, height: 72)
 #if canImport(UIKit)
         let img = svg.uiImage
