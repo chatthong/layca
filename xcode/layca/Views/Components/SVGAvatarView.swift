@@ -21,7 +21,7 @@ struct SVGAvatarView: View {
                 .clipShape(Circle())
         } else {
             Circle()
-                .fill(Color(.systemGray4))
+                .fill(Color.secondary.opacity(0.3))
                 .frame(width: size, height: size)
         }
     }
