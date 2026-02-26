@@ -7,8 +7,6 @@ struct SVGAvatarView: View {
     let name: String
     let size: CGFloat
 
-    @ObservedObject private var cache: SVGAvatarCache = .shared
-
     init(name: String, size: CGFloat = 34) {
         self.name = name
         self.size = size
@@ -16,12 +14,11 @@ struct SVGAvatarView: View {
 
     var body: some View {
         Group {
-            if let image = cache.image(named: name) {
-#if canImport(UIKit)
-                Image(uiImage: image)
-#else
-                Image(nsImage: image)
-#endif
+            if let image = SVGAvatarCache.shared.image(named: name) {
+                // platformImage() returns concrete Image so .resizable() resolves.
+                // Putting #if canImport inside a @ViewBuilder makes the branch type
+                // opaque (some View), which loses .resizable() — helper avoids that.
+                platformImage(image)
                     .resizable()
                     .scaledToFill()
             } else {
@@ -32,5 +29,15 @@ struct SVGAvatarView: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
+    }
+
+    // MARK: - Helpers
+
+    private func platformImage(_ image: PlatformImage) -> Image {
+#if canImport(UIKit)
+        Image(uiImage: image)
+#else
+        Image(nsImage: image)
+#endif
     }
 }

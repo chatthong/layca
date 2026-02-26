@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import Observation
 
 // MARK: - Platform image alias
 
@@ -16,17 +17,17 @@ typealias PlatformImage = NSImage
 /// Pre-renders all 24 avatar SVGs via WKWebView at app launch so SwiftUI
 /// can read them synchronously from the cache later.
 ///
-/// WKWebView is used instead of the xcassets Image() path because WebKit's
-/// full SVG renderer supports linearGradient / radialGradient, whereas
-/// Xcode's built-in SVG rasterizer in imageset assets strips gradient fills.
-@MainActor
-final class SVGAvatarCache: ObservableObject {
+/// Uses @Observable (Swift/iOS 17+) rather than ObservableObject because
+/// @MainActor-isolated classes fail the ObservableObject conformance check
+/// in Swift 6 strict concurrency mode.
+@Observable
+final class SVGAvatarCache {
 
     static let shared = SVGAvatarCache()
 
-    /// Keyed by asset name, e.g. "avatar_1". Published so SwiftUI views
-    /// automatically refresh when a new image becomes ready.
-    @Published private(set) var images: [String: PlatformImage] = [:]
+    /// Keyed by asset name, e.g. "avatar_1". @Observable tracks accesses
+    /// automatically — no @Published needed.
+    var images: [String: PlatformImage] = [:]
 
     private init() {}
 
