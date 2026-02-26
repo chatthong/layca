@@ -575,8 +575,13 @@ struct MacChatWorkspaceView: View {
                     } else {
                         List {
                             ForEach(Array(liveChatItems.enumerated()), id: \.element.id) { index, item in
-                                let isLastInRun = index == liveChatItems.count - 1
-                                    || liveChatItems[index + 1].speakerID != item.speakerID
+                                let isFirstInRun = index == 0
+                                    || liveChatItems[index - 1].speakerID != item.speakerID
+                                VStack(alignment: .leading, spacing: 0) {
+                                    if index > 0 && liveChatItems[index - 1].speakerID != item.speakerID {
+                                        speakerChangeSeparator(for: item)
+                                            .padding(.bottom, 6)
+                                    }
                                 TranscriptBubbleOptionButton(
                                     item: item,
                                     liveChatItems: liveChatItems,
@@ -595,12 +600,8 @@ struct MacChatWorkspaceView: View {
                                     onRetranscribeTranscript: onRetranscribeTranscript
                                 ) {
                                     HStack(alignment: .top, spacing: 10) {
-                                        if isLastInRun {
-                                            let imageName = item.avatarImageName ?? {
-                                                let hash = item.speakerID.unicodeScalars.reduce(0) { $0 &* 31 &+ Int($1.value) }
-                                                return "avatar_\(abs(hash) % 24 + 1)"
-                                            }()
-                                            SVGAvatarView(name: imageName, size: 34)
+                                        if isFirstInRun {
+                                            NativeAvatarView(speakerID: item.speakerID, size: 34)
                                                 .overlay(Circle().stroke(.white.opacity(0.6), lineWidth: 0.8))
                                                 .shadow(color: .black.opacity(0.12), radius: 7, x: 0, y: 4)
                                         } else {
@@ -616,6 +617,7 @@ struct MacChatWorkspaceView: View {
                                         )
                                     }
                                 }
+                                } // VStack
                                 .id(item.id)
                                 .onAppear {
                                     handleTranscriptRowVisible(item.id)
@@ -780,6 +782,34 @@ struct MacChatWorkspaceView: View {
             .easeInOut(duration: 0.2),
             value: isTranscribing || isQueued || isPlaybackActive
         )
+    }
+
+    private func speakerChangeSeparator(for item: TranscriptRow) -> some View {
+        HStack(spacing: 8) {
+            Rectangle()
+                .fill(Color.primary.opacity(0.08))
+                .frame(height: 1)
+
+            Text(item.speaker)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(item.avatarColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule()
+                        .fill(item.avatarColor.opacity(0.12))
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(item.avatarColor.opacity(0.25), lineWidth: 0.5)
+                        )
+                )
+
+            Rectangle()
+                .fill(Color.primary.opacity(0.08))
+                .frame(height: 1)
+        }
+        .padding(.vertical, 2)
+        .accessibilityHidden(true)
     }
 
     private func displayText(for item: TranscriptRow) -> String {

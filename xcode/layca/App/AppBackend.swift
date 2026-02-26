@@ -1611,6 +1611,14 @@ actor SessionStore {
         let label: String
         let colorHex: String
         let avatarSymbol: String
+        let avatarImageName: String?
+
+        init(label: String, colorHex: String, avatarSymbol: String, avatarImageName: String? = nil) {
+            self.label = label
+            self.colorHex = colorHex
+            self.avatarSymbol = avatarSymbol
+            self.avatarImageName = avatarImageName
+        }
     }
 
     private struct SessionMetadataSnapshot: Codable {
@@ -1636,6 +1644,7 @@ actor SessionStore {
         let language: String
         let avatarSymbol: String?
         let avatarColorHex: String?
+        let avatarImageName: String?
         let startOffset: Double?
         let endOffset: Double?
         let chunkURL: URL?
@@ -1829,7 +1838,8 @@ actor SessionStore {
             avatarSymbol: profile.avatarSymbol,
             avatarPaletteIndex: paletteIndex,
             startOffset: event.startOffset,
-            endOffset: event.endOffset
+            endOffset: event.endOffset,
+            avatarImageName: profile.avatarImageName
         )
 
         session.rows.append(row)
@@ -1869,6 +1879,7 @@ actor SessionStore {
             startOffset: existing.startOffset,
             endOffset: existing.endOffset,
             chunkURL: existing.chunkURL,
+            avatarImageName: existing.avatarImageName,
             updatedAt: now
         )
         session.updatedAt = now
@@ -1922,6 +1933,7 @@ actor SessionStore {
             startOffset: existing.startOffset,
             endOffset: existing.endOffset,
             chunkURL: chunkURL,
+            avatarImageName: existing.avatarImageName,
             updatedAt: now
         )
         session.updatedAt = now
@@ -1949,7 +1961,8 @@ actor SessionStore {
         session.speakers[speakerID] = SpeakerProfile(
             label: trimmed,
             colorHex: profile.colorHex,
-            avatarSymbol: profile.avatarSymbol
+            avatarSymbol: profile.avatarSymbol,
+            avatarImageName: profile.avatarImageName
         )
 
         let now = Date()
@@ -1967,6 +1980,7 @@ actor SessionStore {
                 startOffset: existing.startOffset,
                 endOffset: existing.endOffset,
                 chunkURL: existing.chunkURL,
+                avatarImageName: existing.avatarImageName,
                 updatedAt: now
             )
         }
@@ -2011,6 +2025,7 @@ actor SessionStore {
             startOffset: existing.startOffset,
             endOffset: existing.endOffset,
             chunkURL: existing.chunkURL,
+            avatarImageName: targetProfile.avatarImageName,
             updatedAt: existing.updatedAt
         )
 
@@ -2024,7 +2039,8 @@ actor SessionStore {
         in table: inout [String: SpeakerProfile],
         preferredName: String? = nil,
         preferredColorHex: String? = nil,
-        preferredAvatarSymbol: String? = nil
+        preferredAvatarSymbol: String? = nil,
+        preferredAvatarImageName: String? = nil
     ) -> SpeakerProfile {
         if let profile = table[speakerID] {
             return profile
@@ -2039,7 +2055,19 @@ actor SessionStore {
         let symbol = preferredAvatarSymbol
             ?? Self.speakerAvatarSymbols[Self.stableIndex(for: speakerID, modulo: Self.speakerAvatarSymbols.count)]
 
-        let profile = SpeakerProfile(label: resolvedName, colorHex: colorHex, avatarSymbol: symbol)
+        let avatarImageName: String = {
+            if let preferred = preferredAvatarImageName {
+                return preferred
+            }
+            let usedImages = Set(table.values.compactMap(\.avatarImageName))
+            let available = Self.avatarImageNames.filter { !usedImages.contains($0) }
+            if let pick = available.randomElement() {
+                return pick
+            }
+            return Self.avatarImageNames[Self.stableIndex(for: speakerID, modulo: Self.avatarImageNames.count)]
+        }()
+
+        let profile = SpeakerProfile(label: resolvedName, colorHex: colorHex, avatarSymbol: symbol, avatarImageName: avatarImageName)
         table[speakerID] = profile
         return profile
     }
@@ -2197,7 +2225,8 @@ actor SessionStore {
                     in: &speakers,
                     preferredName: snapshot.speaker,
                     preferredColorHex: snapshot.avatarColorHex,
-                    preferredAvatarSymbol: snapshot.avatarSymbol
+                    preferredAvatarSymbol: snapshot.avatarSymbol,
+                    preferredAvatarImageName: snapshot.avatarImageName
                 )
                 let timestamp = Self.resolvedTimestamp(
                     snapshot.time,
@@ -2216,6 +2245,7 @@ actor SessionStore {
                     startOffset: snapshot.startOffset,
                     endOffset: snapshot.endOffset,
                     chunkURL: TranscriptRow.resolvedChunkURL(snapshot.chunkURL, relativeTo: sessionDirectory),
+                    avatarImageName: profile.avatarImageName,
                     updatedAt: snapshot.updatedAt ?? .distantPast
                 )
             }
@@ -2240,7 +2270,8 @@ actor SessionStore {
                     avatarSymbol: profile.avatarSymbol,
                     avatarPaletteIndex: Self.speakerColorPalette.firstIndex(of: profile.colorHex) ?? 0,
                     startOffset: snapshot.startOffset,
-                    endOffset: snapshot.endOffset
+                    endOffset: snapshot.endOffset,
+                    avatarImageName: profile.avatarImageName
                 )
             }
         }
@@ -2266,6 +2297,7 @@ actor SessionStore {
         "person.crop.circle.badge.clock",
         "person.crop.circle.badge.questionmark"
     ]
+    private static let avatarImageNames: [String] = (1...24).map { "avatar_\($0)" }
 
     private static func stableIndex(for value: String, modulo: Int) -> Int {
         guard modulo > 0 else {
@@ -2338,6 +2370,7 @@ actor SessionStore {
                 language: row.language,
                 avatarSymbol: row.avatarSymbol,
                 avatarColorHex: session.speakers[row.speakerID]?.colorHex,
+                avatarImageName: row.avatarImageName,
                 startOffset: row.startOffset,
                 endOffset: row.endOffset,
                 chunkURL: row.persistedChunkURL(relativeTo: sessionDirectory),

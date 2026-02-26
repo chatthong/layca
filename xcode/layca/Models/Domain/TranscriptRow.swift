@@ -14,6 +14,8 @@ struct TranscriptRow: Identifiable {
     let endOffset: Double?
     /// Optional per-bubble audio file (Sprint 8+). Legacy sessions leave this nil.
     var chunkURL: URL?
+    /// Optional SVG avatar image name (e.g. "avatar_3"). Legacy sessions fall back to generated index.
+    var avatarImageName: String?
     var updatedAt: Date
 
     var avatarColor: Color {
@@ -42,6 +44,7 @@ struct TranscriptRow: Identifiable {
         startOffset: Double?,
         endOffset: Double?,
         chunkURL: URL? = nil,
+        avatarImageName: String? = nil,
         updatedAt: Date = Date()
     ) {
         self.id = id
@@ -55,6 +58,7 @@ struct TranscriptRow: Identifiable {
         self.startOffset = startOffset
         self.endOffset = endOffset
         self.chunkURL = chunkURL
+        self.avatarImageName = avatarImageName
         self.updatedAt = updatedAt
     }
 

@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D736710F2F5011F400BDD3BB /* SVGKit in Frameworks */ = {isa = PBXBuildFile; productRef = D73670352F500E9E00BDD3BB /* SVGKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		D7BE3AB72F38D7A3000297EC /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D736710F2F5011F400BDD3BB /* SVGKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -666,11 +671,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		D73670352F500E9E00BDD3BB /* SVGKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = D73670342F500E9E00BDD3BB /* XCRemoteSwiftPackageReference "SVGKit" */;
-			productName = SVGKit;
-		};
 		D73670342F500E9E00BDD3BB /* XCRemoteSwiftPackageReference "SVGKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SVGKit/SVGKit";
@@ -680,6 +680,14 @@
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D73670352F500E9E00BDD3BB /* SVGKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D73670342F500E9E00BDD3BB /* XCRemoteSwiftPackageReference "SVGKit" */;
+			productName = SVGKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D7BE3AA12F38D7A2000297EC /* Project object */;
 }

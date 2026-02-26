@@ -858,13 +858,13 @@ struct ChatTabView: View {
                 // isSameAsPrevious: controls inter-bubble vertical spacing.
                 let isSameAsPrevious = index > 0
                     && liveChatItems[index - 1].speakerID == item.speakerID
-                // isLastInRun: controls avatar + speaker-name visibility.
-                // Avatar and name appear only on the last bubble of each speaker's run.
-                let isLastInRun = index == liveChatItems.count - 1
-                    || liveChatItems[index + 1].speakerID != item.speakerID
+                // isFirstInRun: avatar shows on the FIRST bubble of each speaker's run
+                // so the speaker is immediately identifiable at the start of their turn.
+                let isFirstInRun = index == 0
+                    || liveChatItems[index - 1].speakerID != item.speakerID
 
                 HStack(alignment: .top, spacing: 10) {
-                    avatarView(for: item, isLastInRun: isLastInRun)
+                    avatarView(for: item, isFirstInRun: isFirstInRun)
                     TranscriptBubbleOptionButton(
                         item: item,
                         liveChatItems: liveChatItems,
@@ -884,7 +884,6 @@ struct ChatTabView: View {
                     ) {
                         messageBubble(
                             for: item,
-                            isLastInRun: isLastInRun,
                             isPlaybackActive: item.id == activePlaybackRowID
                         )
                     }
@@ -956,28 +955,23 @@ struct ChatTabView: View {
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
-    private func avatarView(for item: TranscriptRow, isLastInRun: Bool = true) -> some View {
-        Group {
-            if isLastInRun {
-                let imageName = item.avatarImageName ?? {
-                    let hash = item.speakerID.unicodeScalars.reduce(0) { $0 &* 31 &+ Int($1.value) }
-                    return "avatar_\(abs(hash) % 24 + 1)"
-                }()
-                SVGAvatarView(name: imageName, size: 34)
-                    .overlay(Circle().stroke(.white.opacity(0.6), lineWidth: 0.8))
-                    .shadow(color: .black.opacity(0.12), radius: 7, x: 0, y: 4)
-                    .accessibilityLabel("Speaker: \(item.speaker)")
-            } else {
-                // Non-last bubble in a same-speaker run: empty column to keep
-                // bubbles left-aligned with last bubble in the group.
-                Color.clear
-                    .frame(width: 34, height: 1)
-                    .accessibilityHidden(true)
-            }
+    @ViewBuilder
+    private func avatarView(for item: TranscriptRow, isFirstInRun: Bool = true) -> some View {
+        if isFirstInRun {
+            NativeAvatarView(speakerID: item.speakerID, size: 34)
+                .overlay(Circle().stroke(.white.opacity(0.6), lineWidth: 0.8))
+                .shadow(color: .black.opacity(0.12), radius: 7, x: 0, y: 4)
+                .accessibilityLabel("Speaker: \(item.speaker)")
+        } else {
+            // Non-first bubble in a same-speaker run: empty column keeps
+            // bubbles left-aligned with the first bubble in the group.
+            Color.clear
+                .frame(width: 34, height: 1)
+                .accessibilityHidden(true)
         }
     }
 
-    private func messageBubble(for item: TranscriptRow, isLastInRun: Bool = true, isPlaybackActive: Bool) -> some View {
+    private func messageBubble(for item: TranscriptRow, isPlaybackActive: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 speakerMeta(for: item)
