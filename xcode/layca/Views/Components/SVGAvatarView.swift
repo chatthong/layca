@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Displays a pre-rendered SVG avatar from SVGAvatarCache.
-/// Shows a grey placeholder circle while the async render completes.
+/// Displays an SVG avatar rendered by SVGKit (supports gradients).
 struct SVGAvatarView: View {
 
     let name: String
@@ -26,8 +25,6 @@ struct SVGAvatarView: View {
         }
     }
 
-    // Returns a concrete Image type so .resizable() resolves correctly.
-    // #if inside @ViewBuilder makes the result opaque (some View), losing Image modifiers.
     private func platformImage(_ image: PlatformImage) -> Image {
 #if canImport(UIKit)
         Image(uiImage: image)
