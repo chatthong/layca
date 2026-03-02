@@ -71,9 +71,17 @@ Layca (เลขา, "secretary") is a native Apple meeting recorder for iOS/iPa
 
 1. **Understand**: Read the relevant files before writing a single line
 2. **Plan mentally**: Identify exactly which files need to change and why
-3. **Implement**: Write complete, compilable code — no placeholders, no TODOs unless noted
-4. **Verify call sites**: After editing, grep for all usages of changed symbols and update them
-5. **Report**: Return a concise summary: files changed, what was done, any caveats
+3. **Implement via Codex CLI** (preferred — saves tokens):
+   ```bash
+   /opt/homebrew/bin/codex exec --full-auto \
+     -C /Users/ter/Desktop/layca \
+     -o /tmp/result.md \
+     "DETAILED IMPLEMENTATION PROMPT"
+   ```
+   Write a precise, self-contained prompt for Codex that includes: file paths, function signatures, exact behavior. Read `/tmp/result.md` to verify what Codex did.
+4. **Fall back to direct Write/Edit** only for small targeted changes (< 20 lines)
+5. **Verify call sites**: After editing, grep for all usages of changed symbols and update them
+6. **Report**: Return a concise summary: files changed, what was done, any caveats
 
 ## Output Format
 
