@@ -3,7 +3,8 @@
 //  layca
 //
 //  On-device summary using Qwen3-4B-4bit via MLX Swift.
-//  Model auto-downloads from HuggingFace on first use and is cached locally.
+//  Prefers bundled model in Models/RuntimeAssets/Qwen3-4B-4bit/ when all required files
+//  are present; otherwise auto-downloads from HuggingFace on first use.
 //
 
 import Foundation
@@ -28,14 +29,43 @@ Omit the Action Items section entirely if there are no action items.
 Be concise. Do not repeat the transcript verbatim. Do not add any preamble or sign-off.
 """
 
-// MARK: - Model configuration
+// MARK: - Model paths
 
-private let kQwenModelID = "mlx-community/Qwen3-4B-4bit"
+private let kQwenModelID  = "mlx-community/Qwen3-4B-4bit"
+
+/// Returns the local RuntimeAssets model directory if all required MLX files are present,
+/// otherwise returns nil so the service falls back to HuggingFace download.
+private func localModelDirectoryIfReady() -> URL? {
+    // RuntimeAssets lives next to the Swift source tree during development.
+    // In a shipped app bundle the model would need to be copied into the bundle resources.
+    let candidates: [URL] = [
+        // Development: source-tree relative path via Bundle
+        Bundle.main.bundleURL
+            .deletingLastPathComponent()          // DerivedData/.../Build/Products/Debug/
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appending(path: "xcode/layca/Models/RuntimeAssets/Qwen3-4B-4bit"),
+        // Bundle resource (for future: copy model into Xcode target resources)
+        Bundle.main.bundleURL.appending(path: "Qwen3-4B-4bit"),
+    ]
+
+    let required = ["config.json", "tokenizer.json", "tokenizer_config.json"]
+    let fm = FileManager.default
+
+    for dir in candidates {
+        let allPresent = required.allSatisfy { file in
+            fm.fileExists(atPath: dir.appending(path: file).path)
+        }
+        if allPresent { return dir }
+    }
+    return nil
+}
 
 // MARK: - Service
 
 /// Actor that owns the MLX Qwen3 model. Safe to call from any async context.
-/// Model is loaded lazily on first summarise call — expect ~5–15s cold-start on first use.
+/// Cold-start: ~5–15 s on first call (model load). Subsequent calls are instant.
 actor QwenSummaryService {
 
     static let shared = QwenSummaryService()
@@ -46,8 +76,7 @@ actor QwenSummaryService {
     // MARK: - Public API
 
     /// Summarises a NotepadMinutes-format transcript.
-    /// Yields the full response as a single chunk (non-streaming for simplicity).
-    /// Upgrade to streaming via `modelContainer.perform` + `MLXLMCommon.generate` if needed.
+    /// Yields the full response as a single string chunk.
     func summarize(notepadMinutesText: String) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             Task {
@@ -68,12 +97,19 @@ actor QwenSummaryService {
 
     private func loadIfNeeded() async throws -> ModelContainer {
         if let container = modelContainer { return container }
-        let config = ModelConfiguration(id: kQwenModelID)
+
+        let config: ModelConfiguration
+        if let localDir = localModelDirectoryIfReady() {
+            // All model files present locally — no network needed
+            config = ModelConfiguration(directory: localDir)
+        } else {
+            // Fall back to HuggingFace download (cached after first run)
+            config = ModelConfiguration(id: kQwenModelID)
+        }
+
         let container = try await MLXModelFactory.shared.loadContainer(
             configuration: config
-        ) { _ in
-            // Download/load progress — forward to UI if needed in future
-        }
+        ) { _ in }
         modelContainer = container
         return container
     }
