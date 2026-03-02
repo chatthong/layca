@@ -36,27 +36,23 @@ private let kQwenModelID  = "mlx-community/Qwen3-4B-4bit"
 /// Returns the local RuntimeAssets model directory if all required MLX files are present,
 /// otherwise returns nil so the service falls back to HuggingFace download.
 private func localModelDirectoryIfReady() -> URL? {
-    // RuntimeAssets lives next to the Swift source tree during development.
-    // In a shipped app bundle the model would need to be copied into the bundle resources.
-    let candidates: [URL] = [
-        // Development: source-tree relative path via Bundle
-        Bundle.main.bundleURL
-            .deletingLastPathComponent()          // DerivedData/.../Build/Products/Debug/
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appending(path: "xcode/layca/Models/RuntimeAssets/Qwen3-4B-4bit"),
-        // Bundle resource (for future: copy model into Xcode target resources)
-        Bundle.main.bundleURL.appending(path: "Qwen3-4B-4bit"),
-    ]
+    // #file resolves to this source file's compile-time path, e.g.:
+    //   .../xcode/layca/Libraries/QwenSummaryService.swift
+    // From there: up 1 = layca/, then Models/RuntimeAssets/Qwen3-4B-4bit
+    let devModelDir = URL(fileURLWithPath: #file)
+        .deletingLastPathComponent()                        // Libraries/
+        .deletingLastPathComponent()                        // layca/
+        .appending(path: "Models/RuntimeAssets/Qwen3-4B-4bit")
+
+    // Future: model copied into app bundle resources
+    let bundledModelDir = Bundle.main.bundleURL
+        .appending(path: "Qwen3-4B-4bit")
 
     let required = ["config.json", "tokenizer.json", "tokenizer_config.json"]
     let fm = FileManager.default
 
-    for dir in candidates {
-        let allPresent = required.allSatisfy { file in
-            fm.fileExists(atPath: dir.appending(path: file).path)
-        }
+    for dir in [devModelDir, bundledModelDir] {
+        let allPresent = required.allSatisfy { fm.fileExists(atPath: dir.appending(path: $0).path) }
         if allPresent { return dir }
     }
     return nil
