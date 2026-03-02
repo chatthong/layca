@@ -569,7 +569,8 @@ private extension ContentView {
         ExportSheetFlowView(
             sessionTitle: snapshot.title,
             createdAtText: snapshot.createdAtText,
-            buildPayload: buildExportPayload
+            buildPayload: buildExportPayload,
+            buildAudioSourceURL: buildExportAudioSourceURL
         )
 #if os(macOS)
         .frame(minWidth: 620, minHeight: 640)
@@ -598,6 +599,20 @@ private extension ContentView {
 
     private func buildExportPayload(for format: ExportFormat) -> String {
         ExportService.build(format: format, snapshot: exportSessionSnapshot)
+    }
+
+    private var exportSessionID: UUID? {
+        guard let activeSessionID = backend.activeSessionID else {
+            return nil
+        }
+        return backend.sessions.contains(where: { $0.id == activeSessionID }) ? activeSessionID : nil
+    }
+
+    private func buildExportAudioSourceURL() async -> URL? {
+        guard let sessionID = exportSessionID else {
+            return nil
+        }
+        return await backend.buildAudioExportSourceURL(sessionID: sessionID)
     }
 
     var selectedLanguageCodesBinding: Binding<Set<String>> {
@@ -793,4 +808,3 @@ private enum AppTab: Hashable {
     case library
     case newChat
 }
-

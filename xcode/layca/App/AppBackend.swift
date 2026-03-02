@@ -3184,6 +3184,13 @@ final class AppBackend: ObservableObject {
         return "\(header)\(transcriptBody)"
     }
 
+    func buildAudioExportSourceURL(sessionID: UUID) async -> URL? {
+        if let composed = try? await exportFullSessionAudio(sessionID: sessionID) {
+            return composed
+        }
+        return await sessionStore.audioFileURL(for: sessionID)
+    }
+
     func toggleRecording() {
         if isRecording {
             Task {
@@ -3641,6 +3648,7 @@ final class AppBackend: ObservableObject {
                 }
                 return lhsStart < rhsStart
             }
+        let sessionDirectory = await sessionStore.sessionDirectory(for: sessionID)
 
         let composition = AVMutableComposition()
         guard let compositionTrack = composition.addMutableTrack(
@@ -3658,7 +3666,17 @@ final class AppBackend: ObservableObject {
                 continue
             }
 
-            let asset = AVURLAsset(url: chunkURL)
+            let resolvedChunkURL: URL
+            if chunkURL.isFileURL {
+                resolvedChunkURL = chunkURL
+            } else if let sessionDirectory,
+                      let relativeResolved = TranscriptRow.resolvedChunkURL(chunkURL, relativeTo: sessionDirectory) {
+                resolvedChunkURL = relativeResolved
+            } else {
+                continue
+            }
+
+            let asset = AVURLAsset(url: resolvedChunkURL)
             guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
                 continue
             }

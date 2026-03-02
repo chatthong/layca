@@ -17,6 +17,7 @@ enum ExportFormat: String, CaseIterable, Hashable, Identifiable {
     case markdown
     case plainText
     case videoSubtitlesSRT
+    case audio
 
     var id: String { rawValue }
 
@@ -30,6 +31,8 @@ enum ExportFormat: String, CaseIterable, Hashable, Identifiable {
             return "Plain Text"
         case .videoSubtitlesSRT:
             return "Video Subtitles (.srt)"
+        case .audio:
+            return "Audio (.m4a)"
         }
     }
 
@@ -43,6 +46,8 @@ enum ExportFormat: String, CaseIterable, Hashable, Identifiable {
             return "Raw transcript text only"
         case .videoSubtitlesSRT:
             return "SubRip subtitles for video tools"
+        case .audio:
+            return "Merged single-track session audio"
         }
     }
 
@@ -56,6 +61,8 @@ enum ExportFormat: String, CaseIterable, Hashable, Identifiable {
             return "text.alignleft"
         case .videoSubtitlesSRT:
             return "captions.bubble"
+        case .audio:
+            return "waveform"
         }
     }
 
@@ -69,6 +76,8 @@ enum ExportFormat: String, CaseIterable, Hashable, Identifiable {
             return "Best for quick paste workflows where you only need the spoken content."
         case .videoSubtitlesSRT:
             return "Best for video editors and players that support SubRip subtitle files."
+        case .audio:
+            return "Best for sharing one merged audio track built from all chat chunks in timeline order."
         }
     }
 
@@ -78,6 +87,8 @@ enum ExportFormat: String, CaseIterable, Hashable, Identifiable {
             return "md"
         case .videoSubtitlesSRT:
             return "srt"
+        case .audio:
+            return "m4a"
         case .notepadMinutes, .plainText:
             return "txt"
         }
@@ -93,6 +104,17 @@ enum ExportFormat: String, CaseIterable, Hashable, Identifiable {
             return "plain-text"
         case .videoSubtitlesSRT:
             return "video-subtitles"
+        case .audio:
+            return "audio"
+        }
+    }
+
+    var isTextExport: Bool {
+        switch self {
+        case .audio:
+            return false
+        case .notepadMinutes, .markdown, .plainText, .videoSubtitlesSRT:
+            return true
         }
     }
 }
@@ -101,6 +123,7 @@ struct ExportSheetFlowView: View {
     let sessionTitle: String
     let createdAtText: String
     let buildPayload: (ExportFormat) -> String
+    let buildAudioSourceURL: () async -> URL?
 
     @Environment(\.dismiss) private var dismiss
     @State private var path: [ExportFormat] = []
@@ -135,7 +158,8 @@ struct ExportSheetFlowView: View {
                 ExportSheetFormatStepView(
                     format: format,
                     sessionTitle: sessionTitle,
-                    payload: buildPayload(format)
+                    buildPayload: buildPayload,
+                    buildAudioSourceURL: buildAudioSourceURL
                 )
                 .applyExportSubstepCloseControl {
                     dismiss()
@@ -182,10 +206,19 @@ struct ExportSheetFlowView: View {
 private struct ExportSheetFormatStepView: View {
     let format: ExportFormat
     let sessionTitle: String
-    let payload: String
+    let buildPayload: (ExportFormat) -> String
+    let buildAudioSourceURL: () async -> URL?
 
     @State private var didCopy = false
+    @State private var didSave = false
+    @State private var isPreparingFile = false
+    @State private var filePreparationError: String?
+    @State private var fileSaveError: String?
     @State private var shareFileURL: URL?
+
+    private var payload: String {
+        format.isTextExport ? buildPayload(format) : ""
+    }
 
     private var previewText: String {
         let previewLineLimit = 11
@@ -207,67 +240,82 @@ private struct ExportSheetFormatStepView: View {
             }
 
             Section("Preview") {
-                Text(previewText)
-                    .font(.system(.footnote, design: .monospaced))
-                    .textSelection(.enabled)
-                    .lineLimit(nil)
+                if format.isTextExport {
+                    Text(previewText)
+                        .font(.system(.footnote, design: .monospaced))
+                        .textSelection(.enabled)
+                        .lineLimit(nil)
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Renders one merged audio file from all chat chunks.", systemImage: "waveform")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+
+                        if isPreparingFile {
+                            ProgressView("Rendering audio...")
+                        } else if let shareFileURL {
+                            Label(shareFileURL.lastPathComponent, systemImage: "checkmark.circle")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else if let filePreparationError {
+                            Text(filePreparationError)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
 
             Section("Actions") {
 #if os(macOS)
                 HStack(spacing: 10) {
-                    if let shareFileURL {
-                        ShareLink(
-                            item: shareFileURL,
-                            subject: Text(sessionTitle),
-                            message: Text("Shared from Layca")
-                        ) {
-                            Label("Share", systemImage: "square.and.arrow.up")
-                        }
-                    } else {
-                        ShareLink(
-                            item: payload,
-                            subject: Text(sessionTitle),
-                            message: Text("Shared from Layca")
-                        ) {
-                            Label("Share", systemImage: "square.and.arrow.up")
+                    shareActionControl
+
+                    if format.isTextExport {
+                        Button {
+                            copyExportTextToPasteboard(payload)
+                            didCopy = true
+                        } label: {
+                            Label(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc")
                         }
                     }
 
+                    Button {
+                        guard let shareFileURL else {
+                            return
+                        }
+                        do {
+                            let savedURL = try saveExportFileToDownloads(from: shareFileURL)
+                            didSave = true
+                            fileSaveError = nil
+                            self.shareFileURL = savedURL
+                        } catch {
+                            didSave = false
+                            fileSaveError = "Save failed: \(error.localizedDescription)"
+                        }
+                    } label: {
+                        Label(didSave ? "Saved" : "Save", systemImage: didSave ? "checkmark" : "arrow.down.to.line")
+                    }
+                    .disabled(isPreparingFile || shareFileURL == nil)
+
+                    Spacer(minLength: 0)
+                }
+                .buttonStyle(.bordered)
+                if let fileSaveError {
+                    Text(fileSaveError)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+#else
+                shareActionControl
+
+                if format.isTextExport {
                     Button {
                         copyExportTextToPasteboard(payload)
                         didCopy = true
                     } label: {
                         Label(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc")
                     }
-
-                    Spacer(minLength: 0)
-                }
-                .buttonStyle(.bordered)
-#else
-                if let shareFileURL {
-                    ShareLink(
-                        item: shareFileURL,
-                        subject: Text(sessionTitle),
-                        message: Text("Shared from Layca")
-                    ) {
-                        Label("Share", systemImage: "square.and.arrow.up")
-                    }
-                } else {
-                    ShareLink(
-                        item: payload,
-                        subject: Text(sessionTitle),
-                        message: Text("Shared from Layca")
-                    ) {
-                        Label("Share", systemImage: "square.and.arrow.up")
-                    }
-                }
-
-                Button {
-                    copyExportTextToPasteboard(payload)
-                    didCopy = true
-                } label: {
-                    Label(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc")
                 }
 #endif
             }
@@ -279,24 +327,141 @@ private struct ExportSheetFormatStepView: View {
         .navigationTitle(format.title)
         .applyExportStepTitleDisplayMode()
         .task(id: shareTaskID) {
-            shareFileURL = buildShareFileURL()
+            await prepareShareFile()
         }
     }
 
     private var shareTaskID: String {
-        "\(format.rawValue)|\(sessionTitle)|\(payload)"
+        switch format {
+        case .audio:
+            return "\(format.rawValue)|\(sessionTitle)"
+        case .notepadMinutes, .markdown, .plainText, .videoSubtitlesSRT:
+            return "\(format.rawValue)|\(sessionTitle)|\(payload)"
+        }
     }
 
-    private func buildShareFileURL() -> URL? {
+    @ViewBuilder
+    private var shareActionControl: some View {
+        if isPreparingFile {
+            Label("Preparing…", systemImage: "hourglass")
+        } else if let shareFileURL {
+            ShareLink(
+                item: shareFileURL,
+                subject: Text(sessionTitle),
+                message: Text("Shared from Layca")
+            ) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+        } else if format.isTextExport {
+            ShareLink(
+                item: payload,
+                subject: Text(sessionTitle),
+                message: Text("Shared from Layca")
+            ) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+        } else {
+            Button {
+                Task {
+                    await prepareShareFile()
+                }
+            } label: {
+                Label("Retry Render", systemImage: "arrow.clockwise")
+            }
+        }
+    }
+
+    @MainActor
+    private func prepareShareFile() async {
+        didCopy = false
+        didSave = false
+        filePreparationError = nil
+        fileSaveError = nil
+        isPreparingFile = true
+        defer { isPreparingFile = false }
+
+        if format.isTextExport {
+            shareFileURL = buildTextShareFileURL(payload: payload)
+            return
+        }
+
+        shareFileURL = await buildAudioShareFileURL()
+        if shareFileURL == nil {
+            filePreparationError = "Unable to render audio yet. Make sure this chat has recorded audio chunks."
+        }
+    }
+
+    private func buildTextShareFileURL(payload: String) -> URL? {
         let fileName = "\(sanitizedFileStem(sessionTitle))-\(format.fileNameSuffix).\(format.fileExtension)"
         let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
 
         do {
+            if FileManager.default.fileExists(atPath: targetURL.path) {
+                try? FileManager.default.removeItem(at: targetURL)
+            }
             try payload.write(to: targetURL, atomically: true, encoding: .utf8)
             return targetURL
         } catch {
             return nil
         }
+    }
+
+    private func buildAudioShareFileURL() async -> URL? {
+        guard let sourceURL = await buildAudioSourceURL() else {
+            return nil
+        }
+
+        let fileName = "\(sanitizedFileStem(sessionTitle))-\(format.fileNameSuffix).\(format.fileExtension)"
+        let targetURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+
+        guard sourceURL.standardizedFileURL != targetURL.standardizedFileURL else {
+            return sourceURL
+        }
+
+        do {
+            if FileManager.default.fileExists(atPath: targetURL.path) {
+                try? FileManager.default.removeItem(at: targetURL)
+            }
+            try FileManager.default.copyItem(at: sourceURL, to: targetURL)
+            return targetURL
+        } catch {
+            return FileManager.default.fileExists(atPath: sourceURL.path) ? sourceURL : nil
+        }
+    }
+
+    private func saveExportFileToDownloads(from sourceURL: URL) throws -> URL {
+        let fileManager = FileManager.default
+        let downloadsURL = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? fileManager.temporaryDirectory
+        try fileManager.createDirectory(at: downloadsURL, withIntermediateDirectories: true)
+
+        let destinationURL = uniqueDestinationURL(
+            in: downloadsURL,
+            preferredFileName: sourceURL.lastPathComponent
+        )
+        try fileManager.copyItem(at: sourceURL, to: destinationURL)
+        return destinationURL
+    }
+
+    private func uniqueDestinationURL(in directory: URL, preferredFileName: String) -> URL {
+        let fileManager = FileManager.default
+        let baseName = (preferredFileName as NSString).deletingPathExtension
+        let fileExtension = (preferredFileName as NSString).pathExtension
+
+        var candidate = directory.appendingPathComponent(preferredFileName)
+        var index = 1
+        while fileManager.fileExists(atPath: candidate.path) {
+            let suffix = "-\(index)"
+            let nextName: String
+            if fileExtension.isEmpty {
+                nextName = "\(baseName)\(suffix)"
+            } else {
+                nextName = "\(baseName)\(suffix).\(fileExtension)"
+            }
+            candidate = directory.appendingPathComponent(nextName)
+            index += 1
+        }
+        return candidate
     }
 
     private func sanitizedFileStem(_ value: String) -> String {

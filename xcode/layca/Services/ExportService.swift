@@ -25,6 +25,8 @@ struct ExportService {
             return buildPlainTranscriptText(snapshot: snapshot)
         case .videoSubtitlesSRT:
             return buildVideoSubtitlesSRTText(snapshot: snapshot)
+        case .audio:
+            return "Audio export renders a single merged .m4a file from all chunk files."
         }
     }
 }
