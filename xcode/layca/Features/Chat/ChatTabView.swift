@@ -54,6 +54,15 @@ struct ChatTabView: View {
     @State private var scrollViewportHeight: CGFloat = 0
     @State private var scrollContentBottom: CGFloat = 0
     @State private var isDeleteDialogPresented = false
+    @State private var isSummarySheetPresented = false
+
+    private var exportSnapshot: ExportSessionSnapshot {
+        ExportSessionSnapshot(
+            title: activeSessionTitle,
+            createdAtText: activeSessionDateText,
+            rows: liveChatItems
+        )
+    }
 
     private let transcriptScrollSpace = "layca.chat.transcript.scroll"
     private let transcriptBottomAnchorID = "layca.chat.transcript.bottom"
@@ -216,6 +225,9 @@ struct ChatTabView: View {
             }
         } message: {
             Text("This will permanently remove \"\(activeSessionTitle)\" and its recording.")
+        }
+        .sheet(isPresented: $isSummarySheetPresented) {
+            SummarySheetView(snapshot: exportSnapshot)
         }
     }
 
@@ -430,6 +442,13 @@ struct ChatTabView: View {
 
     private var topTrailingSessionActionsToolbarControl: some View {
         ControlGroup {
+            Button {
+                isSummarySheetPresented = true
+            } label: {
+                topToolbarSummaryIconLabel
+            }
+            .disabled(isDraftSession || liveChatItems.isEmpty)
+
             Button(action: onExportTap) {
                 topToolbarShareIconLabel
             }
@@ -452,6 +471,12 @@ struct ChatTabView: View {
 
     private var topToolbarPlayIconLabel: some View {
         Label("Play", systemImage: "play.fill")
+            .labelStyle(.iconOnly)
+            .font(.system(size: 12, weight: .semibold))
+    }
+
+    private var topToolbarSummaryIconLabel: some View {
+        Label("Summary", systemImage: "sparkles.rectangle.stack")
             .labelStyle(.iconOnly)
             .font(.system(size: 12, weight: .semibold))
     }
@@ -488,6 +513,13 @@ struct ChatTabView: View {
 
     @ViewBuilder
     private var topTrailingMenuActions: some View {
+        Button {
+            isSummarySheetPresented = true
+        } label: {
+            Label("Summary", systemImage: "sparkles.rectangle.stack")
+        }
+        .disabled(isDraftSession || liveChatItems.isEmpty)
+
         Button {
             onExportTap()
         } label: {

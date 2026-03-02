@@ -6,7 +6,9 @@
 
 **Architecture:** `QwenSummaryService` (actor) wraps llama.cpp Swift bindings; it loads the GGUF lazily, formats input via ExportService's NotepadMinutes formatter, and streams tokens back to `SummarySheetView`. ChatTabView gains a new `isSummarySheetPresented` state and a Summary button prepended to both ControlGroup and context menu.
 
-**Tech Stack:** llama.cpp (ggml-org/llama.cpp SPM), Swift Concurrency (actor + AsyncStream), SwiftUI `.sheet`, ExportService (existing)
+**Tech Stack:** MLX Swift (`ml-explore/mlx-swift-examples` SPM, product `MLXLLM`), Swift Concurrency (actor + AsyncStream), SwiftUI `.sheet`, ExportService (existing)
+
+> ⚠️ **Correction from v1:** `ggml-org/llama.cpp` has no `Package.swift` — switched to `ml-explore/mlx-swift-examples` which has real SPM support AND routes through ANE+GPU on Apple Silicon (faster than llama.cpp Metal-only). GGUF file is obsolete; model auto-downloads as `mlx-community/Qwen3-4B-4bit`.
 
 ---
 
@@ -44,32 +46,32 @@ git commit -m "chore: move Qwen GGUF to Models/RuntimeAssets, tidy gitignore"
 
 ---
 
-## Task 1: Add llama.cpp Swift Package to Xcode project
+## Task 1: Add mlx-swift-examples Swift Package to Xcode project
 
 **Files:**
-- Modify: `xcode/layca.xcodeproj/project.pbxproj` (via Xcode UI or `swift package` CLI — Xcode is the only safe editor for `.pbxproj`)
+- Modify: `xcode/layca.xcodeproj/project.pbxproj` (via Xcode UI only)
 
 **Step 1: Open Xcode and add package**
 
 In Xcode:
 - File → Add Package Dependencies…
-- URL: `https://github.com/ggml-org/llama.cpp`
-- Branch: `master` (not a tagged release — llama.cpp rolls fast)
-- Add product `llama` to the `layca` target
+- URL: `https://github.com/ml-explore/mlx-swift-examples`
+- Branch: `main`
+- Add product **`MLXLLM`** to the `layca` target (MLXLMCommon is pulled in automatically)
 
 **Step 2: Verify the package resolves**
 ```bash
 cd /Users/ter/Desktop/layca/xcode && \
   xcodebuild -resolvePackageDependencies -scheme layca 2>&1 | tail -5
 ```
-Expected: `Resolved source packages:` with llama.cpp listed.
+Expected: `Resolved source packages:` with mlx-swift-examples listed.
 
 **Step 3: Commit**
 ```bash
 cd /Users/ter/Desktop/layca
 git add xcode/layca.xcodeproj/project.pbxproj \
         xcode/layca.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
-git commit -m "feat: add llama.cpp Swift Package dependency for Qwen inference"
+git commit -m "feat: add mlx-swift-examples SPM dependency (MLXLLM) for Qwen on-device summary"
 ```
 
 ---
