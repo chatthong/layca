@@ -263,6 +263,7 @@ struct MacChatWorkspaceView: View {
     @State private var titleDraft = ""
     @State private var isEditingTitle = false
     @State private var isDeleteDialogPresented = false
+    @State private var isSummarySheetPresented = false
 
     @FocusState private var isTitleFieldFocused: Bool
     @State private var isTranscriptNearBottom = true
@@ -272,8 +273,19 @@ struct MacChatWorkspaceView: View {
     private let transcriptBottomAnchorID = "layca.mac.transcript.bottom"
     private let recordingSpectrumRowID = "layca.mac.recording.spectrum.row"
 
+    private var exportSnapshot: ExportSessionSnapshot {
+        ExportSessionSnapshot(
+            title: activeSessionTitle,
+            createdAtText: activeSessionDateText,
+            rows: liveChatItems
+        )
+    }
+
     var body: some View {
         transcriptPane
+        .sheet(isPresented: $isSummarySheetPresented) {
+            SummarySheetView(snapshot: exportSnapshot)
+        }
         .overlay {
             if isEditingTitle {
                 Color.clear
@@ -311,6 +323,12 @@ struct MacChatWorkspaceView: View {
                     .disabled(!canPlaySessionFromStart)
 
                     Menu {
+                        Button {
+                            isSummarySheetPresented = true
+                        } label: {
+                            Label("Summary", systemImage: "sparkles.rectangle.stack")
+                        }
+
                         Button {
                             onExportTap()
                         } label: {

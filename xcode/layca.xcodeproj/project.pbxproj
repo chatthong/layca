@@ -8,6 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		D736710F2F5011F400BDD3BB /* SVGKit in Frameworks */ = {isa = PBXBuildFile; productRef = D73670352F500E9E00BDD3BB /* SVGKit */; };
+		D7D3BFC22F56A97900593DBA /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = D7D3BFC12F56A97900593DBA /* MLX */; };
+		D7D3BFC42F56A97900593DBA /* MLXFFT in Frameworks */ = {isa = PBXBuildFile; productRef = D7D3BFC32F56A97900593DBA /* MLXFFT */; };
+		D7D3BFC62F56A97900593DBA /* MLXFast in Frameworks */ = {isa = PBXBuildFile; productRef = D7D3BFC52F56A97900593DBA /* MLXFast */; };
+		D7D3BFC82F56A97900593DBA /* MLXLinalg in Frameworks */ = {isa = PBXBuildFile; productRef = D7D3BFC72F56A97900593DBA /* MLXLinalg */; };
+		D7D3BFCA2F56A97900593DBA /* MLXNN in Frameworks */ = {isa = PBXBuildFile; productRef = D7D3BFC92F56A97900593DBA /* MLXNN */; };
+		D7E6A1012F70000100593DBA /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = D7E6A1032F70000100593DBA /* MLXLLM */; };
+		D7E6A1022F70000100593DBA /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = D7E6A1042F70000100593DBA /* MLXLMCommon */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,7 +63,14 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D7D3BFC22F56A97900593DBA /* MLX in Frameworks */,
+				D7E6A1012F70000100593DBA /* MLXLLM in Frameworks */,
+				D7D3BFC82F56A97900593DBA /* MLXLinalg in Frameworks */,
 				D736710F2F5011F400BDD3BB /* SVGKit in Frameworks */,
+				D7E6A1022F70000100593DBA /* MLXLMCommon in Frameworks */,
+				D7D3BFC62F56A97900593DBA /* MLXFast in Frameworks */,
+				D7D3BFCA2F56A97900593DBA /* MLXNN in Frameworks */,
+				D7D3BFC42F56A97900593DBA /* MLXFFT in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +133,13 @@
 			name = layca;
 			packageProductDependencies = (
 				D73670352F500E9E00BDD3BB /* SVGKit */,
+				D7D3BFC12F56A97900593DBA /* MLX */,
+				D7D3BFC32F56A97900593DBA /* MLXFFT */,
+				D7D3BFC52F56A97900593DBA /* MLXFast */,
+				D7D3BFC72F56A97900593DBA /* MLXLinalg */,
+				D7D3BFC92F56A97900593DBA /* MLXNN */,
+				D7E6A1032F70000100593DBA /* MLXLLM */,
+				D7E6A1042F70000100593DBA /* MLXLMCommon */,
 			);
 			productName = layca;
 			productReference = D7BE3AA92F38D7A2000297EC /* layca.app */;
@@ -204,6 +225,8 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				D73670342F500E9E00BDD3BB /* XCRemoteSwiftPackageReference "SVGKit" */,
+				D7D3BFAC2F56237900593DBA /* XCRemoteSwiftPackageReference "mlx-swift-examples" */,
+				D7D3BFC02F56A97900593DBA /* XCRemoteSwiftPackageReference "mlx-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D7BE3AAA2F38D7A2000297EC /* Products */;
@@ -679,6 +702,22 @@
 				minimumVersion = 3.0.0;
 			};
 		};
+		D7D3BFAC2F56237900593DBA /* XCRemoteSwiftPackageReference "mlx-swift-examples" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-examples";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.29.1;
+			};
+		};
+		D7D3BFC02F56A97900593DBA /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.29.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -686,6 +725,41 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D73670342F500E9E00BDD3BB /* XCRemoteSwiftPackageReference "SVGKit" */;
 			productName = SVGKit;
+		};
+		D7D3BFC12F56A97900593DBA /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D7D3BFC02F56A97900593DBA /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
+		};
+		D7D3BFC32F56A97900593DBA /* MLXFFT */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D7D3BFC02F56A97900593DBA /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLXFFT;
+		};
+		D7D3BFC52F56A97900593DBA /* MLXFast */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D7D3BFC02F56A97900593DBA /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLXFast;
+		};
+		D7D3BFC72F56A97900593DBA /* MLXLinalg */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D7D3BFC02F56A97900593DBA /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLXLinalg;
+		};
+		D7D3BFC92F56A97900593DBA /* MLXNN */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D7D3BFC02F56A97900593DBA /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLXNN;
+		};
+		D7E6A1032F70000100593DBA /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D7D3BFAC2F56237900593DBA /* XCRemoteSwiftPackageReference "mlx-swift-examples" */;
+			productName = MLXLLM;
+		};
+		D7E6A1042F70000100593DBA /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D7D3BFAC2F56237900593DBA /* XCRemoteSwiftPackageReference "mlx-swift-examples" */;
+			productName = MLXLMCommon;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
