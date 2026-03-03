@@ -42,29 +42,20 @@ actor QwenSummaryService {
 
     private static let qwenModelID = "mlx-community/Qwen3-4B-4bit"
 
-    /// Returns the local RuntimeAssets model directory if all required MLX files are present,
+    /// Returns the bundled model directory if all required MLX files are present,
     /// otherwise returns nil so the service falls back to HuggingFace download.
     private static func localModelDirectoryIfReady() -> URL? {
-        // #file resolves to this source file's compile-time path, e.g.:
-        //   .../xcode/layca/Libraries/QwenSummaryService.swift
-        // From there: up 1 = layca/, then Models/RuntimeAssets/Qwen3-4B-4bit
-        let devModelDir = URL(fileURLWithPath: #file)
-            .deletingLastPathComponent()                        // Libraries/
-            .deletingLastPathComponent()                        // layca/
+        // The build script copies Models/RuntimeAssets/ into the app bundle's Resources folder.
+        // Bundle.main.resourceURL already points to Contents/Resources/ (macOS) or the bundle
+        // root (iOS/tvOS/visionOS), so appending the subpath works on all platforms.
+        guard let resourceURL = Bundle.main.resourceURL else { return nil }
+        let bundledModelDir = resourceURL
             .appending(path: "Models/RuntimeAssets/Qwen3-4B-4bit")
-
-        // Future: model copied into app bundle resources
-        let bundledModelDir = Bundle.main.bundleURL
-            .appending(path: "Qwen3-4B-4bit")
 
         let required = ["config.json", "tokenizer.json", "tokenizer_config.json"]
         let fm = FileManager.default
-
-        for dir in [devModelDir, bundledModelDir] {
-            let allPresent = required.allSatisfy { fm.fileExists(atPath: dir.appending(path: $0).path) }
-            if allPresent { return dir }
-        }
-        return nil
+        let allPresent = required.allSatisfy { fm.fileExists(atPath: bundledModelDir.appending(path: $0).path) }
+        return allPresent ? bundledModelDir : nil
     }
 
     // MARK: - Public API
