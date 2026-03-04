@@ -21,6 +21,7 @@ struct ChatTabView: View {
     let transcriptChunkPlaybackRangeText: String?
     let activePlaybackRowID: UUID?
     let isDraftSession: Bool
+    let activeSessionID: UUID?
     let liveChatItems: [TranscriptRow]
     let selectedFocusLanguageCodes: Set<String>
     let transcribingRowIDs: Set<UUID>
@@ -39,6 +40,8 @@ struct ChatTabView: View {
     let onExportTap: () -> Void
     let onDeleteActiveSessionTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
+    let loadCachedSummary: (UUID) async -> String?
+    let saveCachedSummary: (UUID, String) async -> Void
     let onSidebarToggle: (() -> Void)?
     let showsTopToolbar: Bool
     let showsBottomRecorderAccessory: Bool
@@ -58,6 +61,7 @@ struct ChatTabView: View {
 
     private var exportSnapshot: ExportSessionSnapshot {
         ExportSessionSnapshot(
+            sessionID: activeSessionID,
             title: activeSessionTitle,
             createdAtText: activeSessionDateText,
             rows: liveChatItems
@@ -80,6 +84,7 @@ struct ChatTabView: View {
         transcriptChunkPlaybackRangeText: String?,
         activePlaybackRowID: UUID?,
         isDraftSession: Bool,
+        activeSessionID: UUID?,
         liveChatItems: [TranscriptRow],
         selectedFocusLanguageCodes: Set<String>,
         transcribingRowIDs: Set<UUID>,
@@ -98,6 +103,8 @@ struct ChatTabView: View {
         onExportTap: @escaping () -> Void,
         onDeleteActiveSessionTap: @escaping () -> Void,
         onRenameSessionTitle: @escaping (String) -> Void,
+        loadCachedSummary: @escaping (UUID) async -> String?,
+        saveCachedSummary: @escaping (UUID, String) async -> Void,
         onSidebarToggle: (() -> Void)? = nil,
         showsTopToolbar: Bool = true,
         showsBottomRecorderAccessory: Bool = true,
@@ -114,6 +121,7 @@ struct ChatTabView: View {
         self.transcriptChunkPlaybackRangeText = transcriptChunkPlaybackRangeText
         self.activePlaybackRowID = activePlaybackRowID
         self.isDraftSession = isDraftSession
+        self.activeSessionID = activeSessionID
         self.liveChatItems = liveChatItems
         self.selectedFocusLanguageCodes = selectedFocusLanguageCodes
         self.transcribingRowIDs = transcribingRowIDs
@@ -132,6 +140,8 @@ struct ChatTabView: View {
         self.onExportTap = onExportTap
         self.onDeleteActiveSessionTap = onDeleteActiveSessionTap
         self.onRenameSessionTitle = onRenameSessionTitle
+        self.loadCachedSummary = loadCachedSummary
+        self.saveCachedSummary = saveCachedSummary
         self.onSidebarToggle = onSidebarToggle
         self.showsTopToolbar = showsTopToolbar
         self.showsBottomRecorderAccessory = showsBottomRecorderAccessory
@@ -227,7 +237,11 @@ struct ChatTabView: View {
             Text("This will permanently remove \"\(activeSessionTitle)\" and its recording.")
         }
         .sheet(isPresented: $isSummarySheetPresented) {
-            SummarySheetView(snapshot: exportSnapshot)
+            SummarySheetView(
+                snapshot: exportSnapshot,
+                loadCachedSummary: loadCachedSummary,
+                saveCachedSummary: saveCachedSummary
+            )
         }
     }
 

@@ -8,14 +8,30 @@ import SwiftUI
 struct SummarySheetView: View {
 
     let snapshot: ExportSessionSnapshot
+    let loadCachedSummary: ((UUID) async -> String?)?
+    let saveCachedSummary: ((UUID, String) async -> Void)?
 
     @State private var phase: Phase = .loading
+    @State private var hasLoadedInitialContent = false
+    @State private var activeSummaryTask: Task<Void, Never>?
+    @State private var activeSummaryRunID: UUID?
     @Environment(\.dismiss) private var dismiss
+    private let localSummaryCache = UserDefaults.standard
 
     private enum Phase {
         case loading
         case result(String)
         case failed(String)
+    }
+
+    init(
+        snapshot: ExportSessionSnapshot,
+        loadCachedSummary: ((UUID) async -> String?)? = nil,
+        saveCachedSummary: ((UUID, String) async -> Void)? = nil
+    ) {
+        self.snapshot = snapshot
+        self.loadCachedSummary = loadCachedSummary
+        self.saveCachedSummary = saveCachedSummary
     }
 
     var body: some View {
@@ -26,7 +42,8 @@ struct SummarySheetView: View {
                 .navigationBarTitleDisplayMode(.inline)
 #endif
                 .toolbar { toolbarContent }
-                .task { await runSummary() }
+                .task { await loadInitialContentIfNeeded() }
+                .onDisappear { cancelSummaryTask() }
         }
     }
 
@@ -49,24 +66,21 @@ struct SummarySheetView: View {
             ProgressView()
                 .scaleEffect(1.4)
                 .accessibilityLabel("Generating summary")
-            Text("Qwen is reading the transcript…")
+            Text("thinking...")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text("Running fully on-device · no data leaves your device")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
     }
 
     private func resultView(_ markdown: String) -> some View {
-        ScrollView {
-            Text(attributedMarkdown(markdown))
+        return ScrollView {
+            Text(markdown)
                 .textSelection(.enabled)
+                .font(.body)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
+                .padding(16)
         }
     }
 
@@ -77,8 +91,7 @@ struct SummarySheetView: View {
             Text(message)
         } actions: {
             Button("Retry") {
-                phase = .loading
-                Task { await runSummary() }
+                startSummary()
             }
             .buttonStyle(.bordered)
         }
@@ -89,7 +102,19 @@ struct SummarySheetView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button("Done") { dismiss() }
+            Button("Done") {
+                cancelSummaryTask()
+                dismiss()
+            }
+        }
+        if case .result = phase {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    regenerateSummary()
+                } label: {
+                    Label("Re-summary", systemImage: "arrow.clockwise")
+                }
+            }
         }
         if case .result(let text) = phase {
             ToolbarItem(placement: .confirmationAction) {
@@ -104,20 +129,137 @@ struct SummarySheetView: View {
 
     // MARK: - Actions
 
-    private func runSummary() async {
+    private func loadInitialContentIfNeeded() async {
+        guard !hasLoadedInitialContent else {
+            return
+        }
+        hasLoadedInitialContent = true
+
+        if let cached = loadLocalSummaryCache() {
+            phase = .result(cached)
+            return
+        }
+
+        if let sessionID = snapshot.sessionID,
+           let loadCachedSummary,
+           let cached = await loadCachedSummary(sessionID) {
+            let trimmed = cached.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                persistLocalSummaryCache(trimmed)
+                phase = .result(trimmed)
+                return
+            }
+        }
+
+        guard !Task.isCancelled else {
+            return
+        }
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        guard !Task.isCancelled else {
+            return
+        }
+        startSummary()
+    }
+
+    private func regenerateSummary() {
+        startSummary()
+    }
+
+    private func startSummary() {
+        cancelSummaryTask()
+        let runID = UUID()
+        activeSummaryRunID = runID
+        phase = .loading
+        activeSummaryTask = Task { @MainActor in
+            await runSummary(runID: runID)
+        }
+    }
+
+    private func runSummary(runID: UUID) async {
+        defer { finishSummaryRun(runID) }
+
         let input = ExportService.build(format: .notepadMinutes, snapshot: snapshot)
         do {
             var accumulated = ""
             for try await chunk in QwenSummaryService.shared.summarize(notepadMinutesText: input) {
+                guard !Task.isCancelled, isCurrentSummaryRun(runID) else {
+                    return
+                }
                 accumulated += chunk
+                await persistSummaryIfPossible(accumulated)
+                guard isCurrentSummaryRun(runID) else {
+                    return
+                }
                 phase = .result(accumulated)
+            }
+
+            guard !Task.isCancelled, isCurrentSummaryRun(runID) else {
+                return
             }
             if accumulated.isEmpty {
                 phase = .failed("No summary was generated.")
+                return
             }
+
+            await persistSummaryIfPossible(accumulated)
+        } catch is CancellationError {
+            return
         } catch {
+            guard !Task.isCancelled, isCurrentSummaryRun(runID) else {
+                return
+            }
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    private func persistSummaryIfPossible(_ summaryText: String) async {
+        let trimmed = summaryText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+        persistLocalSummaryCache(trimmed)
+
+        guard let sessionID = snapshot.sessionID,
+              let saveCachedSummary else {
+            return
+        }
+        await saveCachedSummary(sessionID, trimmed)
+    }
+
+    private func summaryCacheKey() -> String {
+        if let sessionID = snapshot.sessionID {
+            return "layca.summary.\(sessionID.uuidString)"
+        }
+        let fallback = "\(snapshot.title)|\(snapshot.createdAtText)|\(snapshot.rows.count)"
+        return "layca.summary.fallback.\(fallback)"
+    }
+
+    private func loadLocalSummaryCache() -> String? {
+        let raw = localSummaryCache.string(forKey: summaryCacheKey()) ?? ""
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func persistLocalSummaryCache(_ summaryText: String) {
+        localSummaryCache.set(summaryText, forKey: summaryCacheKey())
+    }
+
+    private func cancelSummaryTask() {
+        activeSummaryTask?.cancel()
+        activeSummaryTask = nil
+        activeSummaryRunID = nil
+    }
+
+    private func isCurrentSummaryRun(_ runID: UUID) -> Bool {
+        activeSummaryRunID == runID
+    }
+
+    private func finishSummaryRun(_ runID: UUID) {
+        guard activeSummaryRunID == runID else {
+            return
+        }
+        activeSummaryTask = nil
+        activeSummaryRunID = nil
     }
 
     private func copyToClipboard(_ text: String) {
@@ -129,10 +271,4 @@ struct SummarySheetView: View {
 #endif
     }
 
-    private func attributedMarkdown(_ text: String) -> AttributedString {
-        (try? AttributedString(
-            markdown: text,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(text)
-    }
 }

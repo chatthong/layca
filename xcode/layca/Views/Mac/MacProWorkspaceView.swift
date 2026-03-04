@@ -240,6 +240,7 @@ struct MacChatWorkspaceView: View {
     let activeSessionDateText: String
     let transcriptChunkPlaybackRangeText: String?
     let activePlaybackRowID: UUID?
+    let activeSessionID: UUID?
     let liveChatItems: [TranscriptRow]
     let selectedFocusLanguageCodes: Set<String>
     let transcribingRowIDs: Set<UUID>
@@ -259,6 +260,8 @@ struct MacChatWorkspaceView: View {
     let onDeleteActiveSessionTap: () -> Void
     let onRenameSessionTitle: (String) -> Void
     let onOpenSettingsTap: () -> Void
+    let loadCachedSummary: (UUID) async -> String?
+    let saveCachedSummary: (UUID, String) async -> Void
     let cancelRenameNonce: UUID
     @State private var titleDraft = ""
     @State private var isEditingTitle = false
@@ -275,6 +278,7 @@ struct MacChatWorkspaceView: View {
 
     private var exportSnapshot: ExportSessionSnapshot {
         ExportSessionSnapshot(
+            sessionID: activeSessionID,
             title: activeSessionTitle,
             createdAtText: activeSessionDateText,
             rows: liveChatItems
@@ -284,7 +288,11 @@ struct MacChatWorkspaceView: View {
     var body: some View {
         transcriptPane
         .sheet(isPresented: $isSummarySheetPresented) {
-            SummarySheetView(snapshot: exportSnapshot)
+            SummarySheetView(
+                snapshot: exportSnapshot,
+                loadCachedSummary: loadCachedSummary,
+                saveCachedSummary: saveCachedSummary
+            )
         }
         .overlay {
             if isEditingTitle {

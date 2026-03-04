@@ -7,6 +7,7 @@ import Foundation
 
 /// A snapshot of session data captured at export time, decoupled from live AppBackend state.
 struct ExportSessionSnapshot {
+    let sessionID: UUID?
     let title: String
     let createdAtText: String
     let rows: [TranscriptRow]

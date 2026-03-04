@@ -380,6 +380,7 @@ private extension ContentView {
             activeSessionDateText: backend.activeSessionDateText,
             transcriptChunkPlaybackRangeText: backend.transcriptChunkPlaybackRangeText,
             activePlaybackRowID: backend.activeTranscriptPlaybackRowID,
+            activeSessionID: backend.activeSessionID,
             liveChatItems: backend.activeTranscriptRows,
             selectedFocusLanguageCodes: backend.selectedLanguageCodes,
             transcribingRowIDs: backend.transcribingRowIDs,
@@ -402,6 +403,12 @@ private extension ContentView {
             onRenameSessionTitle: backend.renameActiveSessionTitle,
             onOpenSettingsTap: {
                 presentSettingsSheet()
+            },
+            loadCachedSummary: { sessionID in
+                await backend.cachedSummary(for: sessionID)
+            },
+            saveCachedSummary: { sessionID, markdown in
+                await backend.saveSummary(markdown, for: sessionID)
             },
             cancelRenameNonce: cancelRenameNonce
         )
@@ -447,6 +454,7 @@ private extension ContentView {
             transcriptChunkPlaybackRangeText: backend.transcriptChunkPlaybackRangeText,
             activePlaybackRowID: backend.activeTranscriptPlaybackRowID,
             isDraftSession: backend.activeSessionID == nil,
+            activeSessionID: backend.activeSessionID,
             liveChatItems: backend.activeTranscriptRows,
             selectedFocusLanguageCodes: backend.selectedLanguageCodes,
             transcribingRowIDs: backend.transcribingRowIDs,
@@ -467,6 +475,12 @@ private extension ContentView {
             onExportTap: presentExportSheet,
             onDeleteActiveSessionTap: backend.deleteActiveSession,
             onRenameSessionTitle: backend.renameActiveSessionTitle,
+            loadCachedSummary: { sessionID in
+                await backend.cachedSummary(for: sessionID)
+            },
+            saveCachedSummary: { sessionID, markdown in
+                await backend.saveSummary(markdown, for: sessionID)
+            },
             onSidebarToggle: onSidebarToggle,
             showsTopToolbar: showsTopToolbar,
             showsBottomRecorderAccessory: !usesMergedTabBarRecorderAccessory,
@@ -584,6 +598,7 @@ private extension ContentView {
         if let activeSessionID = backend.activeSessionID,
            let session = backend.sessions.first(where: { $0.id == activeSessionID }) {
             return ExportSessionSnapshot(
+                sessionID: session.id,
                 title: session.title,
                 createdAtText: session.formattedDate,
                 rows: session.rows
@@ -591,6 +606,7 @@ private extension ContentView {
         }
 
         return ExportSessionSnapshot(
+            sessionID: nil,
             title: backend.activeSessionTitle,
             createdAtText: backend.activeSessionDateText,
             rows: backend.activeTranscriptRows

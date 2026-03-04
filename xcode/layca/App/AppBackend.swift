@@ -1597,6 +1597,8 @@ actor SessionStore {
         var title: String
         let createdAt: Date
         var updatedAt: Date
+        var summaryMarkdown: String?
+        var summaryUpdatedAt: Date?
         var rows: [TranscriptRow]
         var speakers: [String: SpeakerProfile]
         var languageHints: [String]
@@ -1627,6 +1629,8 @@ actor SessionStore {
         let title: String
         let createdAt: Date
         let updatedAt: Date?
+        let summaryMarkdown: String?
+        let summaryUpdatedAt: Date?
         let languageHints: [String]
         let audioFileName: String
         let segmentsFileName: String
@@ -1664,6 +1668,7 @@ actor SessionStore {
     private let fileManager: FileManager
     private let sessionsDirectory: URL
     private let metadataFileName = "session.json"
+    private let summaryFileName = "summary.txt"
     private let audioFileName = "session_full.m4a"
     private let segmentsFileName = "segments.json"
     private let chunksDirectoryName = "chunks"
@@ -1711,6 +1716,8 @@ actor SessionStore {
             title: title,
             createdAt: Date(),
             updatedAt: Date(),
+            summaryMarkdown: nil,
+            summaryUpdatedAt: nil,
             rows: [],
             speakers: [:],
             languageHints: languageHints,
@@ -2137,7 +2144,9 @@ actor SessionStore {
         }
 
         let metadataURL = sessionDirectory.appendingPathComponent(metadataFileName)
+        let summaryURL = sessionDirectory.appendingPathComponent(summaryFileName)
         let metadata = loadSessionMetadata(at: metadataURL)
+        let fallbackSummary = loadSummaryText(at: summaryURL)
 
         var speakers = metadata?.speakers ?? [:]
         let rows = loadSegments(at: segmentsURL, sessionDirectory: sessionDirectory, speakers: &speakers)
@@ -2159,6 +2168,10 @@ actor SessionStore {
             title: metadata?.title ?? "Chat",
             createdAt: metadata?.createdAt ?? fallbackCreatedAt,
             updatedAt: metadata?.updatedAt ?? .distantPast,
+            summaryMarkdown: metadata?.summaryMarkdown?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                ? metadata?.summaryMarkdown
+                : fallbackSummary,
+            summaryUpdatedAt: metadata?.summaryUpdatedAt,
             rows: rows,
             speakers: speakers,
             languageHints: metadata?.languageHints ?? [],
@@ -2172,6 +2185,7 @@ actor SessionStore {
         // Keep old files forward-compatible by rewriting with current schema.
         persistSessionMetadata(for: session)
         persistSegmentsSnapshot(for: session)
+        persistSummarySidecar(for: session)
 
         return session
     }
@@ -2180,6 +2194,8 @@ actor SessionStore {
         title: String,
         createdAt: Date,
         updatedAt: Date?,
+        summaryMarkdown: String?,
+        summaryUpdatedAt: Date?,
         languageHints: [String],
         durationSeconds: Double,
         status: SessionStatus,
@@ -2199,6 +2215,8 @@ actor SessionStore {
             title: snapshot.title,
             createdAt: snapshot.createdAt,
             updatedAt: snapshot.updatedAt,
+            summaryMarkdown: snapshot.summaryMarkdown,
+            summaryUpdatedAt: snapshot.summaryUpdatedAt,
             languageHints: snapshot.languageHints,
             durationSeconds: snapshot.durationSeconds,
             status: SessionStatus(rawValue: snapshot.status) ?? .ready,
@@ -2334,11 +2352,13 @@ actor SessionStore {
 
     private func persistSessionMetadata(for session: StoredSession) {
         let metadata = SessionMetadataSnapshot(
-            schemaVersion: 1,
+            schemaVersion: 2,
             id: session.id,
             title: session.title,
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
+            summaryMarkdown: session.summaryMarkdown,
+            summaryUpdatedAt: session.summaryUpdatedAt,
             languageHints: session.languageHints,
             audioFileName: URL(fileURLWithPath: session.audioFilePath).lastPathComponent,
             segmentsFileName: URL(fileURLWithPath: session.segmentsFilePath).lastPathComponent,
@@ -2356,6 +2376,31 @@ actor SessionStore {
 
         let url = URL(fileURLWithPath: session.metadataFilePath)
         try? data.write(to: url, options: .atomic)
+    }
+
+    private func persistSummarySidecar(for session: StoredSession) {
+        let url = URL(fileURLWithPath: session.metadataFilePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent(summaryFileName)
+
+        let trimmed = session.summaryMarkdown?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else {
+            if fileManager.fileExists(atPath: url.path) {
+                try? fileManager.removeItem(at: url)
+            }
+            return
+        }
+
+        try? trimmed.data(using: .utf8)?.write(to: url, options: .atomic)
+    }
+
+    private func loadSummaryText(at url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url),
+              let raw = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func persistSegmentsSnapshot(for session: StoredSession) {
@@ -2411,6 +2456,62 @@ actor SessionStore {
             return
         }
         try fileManager.createDirectory(at: chunksDirectory, withIntermediateDirectories: true)
+    }
+
+    func summary(for sessionID: UUID) -> String? {
+        prepareIfNeeded()
+        guard let session = sessions[sessionID] else {
+            let sessionDirectory = sessionsDirectory.appendingPathComponent(sessionID.uuidString, isDirectory: true)
+            let metadataURL = sessionDirectory.appendingPathComponent(metadataFileName)
+            if let metadataSummary = loadSessionMetadata(at: metadataURL)?
+                .summaryMarkdown?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !metadataSummary.isEmpty {
+                return metadataSummary
+            }
+
+            let summaryURL = sessionDirectory.appendingPathComponent(summaryFileName)
+            return loadSummaryText(at: summaryURL)
+        }
+
+        let summary = session.summaryMarkdown?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let summary, !summary.isEmpty else {
+            let summaryURL = URL(fileURLWithPath: session.metadataFilePath)
+                .deletingLastPathComponent()
+                .appendingPathComponent(summaryFileName)
+            return loadSummaryText(at: summaryURL)
+        }
+        return summary
+    }
+
+    func saveSummary(_ markdown: String, for sessionID: UUID) {
+        prepareIfNeeded()
+        if sessions[sessionID] == nil {
+            let sessionDirectory = sessionsDirectory.appendingPathComponent(sessionID.uuidString, isDirectory: true)
+            if fileManager.fileExists(atPath: sessionDirectory.path),
+               let loaded = loadSession(at: sessionDirectory, sessionID: sessionID) {
+                sessions[sessionID] = loaded
+                if !sessionOrder.contains(sessionID) {
+                    sessionOrder.append(sessionID)
+                }
+            }
+        }
+
+        guard var session = sessions[sessionID] else {
+            return
+        }
+
+        let trimmed = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+
+        session.summaryMarkdown = trimmed
+        session.summaryUpdatedAt = Date()
+        session.updatedAt = Date()
+        sessions[sessionID] = session
+        persistSessionMetadata(for: session)
+        persistSummarySidecar(for: session)
     }
 }
 
@@ -3182,6 +3283,15 @@ final class AppBackend: ObservableObject {
         }
 
         return "\(header)\(transcriptBody)"
+    }
+
+    func cachedSummary(for sessionID: UUID) async -> String? {
+        await sessionStore.summary(for: sessionID)
+    }
+
+    func saveSummary(_ markdown: String, for sessionID: UUID) async {
+        await sessionStore.saveSummary(markdown, for: sessionID)
+        scheduleSyncIfEnabled(sessionID: sessionID)
     }
 
     func buildAudioExportSourceURL(sessionID: UUID) async -> URL? {
