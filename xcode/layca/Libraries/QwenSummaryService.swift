@@ -26,26 +26,30 @@ actor QwenSummaryService {
     // MARK: - Configuration
 
     private static let summarySystemPrompt = """
-    You are a precise meeting secretary.
-    Summarize the transcript as concise meeting minutes.
-    Do not include reasoning, hidden analysis, or meta commentary.
+    You are a precise meeting secretary. Follow these two steps:
+
+    Step 1 — Correct transcription errors: Fix obvious speech-to-text errors, misspellings, \
+    and garbled words using context. Do not change meaning or invent facts.
+
+    Step 2 — Write concise meeting minutes based on the corrected transcript.
 
     Output format requirement:
-    - Return ONLY valid JSON object, no markdown and no code fences.
+    - Return ONLY a valid JSON object. No markdown, no code fences, no extra text.
     - JSON keys:
       {
         "topic": "short title",
         "summary_paragraphs": ["paragraph 1", "paragraph 2"],
-        "checklist": ["task 1", "task 2"]
+        "checklist": ["action item 1", "action item 2"]
       }
 
     Rules:
-    - "topic" must be a concise noun phrase (no prefix like "สรุป..." or "บทสรุป...").
-    - "summary_paragraphs" must have 2-4 paragraphs.
-    - Write natural meeting-minutes prose (not speaker-by-speaker replay).
-    - "checklist" can be empty [] if no concrete tasks.
-    - Fix obvious transcription/spelling errors for readability, but do not invent facts.
-    - Keep names, numbers, and decisions accurate to the transcript.
+    - "topic" must be a concise noun phrase. No filler prefixes.
+    - "summary_paragraphs" must have 2-4 paragraphs of natural prose (not speaker-by-speaker replay).
+    - Write in the same language(s) as the transcript.
+    - "checklist" must contain 2-5 concrete action items or follow-up tasks inferred from \
+      the discussion. Always include at least 2 items — if no explicit tasks were stated, \
+      infer reasonable next steps from the topics discussed.
+    - Keep names, numbers, and decisions accurate to the (corrected) transcript.
     """
 
     private static let qwenModelID = "mlx-community/Qwen3-4B-4bit"
@@ -84,7 +88,7 @@ actor QwenSummaryService {
                         container,
                         instructions: Self.summarySystemPrompt,
                         generateParameters: .init(
-                            maxTokens: 700,
+                            maxTokens: 900,
                             temperature: 0,
                             topP: 1.0
                         )
@@ -103,13 +107,14 @@ actor QwenSummaryService {
                         try Task.checkCancellation()
                         let retryPrompt = Self.makeNoThinkPrompt(
                             """
-                            Rewrite into strict JSON only, with no extra text:
-                            {"topic":"...","summary_paragraphs":["...","..."],"checklist":["..."]}
+                            Fix any transcription errors, then rewrite as strict JSON only — no extra text:
+                            {"topic":"...","summary_paragraphs":["...","..."],"checklist":["...","..."]}
 
-                            Summary rules:
-                            - 2 to 4 concise paragraphs, natural prose.
-                            - topic is short and without prefixes like "สรุป...".
-                            - Keep factual and concise.
+                            Rules:
+                            - topic: short noun phrase.
+                            - summary_paragraphs: 2 to 4 natural prose paragraphs.
+                            - checklist: 2 to 5 concrete action items. Never empty.
+                            - Write in the same language(s) as the transcript.
                             - No meta commentary.
 
                             Transcript:
