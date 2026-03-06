@@ -70,12 +70,16 @@ actor QwenSummaryService {
 
     /// Summarises a NotepadMinutes-format transcript.
     /// Yields the full response as a single string chunk.
-    nonisolated func summarize(notepadMinutesText: String) -> AsyncThrowingStream<String, Error> {
+    /// `onDownloadProgress` is called with 0…1 while the model downloads on first use.
+    nonisolated func summarize(
+        notepadMinutesText: String,
+        onDownloadProgress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let work = Task {
                 do {
                     try Task.checkCancellation()
-                    let container = try await self.loadIfNeeded()
+                    let container = try await self.loadIfNeeded(onDownloadProgress: onDownloadProgress)
                     let session = MLXLMCommon.ChatSession(
                         container,
                         instructions: Self.summarySystemPrompt,
@@ -145,7 +149,9 @@ actor QwenSummaryService {
 
     // MARK: - Private
 
-    private func loadIfNeeded() async throws -> ModelContainer {
+    private func loadIfNeeded(
+        onDownloadProgress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws -> ModelContainer {
         if let container = modelContainer { return container }
 
         let config: ModelConfiguration
@@ -159,7 +165,9 @@ actor QwenSummaryService {
 
         let container = try await LLMModelFactory.shared.loadContainer(
             configuration: config
-        ) { _ in }
+        ) { progress in
+            onDownloadProgress(progress.fractionCompleted)
+        }
         modelContainer = container
         return container
     }

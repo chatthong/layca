@@ -15,6 +15,7 @@ struct SummarySheetView: View {
     @State private var hasLoadedInitialContent = false
     @State private var activeSummaryTask: Task<Void, Never>?
     @State private var activeSummaryRunID: UUID?
+    @State private var downloadProgress: Double? = nil
     @Environment(\.dismiss) private var dismiss
     private let localSummaryCache = UserDefaults.standard
 
@@ -63,12 +64,22 @@ struct SummarySheetView: View {
 
     private var loadingView: some View {
         VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.4)
-                .accessibilityLabel("Generating summary")
-            Text("thinking...")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            if let progress = downloadProgress {
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .frame(maxWidth: 220)
+                    .accessibilityLabel("Downloading AI model")
+                Text("Downloading AI model… \(Int(progress * 100))%")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+                    .scaleEffect(1.4)
+                    .accessibilityLabel("Generating summary")
+                Text("thinking...")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
@@ -176,12 +187,20 @@ struct SummarySheetView: View {
     }
 
     private func runSummary(runID: UUID) async {
-        defer { finishSummaryRun(runID) }
+        defer {
+            downloadProgress = nil
+            finishSummaryRun(runID)
+        }
 
         let input = ExportService.build(format: .notepadMinutes, snapshot: snapshot)
         do {
             var accumulated = ""
-            for try await chunk in QwenSummaryService.shared.summarize(notepadMinutesText: input) {
+            for try await chunk in QwenSummaryService.shared.summarize(
+                notepadMinutesText: input,
+                onDownloadProgress: { @MainActor fraction in
+                    self.downloadProgress = fraction < 1.0 ? fraction : nil
+                }
+            ) {
                 guard !Task.isCancelled, isCurrentSummaryRun(runID) else {
                     return
                 }
