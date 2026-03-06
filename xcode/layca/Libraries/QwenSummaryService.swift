@@ -689,179 +689,43 @@ actor QwenSummaryService {
         return text
     }
 
+    /// Last-resort fallback when the LLM fails twice. Samples evenly-spread lines
+    /// from the transcript as paragraph material — language and topic agnostic.
     private static func heuristicSummary(from transcript: String) -> String {
-        let sourceLines = transcript
+        let lines = transcript
             .components(separatedBy: .newlines)
             .map { cleanOneLine($0) }
             .filter { !$0.isEmpty }
             .filter { isInformativeTranscriptLine($0) }
 
-        var hasSales = false
-        var hasFunding = false
-        var hasOnlineOffline = false
-        var hasB2B = false
-        var hasB2C = false
-        var hasBranches = false
-        var hasCompetition = false
-        var hasStrategy = false
-        var isFoodBusiness = false
-        var numberPhrases: [String] = []
-
-        for line in sourceLines {
-            let lowered = line.lowercased()
-            if containsAny(lowered, ["ขาย", "ยอด", "กำไร", "revenue", "sales", "profit"]) {
-                hasSales = true
-            }
-            if containsAny(lowered, ["ทุน", "ลงทุน", "เงินสด", "cost", "fund", "loan", "ยืม"]) {
-                hasFunding = true
-            }
-            if containsAny(lowered, ["ออนไลน์", "หน้าร้าน", "offline", "online", "ช่องทาง"]) {
-                hasOnlineOffline = true
-            }
-            if lowered.contains("b2b") {
-                hasB2B = true
-            }
-            if lowered.contains("b2c") {
-                hasB2C = true
-            }
-            if containsAny(lowered, ["สาขา", "ร้าน", "branch", "store"]) {
-                hasBranches = true
-            }
-            if containsAny(lowered, ["แข่งขัน", "competition", "คู่แข่ง", "ตลาด"]) {
-                hasCompetition = true
-            }
-            if containsAny(lowered, ["โฟกัส", "แผน", "ระยะยาว", "ขยาย", "strategy", "focus"]) {
-                hasStrategy = true
-            }
-            if containsAny(lowered, ["มาล่า", "ซอส", "วัตถุดิบ", "ร้านอาหาร", "อาหาร", "ซุป", "น้ำซุป"]) {
-                isFoodBusiness = true
-            }
-            numberPhrases.append(contentsOf: extractNumberPhrases(from: line))
-        }
-
-        numberPhrases = dedupePreservingOrder(numberPhrases).prefix(4).map { $0 }
-        let metricText: String = {
-            guard !numberPhrases.isEmpty else {
-                return "มีการทบทวนตัวเลขสำคัญของธุรกิจทั้งยอดขาย ต้นทุน และการเติบโตในภาพรวม"
-            }
-            let filtered = numberPhrases.filter { token in
-                token.range(of: #"\d"#, options: .regularExpression) != nil
-            }
-            let sample = filtered.prefix(2).joined(separator: ", ")
-            if sample.isEmpty {
-                return "มีการทบทวนตัวเลขสำคัญของธุรกิจเพื่อประเมินสถานะการเงินและการเติบโต"
-            }
-            return "มีการอ้างอิงตัวเลขประกอบการตัดสินใจ (เช่น \(sample)) เพื่อประเมินผลดำเนินงาน"
-        }()
-
-        var bullets: [String] = []
-        bullets.append(metricText)
-
-        if hasOnlineOffline || hasB2B || hasB2C {
-            var channel = "ช่องทางขายถูกวางให้สมดุลมากขึ้น"
-            if hasOnlineOffline {
-                channel += "ระหว่างหน้าร้านและออนไลน์"
-            }
-            if hasB2B || hasB2C {
-                channel += " พร้อมโครงสร้างลูกค้า"
-                if hasB2B && hasB2C {
-                    channel += "ทั้ง B2B และ B2C"
-                } else if hasB2B {
-                    channel += "ฝั่ง B2B"
-                } else {
-                    channel += "ฝั่ง B2C"
-                }
-            }
-            bullets.append(channel)
-        }
-
-        if hasFunding {
-            bullets.append("โครงสร้างเงินลงทุนและกระแสเงินสดยังเป็นประเด็นหลักที่ต้องติดตามอย่างใกล้ชิด")
-        }
-
-        if hasBranches || hasCompetition {
-            var growth = "การเติบโตถูกประเมินทั้งด้านการขยายธุรกิจ"
-            if hasBranches {
-                growth += "ในมุมสาขา/หน้าร้าน"
-            }
-            if hasCompetition {
-                growth += "และแรงกดดันจากการแข่งขันในตลาด"
-            }
-            bullets.append(growth)
-        }
-
-        if hasStrategy || hasSales {
-            if isFoodBusiness {
-                bullets.append("ทิศทางถัดไปเน้นพัฒนาสินค้าหลักและต่อยอดช่องทางขาย มากกว่าขยายหน้าร้านแบบเร่งตัว")
-            } else {
-                bullets.append("ทิศทางถัดไปเน้นโฟกัสสินค้าหลักและเพิ่มประสิทธิภาพช่องทางขายเพื่อยกระดับกำไร")
-            }
-        }
-
-        bullets = dedupePreservingOrder(bullets).prefix(5).map { $0 }
-        if bullets.count < 3 {
-            bullets.append("มีการทบทวนจุดแข็งของสินค้าและความแตกต่างจากคู่แข่งเพื่อรักษาความสามารถในการแข่งขัน")
-        }
-        if bullets.count < 3 {
-            bullets.append("สรุปภาพรวมเป็นการจัดลำดับแผนธุรกิจระยะถัดไปโดยอิงข้อมูลยอดขายจริงและข้อจำกัดด้านทุน")
-        }
-
-        let topic: String
-        if isFoodBusiness && hasSales {
-            topic = "ยอดขาย ช่องทางขาย และแผนขยาย"
-        } else if hasSales && (hasOnlineOffline || hasB2B || hasB2C) {
-            topic = "ยอดขาย ช่องทางขาย และแผนเติบโต"
-        } else if hasFunding {
-            topic = "การลงทุน โครงสร้างทุน และการเติบโต"
-        } else if hasCompetition {
-            topic = "ภาพรวมธุรกิจและการแข่งขันในตลาด"
+        // Sample up to 6 evenly-spread lines to represent the full transcript.
+        let sampled: [String]
+        if lines.count <= 6 {
+            sampled = lines
         } else {
-            topic = "ภาพรวมการประชุมเชิงธุรกิจ"
+            let step = max(lines.count / 6, 1)
+            sampled = stride(from: 0, to: lines.count, by: step).prefix(6).map { lines[$0] }
         }
 
-        let paragraph1 = bullets.prefix(2).joined(separator: " ")
-        let paragraph2 = bullets.dropFirst(2).prefix(2).joined(separator: " ")
-        let paragraph3 = bullets.dropFirst(4).prefix(1).joined(separator: " ")
-
-        var paragraphs: [String] = []
-        if !paragraph1.isEmpty { paragraphs.append(paragraph1) }
-        if !paragraph2.isEmpty { paragraphs.append(paragraph2) }
-        if !paragraph3.isEmpty { paragraphs.append(paragraph3) }
-        if paragraphs.isEmpty {
-            paragraphs = [
-                "การประชุมเน้นทบทวนภาพรวมธุรกิจ ผลดำเนินงาน และประเด็นสำคัญที่ส่งผลต่อการเติบโต.",
-                "ข้อสรุปคือให้เดินหน้าปรับกลยุทธ์ช่องทางขายและบริหารต้นทุนให้สอดคล้องกับแผนขยาย."
-            ]
+        let paragraphs: [String]
+        if sampled.isEmpty {
+            paragraphs = ["Discussion captured from transcript."]
+        } else {
+            let half = max(sampled.count / 2, 1)
+            let p1 = sampled.prefix(half).joined(separator: " ")
+            let p2 = sampled.dropFirst(half).joined(separator: " ")
+            paragraphs = [p1, p2].filter { !$0.isEmpty }
         }
 
-        var output: [String] = ["Topic: \(topic)", "", "Summary:"]
+        var output: [String] = ["Topic: Meeting Summary", "", "Summary:"]
         for (index, paragraph) in paragraphs.enumerated() {
             output.append(paragraph)
             if index < paragraphs.count - 1 {
                 output.append("")
             }
         }
-
-        var checklist: [String] = []
-        if hasOnlineOffline || hasB2B || hasB2C {
-            checklist.append("กำหนดสัดส่วนเป้าหมายยอดขายแยกตามช่องทางและกลุ่มลูกค้า (B2B/B2C)")
-        }
-        if hasFunding {
-            checklist.append("ติดตามกระแสเงินสดและแผนใช้เงินลงทุนรายเดือนให้ชัดเจน")
-        }
-        if hasBranches || hasCompetition {
-            checklist.append("สรุปแผนขยายธุรกิจโดยเทียบผลตอบแทนระหว่างขยายสาขาและลงทุนในสินค้า")
-        }
-        checklist = dedupePreservingOrder(checklist).prefix(3).map { $0 }
-        if !checklist.isEmpty {
-            output.append("")
-            output.append("Checklist:")
-            output.append(contentsOf: checklist.map { "- [ ] \($0)" })
-        }
-
         return output.joined(separator: "\n")
     }
-
     private static func isInformativeTranscriptLine(_ line: String) -> Bool {
         guard line.count >= 8 else {
             return false
@@ -915,10 +779,9 @@ actor QwenSummaryService {
         let spokenMarkers = ["ครับ", "ค่ะ", "คะ", "หรอ", "เหรอ", "เออ", "อ่า", "แล้วก็", "ใช่ไหม"]
         let topicLower = topic.lowercased()
 
-        if containsAny(topicLower, [
-            "it seems", "possible interpretation", "let me know", "if this is",
-            "from the transcript", "discussion captured"
-        ]) {
+        let metaTopicPhrases = ["it seems", "possible interpretation", "let me know", "if this is",
+                               "from the transcript", "discussion captured"]
+        if metaTopicPhrases.contains(where: { topicLower.contains($0) }) {
             return true
         }
 
@@ -949,7 +812,7 @@ actor QwenSummaryService {
         var output: [String] = ["Topic: \(topic)", "", "Summary:"]
         let summaryParagraphs = Array(paragraphs)
         if summaryParagraphs.isEmpty {
-            output.append("มีการสรุปประเด็นสำคัญจากการประชุมเพื่อใช้ตัดสินใจต่อในขั้นถัดไป.")
+            output.append("Discussion points captured from this session.")
         } else {
             for (index, paragraph) in summaryParagraphs.enumerated() {
                 output.append(paragraph)
@@ -982,29 +845,4 @@ actor QwenSummaryService {
         return output.joined(separator: "\n")
     }
 
-    private static func containsAny(_ text: String, _ terms: [String]) -> Bool {
-        terms.contains(where: { text.contains($0) })
-    }
-
-    private static func extractNumberPhrases(from line: String) -> [String] {
-        guard let regex = try? NSRegularExpression(
-            pattern: #"\d+(?:[.,]\d+)?\s*(?:%|เปอร์เซ็นต์|ล้าน|แสน|หมื่น|พัน|บาท|สาขา|ร้าน|ปี|เดือน|วัน)?"#
-        ) else {
-            return []
-        }
-
-        let fullRange = NSRange(line.startIndex..<line.endIndex, in: line)
-        let matches = regex.matches(in: line, options: [], range: fullRange)
-
-        return matches.compactMap { match in
-            guard let range = Range(match.range, in: line) else {
-                return nil
-            }
-            let token = String(line[range]).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !token.isEmpty else {
-                return nil
-            }
-            return token
-        }
-    }
 }
