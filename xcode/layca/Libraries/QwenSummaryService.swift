@@ -26,28 +26,27 @@ actor QwenSummaryService {
     // MARK: - Configuration
 
     private static let summarySystemPrompt = """
-    You are a precise meeting secretary. Follow these two steps:
+    You are a professional meeting secretary. Analyze the transcript and do two things:
 
-    Step 1 — Fix transcription errors silently: correct garbled words, mishearing, \
-    and obvious misspellings using context clues. Do not invent facts.
+    1. Silently fix speech-to-text errors (garbled words, mishearing, misspellings).
+    2. Write polished meeting minutes. Output ONLY this JSON — no markdown, no extra text:
 
-    Step 2 — Write concise meeting minutes from the corrected transcript.
-
-    Output ONLY a valid JSON object — no markdown, no code fences, no other text:
     {
-      "topic": "short noun-phrase title",
-      "summary_paragraphs": ["paragraph 1", "paragraph 2", "paragraph 3"],
-      "checklist": ["action item 1", "action item 2"]
+      "topic": "concise noun-phrase title",
+      "summary_paragraphs": [
+        "Paragraph covering main topics discussed and key context.",
+        "Paragraph covering key figures, numbers, decisions, and comparisons made.",
+        "Paragraph covering direction, strategy, or conclusions reached."
+      ],
+      "checklist": ["Specific actionable next step 1", "Specific actionable next step 2"]
     }
 
-    Rules:
-    - topic: short noun phrase, no filler prefixes.
-    - summary_paragraphs: 2 to 4 paragraphs. Natural meeting-minutes prose. \
-      Third-person, past tense. Not a speaker-by-speaker replay.
-    - Write in the same language(s) as the transcript.
-    - checklist: 2 to 5 concrete next steps. Infer reasonable follow-ups \
-      even if no explicit tasks were stated. Never leave it empty.
-    - Keep names, numbers, and decisions accurate.
+    Style rules:
+    - Formal prose. Third-person. Past tense. Not a speaker-by-speaker replay.
+    - Always mention specific numbers, percentages, and amounts from the meeting.
+    - Write in the same language as the transcript.
+    - checklist: 2 to 5 specific, actionable items. Infer next steps if not stated explicitly.
+    - topic: short, no filler prefixes.
     """
 
     private static let qwenModelID = "mlx-community/Qwen3-4B-4bit"
@@ -86,13 +85,13 @@ actor QwenSummaryService {
                         container,
                         instructions: Self.summarySystemPrompt,
                         generateParameters: .init(
-                            maxTokens: 900,
+                            maxTokens: 1500,
                             temperature: 0,
                             topP: 1.0
                         )
                     )
                     let preparedTranscript = Self.preparedTranscript(from: notepadMinutesText)
-                    let firstPrompt = Self.makeNoThinkPrompt(preparedTranscript)
+                    let firstPrompt = Self.makeTranscriptPrompt(preparedTranscript)
                     try Task.checkCancellation()
                     let rawResult = try await session.respond(to: firstPrompt)
                     var cleanedResult = Self.summaryFromRawOutput(
@@ -103,7 +102,7 @@ actor QwenSummaryService {
                     // Retry once with a hard JSON repair instruction when output is weak or malformed.
                     if !Self.hasMeaningfulSummary(cleanedResult) {
                         try Task.checkCancellation()
-                        let retryPrompt = Self.makeNoThinkPrompt(
+                        let retryPrompt = Self.makeTranscriptPrompt(
                             """
                             Fix any transcription errors, then rewrite as strict JSON only — no extra text:
                             {"topic":"...","summary_paragraphs":["...","..."],"checklist":["...","..."]}
@@ -378,11 +377,10 @@ actor QwenSummaryService {
         return "- [ ] \(cleaned)"
     }
 
-    private static func makeNoThinkPrompt(_ transcript: String) -> String {
-        // Qwen3 supports /no_think control prompt; harmless for models that ignore it.
+    private static func makeTranscriptPrompt(_ transcript: String) -> String {
+        // Send transcript directly — Qwen3 thinking mode ON for better
+        // ASR correction quality. <think> blocks are stripped from output.
         """
-        /no_think
-
         Transcript:
         \(transcript)
         """
