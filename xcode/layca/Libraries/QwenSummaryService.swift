@@ -28,28 +28,26 @@ actor QwenSummaryService {
     private static let summarySystemPrompt = """
     You are a precise meeting secretary. Follow these two steps:
 
-    Step 1 — Correct transcription errors: Fix obvious speech-to-text errors, misspellings, \
-    and garbled words using context. Do not change meaning or invent facts.
+    Step 1 — Fix transcription errors silently: correct garbled words, mishearing, \
+    and obvious misspellings using context clues. Do not invent facts.
 
-    Step 2 — Write concise meeting minutes based on the corrected transcript.
+    Step 2 — Write concise meeting minutes from the corrected transcript.
 
-    Output format requirement:
-    - Return ONLY a valid JSON object. No markdown, no code fences, no extra text.
-    - JSON keys:
-      {
-        "topic": "short title",
-        "summary_paragraphs": ["paragraph 1", "paragraph 2"],
-        "checklist": ["action item 1", "action item 2"]
-      }
+    Output ONLY a valid JSON object — no markdown, no code fences, no other text:
+    {
+      "topic": "short noun-phrase title",
+      "summary_paragraphs": ["paragraph 1", "paragraph 2", "paragraph 3"],
+      "checklist": ["action item 1", "action item 2"]
+    }
 
     Rules:
-    - "topic" must be a concise noun phrase. No filler prefixes.
-    - "summary_paragraphs" must have 2-4 paragraphs of natural prose (not speaker-by-speaker replay).
+    - topic: short noun phrase, no filler prefixes.
+    - summary_paragraphs: 2 to 4 paragraphs. Natural meeting-minutes prose. \
+      Third-person, past tense. Not a speaker-by-speaker replay.
     - Write in the same language(s) as the transcript.
-    - "checklist" must contain 2-5 concrete action items or follow-up tasks inferred from \
-      the discussion. Always include at least 2 items — if no explicit tasks were stated, \
-      infer reasonable next steps from the topics discussed.
-    - Keep names, numbers, and decisions accurate to the (corrected) transcript.
+    - checklist: 2 to 5 concrete next steps. Infer reasonable follow-ups \
+      even if no explicit tasks were stated. Never leave it empty.
+    - Keep names, numbers, and decisions accurate.
     """
 
     private static let qwenModelID = "mlx-community/Qwen3-4B-4bit"
@@ -502,6 +500,11 @@ actor QwenSummaryService {
                 if line.range(of: #"^speaker\s+[A-Z0-9]+\s*\([A-Za-z]+\)\s*$"#, options: [.regularExpression, .caseInsensitive]) != nil {
                     return false
                 }
+                // Strip filler/noise lines: repeated single words or very short utterances.
+                // e.g. "อ่ะ อ่ะ อ่ะ อ่ะ", "Right.", "I don't know."
+                let words = line.split(separator: " ").map(String.init)
+                if words.count >= 3 && Set(words).count == 1 { return false }
+                if line.count < 10 { return false }
                 return true
             }
         let joined = cleanedLines.joined(separator: "\n")
@@ -781,6 +784,9 @@ actor QwenSummaryService {
     }
 
     private static func isLowQualitySummary(topic: String, paragraphs: [String]) -> Bool {
+        // Spoken-language particles that shouldn't appear in formal meeting minutes.
+        // A properly written summary avoids them; heavy presence means the model
+        // copy-pasted transcript verbatim instead of paraphrasing.
         let spokenMarkers = ["ครับ", "ค่ะ", "คะ", "หรอ", "เหรอ", "เออ", "อ่า", "แล้วก็", "ใช่ไหม"]
         let topicLower = topic.lowercased()
 
@@ -790,20 +796,22 @@ actor QwenSummaryService {
             return true
         }
 
-        let noisyTopic = spokenMarkers.contains { topic.contains($0) } && topic.count > 24
-        if noisyTopic {
+        // Topic containing multiple spoken markers is almost certainly raw transcript.
+        let topicMarkerCount = spokenMarkers.filter { topic.contains($0) }.count
+        if topicMarkerCount >= 2 {
             return true
         }
 
+        // A paragraph is noisy only when it has heavy spoken-language density:
+        // 3+ markers, or 2+ markers in a very long paragraph, or comma-spam.
         let noisyParagraphs = paragraphs.filter { paragraph in
-            let markerCount = spokenMarkers.reduce(0) { count, marker in
-                count + (paragraph.contains(marker) ? 1 : 0)
-            }
-            let hasManyCommas = paragraph.filter { $0 == "," }.count >= 4
-            return markerCount >= 2 || (markerCount >= 1 && paragraph.count > 70) || hasManyCommas
+            let markerCount = spokenMarkers.filter { paragraph.contains($0) }.count
+            let hasManyCommas = paragraph.filter { $0 == "," }.count >= 6
+            return markerCount >= 3 || (markerCount >= 2 && paragraph.count > 120) || hasManyCommas
         }
 
-        return noisyParagraphs.count >= 2
+        // Reject only when the majority of paragraphs are noisy.
+        return noisyParagraphs.count >= max(paragraphs.count, 2)
     }
 
     private static func normalizedSummaryDisplay(from text: String) -> String {
