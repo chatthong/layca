@@ -458,7 +458,7 @@ actor LiveSessionPipeline {
     // Sprint 7 increased this to 8_192, but `SpeakerDiarizationCoreMLService.checkForInterrupt`
     // still analyzes only the last 4_096 samples and requires consecutive detections,
     // which effectively halves boundary-check cadence and can collapse chunks to one speaker.
-    private let interruptCheckWindowSize = 4_096
+    private let interruptCheckWindowSize = 16_384
     private var chunkCounter = 0
     private var runToken = UUID()
     private var vadState: VADState = .loading
@@ -479,21 +479,21 @@ actor LiveSessionPipeline {
     private let speakerProbeIntervalSpeechSeconds: Double = 0.25
     private let minSpeechSecondsForSpeakerProbe: Double = 1.6
     private let minSpeakerBoundaryChunkSeconds: Double = 1.6
-    private let speakerSimilarityThreshold: Float = 0.65
-    private let speakerLooseSimilarityThreshold: Float = 0.52
+    private let speakerSimilarityThreshold: Float = 0.75
+    private let speakerLooseSimilarityThreshold: Float = 0.62
     // Assignment should be stricter than probe/boundary detection.
     // A too-loose assignment threshold causes mixed/noisy chunks to be absorbed into
     // the first speaker embedding, collapsing many people into "Speaker A".
-    private let speakerAssignmentLooseSimilarityThreshold: Float = 0.62
+    private let speakerAssignmentLooseSimilarityThreshold: Float = 0.72
     private let newSpeakerCandidateSimilarity: Float = 0.58
-    private let immediatNewSpeakerSimilarityThreshold: Float = 0.40
+    private let immediatNewSpeakerSimilarityThreshold: Float = 0.55
     private let pendingChunksBeforeNewSpeaker = 2
     private let maxSpeakersPerSession = 6
     private let minSegmentDurationForNewSpeaker: Double = 2.5
     private let adaptiveProbeWindowSpeechSeconds: Double = 0.8
     private let adaptiveProbeObservationThreshold: Int = 5
     private let turnTakingSilenceThreshold: Double = 0.5
-    private let turnTakingSimilarityThreshold: Float = 0.45
+    private let turnTakingSimilarityThreshold: Float = 0.68
     private let speakerFallbackThreshold: Double = 0.015
     // 80ms is too aggressive on some devices (especially while Whisper/CoreML is warming up),
     // causing interrupt detections to be computed but discarded before the pipeline can apply them.
@@ -518,6 +518,12 @@ actor LiveSessionPipeline {
 
     private func fmt4(_ value: Double) -> String {
         String(format: "%.4f", value)
+    }
+
+    /// Snapshot of the live pipeline's speaker state so PostSaveSpeakerClassifier
+    /// can be seeded with the same known speakers before it runs.
+    func currentSpeakerState() -> (embeddings: [String: [Float]], counts: [String: Int]) {
+        (speakerEmbeddings, speakerObservationCounts)
     }
 
     func start(config: LivePipelineConfig) -> AsyncStream<PipelineEvent> {
@@ -1448,6 +1454,12 @@ actor LiveSessionPipeline {
             speakerObservationCounts[label] = 1
             return
         }
+
+        // Contamination guard: reject embeddings too dissimilar to the current
+        // centroid to stop positive-feedback drift across similar speakers.
+        // Both vectors are L2-normalized, so dot product == cosine similarity.
+        let contaminationSimilarity = zip(current, embedding).reduce(Float(0)) { $0 + $1.0 * $1.1 }
+        guard contaminationSimilarity >= 0.70 else { return }
 
         let previousCount = speakerObservationCounts[label] ?? 1
         let newCount = previousCount + 1
@@ -2677,6 +2689,20 @@ actor PostSaveSpeakerClassifier {
     private let minSegmentDurationForNewSpeaker: Double = 1.0
     private let maxSpeakersPerSession = 8
 
+    /// Seeds this classifier's session state with speakers the live pipeline already knows,
+    /// preventing it from overriding a correct live label with a stale re-derived one.
+    /// Additive-only: does not overwrite speakers already accumulated by this classifier.
+    func syncSpeakers(sessionID: UUID, from embeddings: [String: [Float]], counts: [String: Int]) {
+        var current = speakerEmbeddingsBySession[sessionID] ?? [:]
+        var currentCounts = speakerObservationCountsBySession[sessionID] ?? [:]
+        for (label, embedding) in embeddings where current[label] == nil {
+            current[label] = embedding
+            currentCounts[label] = counts[label] ?? 1
+        }
+        speakerEmbeddingsBySession[sessionID] = current
+        speakerObservationCountsBySession[sessionID] = currentCounts
+    }
+
     func classify(
         sessionID: UUID,
         samples: [Float],
@@ -2822,6 +2848,11 @@ actor PostSaveSpeakerClassifier {
             counts[label] = 1
             return
         }
+
+        // Contamination guard: reject embeddings too dissimilar to the current
+        // centroid to stop positive-feedback drift across similar speakers.
+        let contaminationSimilarity = zip(current, embedding).reduce(Float(0)) { $0 + $1.0 * $1.1 }
+        guard contaminationSimilarity >= 0.70 else { return }
 
         let previousCount = counts[label] ?? 1
         let newCount = previousCount + 1
@@ -4642,6 +4673,16 @@ final class AppBackend: ObservableObject {
                         adjustedTranscript.endOffset - adjustedTranscript.startOffset,
                         0
                     )
+                    // Seed the post-save classifier with the live pipeline's current
+                    // speaker state so it knows about speakers (e.g. "Speaker C") that
+                    // were just created — preventing it from reverting a correct live label.
+                    let (liveEmbeddings, liveCounts) = await self.pipeline.currentSpeakerState()
+                    await self.postSaveSpeakerClassifier.syncSpeakers(
+                        sessionID: sessionID,
+                        from: liveEmbeddings,
+                        counts: liveCounts
+                    )
+
                     if let finalSpeakerID = await self.postSaveSpeakerClassifier.classify(
                         sessionID: sessionID,
                         samples: adjustedTranscript.samples,
