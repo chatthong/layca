@@ -34,6 +34,20 @@ struct ContentView: View {
         .sheet(isPresented: $isSettingsPresented) {
             settingsSheetScreen
         }
+        .sheet(isPresented: $backend.showModelPickerSheet) {
+            WhisperModelPickerView(
+                context: .gate,
+                activeProfile: backend.whisperModelProfile,
+                manager: backend.modelDownloadManager,
+                onActivate: { profile in
+                    backend.whisperModelProfile = profile
+                    backend.modelDownloadManager.markActive(profile)
+                },
+                onDismiss: {
+                    backend.showModelPickerSheet = false
+                }
+            )
+        }
     }
 }
 
