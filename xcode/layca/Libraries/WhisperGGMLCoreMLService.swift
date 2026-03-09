@@ -738,7 +738,7 @@ actor WhisperGGMLCoreMLService {
         return (.pro, nil)
     }
 
-    private func modelSpec(for profile: WhisperModelProfile) -> ModelAssetSpec {
+    private nonisolated func modelSpec(for profile: WhisperModelProfile) -> ModelAssetSpec {
         switch profile {
         case .quick:
             return ModelAssetSpec(
@@ -955,7 +955,7 @@ actor WhisperGGMLCoreMLService {
 
     /// Returns the URL where a model profile's binary is cached on disk, if present and valid.
     /// Returns nil if the file is missing or too small.
-    func cachedModelURL(for profile: WhisperModelProfile) -> URL? {
+    nonisolated func cachedModelURL(for profile: WhisperModelProfile) -> URL? {
         let spec = modelSpec(for: profile)
         let url = rootDirectory.appendingPathComponent(spec.cacheFileName)
         guard isValidModelFile(at: url, minimumFileSizeBytes: spec.minimumFileSizeBytes) else {
@@ -965,19 +965,21 @@ actor WhisperGGMLCoreMLService {
     }
 
     /// Returns the HuggingFace remote download URL for a profile, or nil if none is configured.
-    func remoteDownloadURL(for profile: WhisperModelProfile) -> URL? {
+    nonisolated func remoteDownloadURL(for profile: WhisperModelProfile) -> URL? {
         guard let str = modelSpec(for: profile).downloadURL else { return nil }
-        return URL(string: str)
+        let url = URL(string: str)
+        assert(url != nil, "Malformed downloadURL for profile \(profile): \(str)")
+        return url
     }
 
     /// Returns the local cache destination URL and minimum valid file size for a profile.
-    func cacheDestination(for profile: WhisperModelProfile) -> (url: URL, minimumBytes: Int64) {
+    nonisolated func cacheDestination(for profile: WhisperModelProfile) -> (url: URL, minimumBytes: Int64) {
         let spec = modelSpec(for: profile)
         return (rootDirectory.appendingPathComponent(spec.cacheFileName), spec.minimumFileSizeBytes)
     }
 
     /// Creates the cache directory if it does not already exist.
-    func prepareCacheDirectory() throws {
+    nonisolated func prepareCacheDirectory() throws {
         try fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
     }
 
