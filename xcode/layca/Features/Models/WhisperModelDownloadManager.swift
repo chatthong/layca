@@ -80,18 +80,31 @@ final class WhisperModelDownloadManager: ObservableObject {
 
                 FileManager.default.createFile(atPath: tempURL.path, contents: nil)
                 let handle = try FileHandle(forWritingTo: tempURL)
+                var buffer = Data(capacity: 262_144) // 256 KB write buffer
                 var receivedBytes: Int64 = 0
 
                 for try await byte in asyncBytes {
-                    try handle.write(contentsOf: [byte])
+                    buffer.append(byte)
                     receivedBytes += 1
+
+                    if buffer.count >= 262_144 {
+                        try handle.write(contentsOf: buffer)
+                        buffer.removeAll(keepingCapacity: true)
+                    }
+
                     if receivedBytes % 65_536 == 0 {
                         let progress = totalBytes > 0 ? Double(receivedBytes) / Double(totalBytes) : 0
                         await MainActor.run {
                             self.states[profile] = .downloading(progress: progress)
                         }
                     }
+
                     if Task.isCancelled { break }
+                }
+
+                // Flush remaining bytes
+                if !buffer.isEmpty {
+                    try handle.write(contentsOf: buffer)
                 }
                 try handle.close()
 
@@ -138,8 +151,8 @@ final class WhisperModelDownloadManager: ObservableObject {
     /// Cancels an in-flight download and resets state to notDownloaded.
     func cancel(profile: WhisperModelProfile) {
         downloadTasks[profile]?.cancel()
-        downloadTasks[profile] = nil
         states[profile] = .notDownloaded
+        downloadErrors[profile] = nil
     }
 
     /// Marks a profile as the active model. Demotes any previously active profile to downloaded.
