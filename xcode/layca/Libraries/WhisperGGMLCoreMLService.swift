@@ -749,7 +749,7 @@ actor WhisperGGMLCoreMLService {
                 ],
                 cacheFileName: "ggml-large-v3-turbo-q5_0.bin",
                 minimumFileSizeBytes: Constants.minimumQ5ModelSizeBytes,
-                downloadURL: nil
+                downloadURL: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin?download=true"
             )
         case .normal:
             return ModelAssetSpec(
@@ -760,7 +760,7 @@ actor WhisperGGMLCoreMLService {
                 ],
                 cacheFileName: "ggml-large-v3-turbo-q8_0.bin",
                 minimumFileSizeBytes: Constants.minimumQ8ModelSizeBytes,
-                downloadURL: nil
+                downloadURL: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin?download=true"
             )
         case .pro:
             return ModelAssetSpec(
@@ -951,6 +951,34 @@ actor WhisperGGMLCoreMLService {
             return false
         }
         return Int64(fileSize) >= minimumFileSizeBytes
+    }
+
+    /// Returns the URL where a model profile's binary is cached on disk, if present and valid.
+    /// Returns nil if the file is missing or too small.
+    func cachedModelURL(for profile: WhisperModelProfile) -> URL? {
+        let spec = modelSpec(for: profile)
+        let url = rootDirectory.appendingPathComponent(spec.cacheFileName)
+        guard isValidModelFile(at: url, minimumFileSizeBytes: spec.minimumFileSizeBytes) else {
+            return nil
+        }
+        return url
+    }
+
+    /// Returns the HuggingFace remote download URL for a profile, or nil if none is configured.
+    func remoteDownloadURL(for profile: WhisperModelProfile) -> URL? {
+        guard let str = modelSpec(for: profile).downloadURL else { return nil }
+        return URL(string: str)
+    }
+
+    /// Returns the local cache destination URL and minimum valid file size for a profile.
+    func cacheDestination(for profile: WhisperModelProfile) -> (url: URL, minimumBytes: Int64) {
+        let spec = modelSpec(for: profile)
+        return (rootDirectory.appendingPathComponent(spec.cacheFileName), spec.minimumFileSizeBytes)
+    }
+
+    /// Creates the cache directory if it does not already exist.
+    func prepareCacheDirectory() throws {
+        try fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
     }
 
     private func bundledEncoderDirectoryURL() -> URL? {
