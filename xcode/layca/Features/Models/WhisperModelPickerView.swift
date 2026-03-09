@@ -103,9 +103,15 @@ struct WhisperModelPickerView: View {
                 }
                 modelCardsSection
             }
+            #if os(iOS)
             .listStyle(.insetGrouped)
+            #else
+            .listStyle(.inset)
+            #endif
             .navigationTitle(context == .gate ? "Choose a Model" : "Whisper Models")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar { toolbarContent }
             .interactiveDismissDisabled(context == .gate)
             .task {
@@ -169,16 +175,25 @@ struct WhisperModelPickerView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         if context == .settings {
+            #if os(iOS)
             ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    onDismiss()
-                } label: {
+                Button { onDismiss() } label: {
                     Image(systemName: "xmark")
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
                 .accessibilityLabel("Close")
             }
+            #elseif os(macOS)
+            ToolbarItem(placement: .cancellationAction) {
+                Button { onDismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityLabel("Close")
+            }
+            #endif
         }
     }
 }
