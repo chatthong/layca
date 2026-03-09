@@ -3059,7 +3059,10 @@ final class AppBackend: ObservableObject {
         didSet {
             persistSettingsIfNeeded()
             applyWhisperAccelerationPreferencesIfNeeded()
-            modelDownloadManager.markActive(whisperModelProfile)
+            let currentState = modelDownloadManager.states[whisperModelProfile]
+            if currentState == .downloaded || currentState == .active {
+                modelDownloadManager.markActive(whisperModelProfile)
+            }
         }
     }
     @Published var mainTimerDisplayStyle: MainTimerDisplayStyle = .friendly {
