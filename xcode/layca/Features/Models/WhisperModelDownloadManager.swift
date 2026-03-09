@@ -87,7 +87,9 @@ final class WhisperModelDownloadManager: ObservableObject {
                     receivedBytes += 1
                     if receivedBytes % 65_536 == 0 {
                         let progress = totalBytes > 0 ? Double(receivedBytes) / Double(totalBytes) : 0
-                        self.states[profile] = .downloading(progress: progress)
+                        await MainActor.run {
+                            self.states[profile] = .downloading(progress: progress)
+                        }
                     }
                     if Task.isCancelled { break }
                 }
@@ -95,8 +97,10 @@ final class WhisperModelDownloadManager: ObservableObject {
 
                 if Task.isCancelled {
                     try? FileManager.default.removeItem(at: tempURL)
-                    self.states[profile] = .notDownloaded
-                    self.downloadTasks[profile] = nil
+                    await MainActor.run {
+                        self.states[profile] = .notDownloaded
+                        self.downloadTasks[profile] = nil
+                    }
                     return
                 }
 
@@ -112,17 +116,21 @@ final class WhisperModelDownloadManager: ObservableObject {
                 }
                 try FileManager.default.moveItem(at: tempURL, to: destination)
 
-                self.states[profile] = .downloaded
-                self.downloadTasks[profile] = nil
+                await MainActor.run {
+                    self.states[profile] = .downloaded
+                    self.downloadTasks[profile] = nil
+                }
 
             } catch {
                 let isCancelled = error is CancellationError
                     || (error as? URLError)?.code == .cancelled
-                self.states[profile] = .notDownloaded
-                if !isCancelled {
-                    self.downloadErrors[profile] = error.localizedDescription
+                await MainActor.run {
+                    self.states[profile] = .notDownloaded
+                    if !isCancelled {
+                        self.downloadErrors[profile] = error.localizedDescription
+                    }
+                    self.downloadTasks[profile] = nil
                 }
-                self.downloadTasks[profile] = nil
             }
         }
     }
