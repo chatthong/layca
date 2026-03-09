@@ -448,6 +448,7 @@ private extension ContentView {
             whisperModelRecommendationText: backend.whisperModelRecommendationText,
             isRestoringPurchases: backend.isRestoringPurchases,
             restoreStatusMessage: backend.restoreStatusMessage,
+            manager: backend.modelDownloadManager,
             onToggleLanguage: backend.toggleLanguageFocus,
             onRestorePurchases: backend.restorePurchases,
             onSyncNow: { Task { await backend.syncNow() } }
@@ -539,6 +540,7 @@ private extension ContentView {
             whisperModelRecommendationText: backend.whisperModelRecommendationText,
             isRestoringPurchases: backend.isRestoringPurchases,
             restoreStatusMessage: backend.restoreStatusMessage,
+            manager: backend.modelDownloadManager,
             onToggleLanguage: backend.toggleLanguageFocus,
             onRestorePurchases: backend.restorePurchases,
             onSyncNow: { Task { await backend.syncNow() } }

@@ -1138,6 +1138,7 @@ struct MacSettingsWorkspaceView: View {
     let whisperModelRecommendationText: String
     let isRestoringPurchases: Bool
     let restoreStatusMessage: String?
+    let manager: WhisperModelDownloadManager
     let onToggleLanguage: (String) -> Void
     let onRestorePurchases: () -> Void
     let onSyncNow: () -> Void
@@ -1163,6 +1164,7 @@ struct MacSettingsWorkspaceView: View {
             whisperModelRecommendationText: whisperModelRecommendationText,
             isRestoringPurchases: isRestoringPurchases,
             restoreStatusMessage: restoreStatusMessage,
+            manager: manager,
             onToggleLanguage: onToggleLanguage,
             onRestorePurchases: onRestorePurchases,
             onSyncNow: onSyncNow,

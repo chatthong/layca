@@ -29,6 +29,7 @@ struct SettingsTabView: View {
     let whisperModelRecommendationText: String
     let isRestoringPurchases: Bool
     let restoreStatusMessage: String?
+    let manager: WhisperModelDownloadManager
 
     let onToggleLanguage: (String) -> Void
     let onRestorePurchases: () -> Void
@@ -54,6 +55,7 @@ struct SettingsTabView: View {
             whisperModelRecommendationText: whisperModelRecommendationText,
             isRestoringPurchases: isRestoringPurchases,
             restoreStatusMessage: restoreStatusMessage,
+            manager: manager,
             onToggleLanguage: onToggleLanguage,
             onRestorePurchases: onRestorePurchases,
             onSyncNow: onSyncNow,
@@ -130,6 +132,7 @@ struct SettingsSheetFlowView: View {
     let whisperModelRecommendationText: String
     let isRestoringPurchases: Bool
     let restoreStatusMessage: String?
+    let manager: WhisperModelDownloadManager
 
     let onToggleLanguage: (String) -> Void
     let onRestorePurchases: () -> Void
@@ -193,13 +196,16 @@ struct SettingsSheetFlowView: View {
                             dismiss()
                         }
                     case .offlineModelSwitch:
-                        SettingsOfflineModelSwitchStepView(
-                            whisperModelProfile: $whisperModelProfile,
-                            whisperModelRecommendationText: whisperModelRecommendationText
+                        WhisperModelPickerView(
+                            context: .settings,
+                            activeProfile: whisperModelProfile,
+                            manager: manager,
+                            onActivate: { profile in
+                                whisperModelProfile = profile
+                                manager.markActive(profile)
+                            },
+                            onDismiss: { }
                         )
-                        .applySettingsSubstepCloseControl {
-                            dismiss()
-                        }
                     case .cloudAndPurchases:
                         SettingsCloudAndPurchasesStepView(
                             isICloudSyncEnabled: $isICloudSyncEnabled,
@@ -620,39 +626,6 @@ private struct SettingsAccelerationStepView: View {
             }
         }
         .navigationTitle("Acceleration")
-        .applyStepTitleDisplayMode()
-    }
-}
-
-private struct SettingsOfflineModelSwitchStepView: View {
-    @Binding var whisperModelProfile: WhisperModelProfile
-    let whisperModelRecommendationText: String
-
-    var body: some View {
-        SettingsStepContainer {
-            Section {
-                Text("Choose which offline model profile the app should prefer.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Offline Model Switch") {
-                Picker("Offline Model Switch", selection: $whisperModelProfile) {
-                    ForEach(WhisperModelProfile.allCases, id: \.self) { profile in
-                        Text(profile.title).tag(profile)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                Text(whisperModelRecommendationText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(whisperModelProfile.detailText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .navigationTitle("Offline Model Switch")
         .applyStepTitleDisplayMode()
     }
 }
