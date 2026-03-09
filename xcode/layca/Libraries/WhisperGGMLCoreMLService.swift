@@ -743,10 +743,7 @@ actor WhisperGGMLCoreMLService {
         case .quick:
             return ModelAssetSpec(
                 profile: .quick,
-                bundledFileNames: [
-                    "ggml-large-v3-turbo-q5_0.bin",
-                    "ggml-large-v3-turbo-q5_0"
-                ],
+                bundledFileNames: [],
                 cacheFileName: "ggml-large-v3-turbo-q5_0.bin",
                 minimumFileSizeBytes: Constants.minimumQ5ModelSizeBytes,
                 downloadURL: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin?download=true"
@@ -754,10 +751,7 @@ actor WhisperGGMLCoreMLService {
         case .normal:
             return ModelAssetSpec(
                 profile: .normal,
-                bundledFileNames: [
-                    "ggml-large-v3-turbo-q8_0.bin",
-                    "ggml-large-v3-turbo-q8_0"
-                ],
+                bundledFileNames: [],
                 cacheFileName: "ggml-large-v3-turbo-q8_0.bin",
                 minimumFileSizeBytes: Constants.minimumQ8ModelSizeBytes,
                 downloadURL: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin?download=true"
@@ -765,7 +759,7 @@ actor WhisperGGMLCoreMLService {
         case .pro:
             return ModelAssetSpec(
                 profile: .pro,
-                bundledFileNames: ["ggml-large-v3-turbo.bin"],
+                bundledFileNames: [],
                 cacheFileName: "ggml-large-v3-turbo.bin",
                 minimumFileSizeBytes: Constants.minimumTurboModelSizeBytes,
                 downloadURL: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true"

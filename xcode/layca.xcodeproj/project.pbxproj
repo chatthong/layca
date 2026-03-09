@@ -284,7 +284,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\nSRC_ASSETS_DIR=\"${SRCROOT}/layca/Models/RuntimeAssets\"\nDST_ASSETS_DIR=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Models/RuntimeAssets\"\nmkdir -p \"${DST_ASSETS_DIR}\"\nrsync -a --delete \"${SRC_ASSETS_DIR}/\" \"${DST_ASSETS_DIR}/\"\n";
+			shellScript = "set -euo pipefail\nSRC_ASSETS_DIR=\"${SRCROOT}/layca/Models/RuntimeAssets\"\nDST_ASSETS_DIR=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Models/RuntimeAssets\"\nmkdir -p \"${DST_ASSETS_DIR}\"\nrsync -a --delete --exclude='ggml-large-v3-turbo-q5_0.bin' --exclude='ggml-large-v3-turbo-q8_0.bin' --exclude='ggml-large-v3-turbo.bin' \"${SRC_ASSETS_DIR}/\" \"${DST_ASSETS_DIR}/\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
