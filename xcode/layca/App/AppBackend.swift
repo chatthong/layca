@@ -2982,6 +2982,7 @@ final class AppBackend: ObservableObject {
     }
 
     @Published var isRecording = false
+    @Published var showModelPickerSheet = false
     @Published var liveSpeakerID: String? = nil
     @Published private(set) var isTranscriptChunkPlaying = false
     @Published private(set) var transcriptChunkPlaybackRemainingSeconds: Double = 0
@@ -3058,6 +3059,7 @@ final class AppBackend: ObservableObject {
         didSet {
             persistSettingsIfNeeded()
             applyWhisperAccelerationPreferencesIfNeeded()
+            modelDownloadManager.markActive(whisperModelProfile)
         }
     }
     @Published var mainTimerDisplayStyle: MainTimerDisplayStyle = .friendly {
@@ -3093,6 +3095,9 @@ final class AppBackend: ObservableObject {
         diarizer: pipeline.speakerDiarizer
     )
     private let whisperTranscriber = WhisperGGMLCoreMLService()
+    private(set) lazy var modelDownloadManager: WhisperModelDownloadManager = {
+        WhisperModelDownloadManager(service: whisperTranscriber)
+    }()
 
     private var streamTask: Task<Void, Never>?
     private var chunkPlayer: AVAudioPlayer?
@@ -3188,6 +3193,7 @@ final class AppBackend: ObservableObject {
         activeTranscriptRows = []
 
         applyWhisperAccelerationPreferencesIfNeeded()
+        await modelDownloadManager.refreshStates(activeProfile: whisperModelProfile)
         await refreshSessionsFromStore(autoSelectFallbackSession: false)
 
         let inferredCounter = inferChatCounter(from: sessions)
@@ -3334,15 +3340,13 @@ final class AppBackend: ObservableObject {
 
     func toggleRecording() {
         if isRecording {
-            Task {
-                await stopRecording()
-            }
+            Task { await stopRecording() }
         } else if isTranscriptChunkPlaying {
             stopChunkPlayback()
+        } else if !modelDownloadManager.hasAnyDownloadedModel {
+            showModelPickerSheet = true
         } else {
-            Task {
-                await startRecording()
-            }
+            Task { await startRecording() }
         }
     }
 
