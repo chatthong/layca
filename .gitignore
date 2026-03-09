@@ -50,6 +50,8 @@ fastlane/test_output/
 Models/
 !xcode/layca/Models/
 !xcode/layca/Models/**
+!xcode/layca/Features/Models/
+!xcode/layca/Features/Models/**
 Documents/Sessions/
 xcode/layca/Models/RuntimeAssets/ggml-large-v3-turbo.bin
 xcode/layca/Models/RuntimeAssets/ggml-large-v3-turbo-encoder.mlmodelc/
