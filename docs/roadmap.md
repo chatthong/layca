@@ -2,6 +2,23 @@
 
 ## Completed In This Chat
 
+### Whisper Model Picker UI Overhaul + Language Focus Improvements
+- `Features/Models/WhisperModelPickerView.swift`, `Features/Models/WhisperModelDownloadManager.swift`, `Features/Share/SettingsSheetFlowView.swift`, `App/ContentView.swift`, `Libraries/WhisperGGMLCoreMLService.swift`, `layca-macos.entitlements`
+- Model picker controls replaced with native icon-style buttons: download arrow circle, progress ring, stroke-check "Use" pill, green "Active" pill
+- Auto-activates remaining model after last-one deletion
+- macOS grouped list style fixed (`Form + .formStyle(.grouped)`)
+- Fixed macOS `comparisonTypeMismatch` crash from nested `NavigationStack`
+- Fixed macOS sandbox network block (added `com.apple.security.network.client` entitlement)
+- Rewrote download to `URLSessionDownloadTask` for full OS-native speed
+- Added Safari User-Agent to bypass HuggingFace CDN blocking
+- Fixed progress stuck at 0% when CDN omits `Content-Length`
+- Swift 6: `fileManager`/`rootDirectory` marked `nonisolated let`, `isValidModelFile` marked `nonisolated func`
+- Renamed "Offline Model Switch" → "Whisper Models Switch"
+- Language Focus: replaced selected-count badge with removable chip badges (tap × to deselect)
+- Language Focus: fixed badge names reverting to language codes when search is active (use `FocusLanguage.all` instead of filtered list)
+- Language Focus: macOS search field fixed with `NSViewRepresentable` (`NSTextField.alignment = .left`) to bypass Form's trailing-aligned value field
+- Language Focus: search input resets on every sheet open
+
 ### Export Sheet Detail-Step Polish (iOS + macOS)
 - `Features/Share/ExportSheetFlowView.swift`
 - Export format preview in detail steps is intentionally shorter (line cap reduced from `14` to `11`) with trailing ellipsis when truncated.

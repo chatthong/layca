@@ -11,10 +11,13 @@
     - Acceleration sub-step:
       - Whisper ggml GPU Decode (toggle)
       - Whisper CoreML Encoder (toggle)
-    - Offline Model Switch sub-step (`Fast`, `Normal`, `Pro`)
+    - Whisper Models Switch sub-step (`Fast`, `Normal`, `Pro`) — downloadable on demand
 - On macOS, the same model-related settings are shown in the native settings workspace form.
 - macOS settings view is reachable from sidebar `Settings` and opens as a modal sheet flow.
-- Initial Advanced values (Acceleration + Offline Model Switch) are auto-detected by device and persisted; users can override anytime.
+- Initial Advanced values (Acceleration + Whisper Models Switch) are auto-detected by device and persisted; users can override anytime.
+- Whisper decoder models are **not bundled** — downloaded on demand via `WhisperModelDownloadManager` using `URLSessionDownloadTask` with browser User-Agent to bypass CDN blocking.
+- macOS requires `com.apple.security.network.client` entitlement for outbound downloads.
+- `WhisperModelDownloadManager` auto-activates the only downloaded model when no active model is set (on launch, after download, after delete).
 - `Time Display` default is `Friendly` and persists in app settings (`mainTimerDisplayStyleRawValue`).
 
 ## Current Runtime Assets
