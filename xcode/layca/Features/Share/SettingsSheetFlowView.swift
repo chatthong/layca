@@ -1,4 +1,38 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+
+private struct LeadingTextField: NSViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField()
+        field.placeholderString = placeholder
+        field.isBordered = false
+        field.drawsBackground = false
+        field.alignment = .left
+        field.focusRingType = .none
+        field.delegate = context.coordinator
+        return field
+    }
+
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        if nsView.stringValue != text { nsView.stringValue = text }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        @Binding var text: String
+        init(text: Binding<String>) { _text = text }
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            text = field.stringValue
+        }
+    }
+}
+#endif
 
 enum SettingsMicrophonePermissionState: Sendable {
     case granted
@@ -233,9 +267,7 @@ struct SettingsSheetFlowView: View {
 #if os(iOS)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        settingsSheetCloseButton {
-                            dismiss()
-                        }
+                        settingsSheetCloseButton { dismiss() }
                     }
                 }
 #endif
@@ -388,7 +420,7 @@ struct SettingsSheetFlowView: View {
 
             NavigationLink(value: SettingsStep.offlineModelSwitch) {
                 settingsRowLabel(
-                    title: "Offline Model Switch",
+                    title: "Whisper Models Switch",
                     subtitle: "Pick local model profile",
                     symbol: "externaldrive.badge.checkmark"
                 )
@@ -470,27 +502,60 @@ private struct SettingsLanguageFocusStepView: View {
     let filteredFocusLanguages: [FocusLanguage]
     let groupedFocusLanguages: [LanguageRegionGroup]
 
+    private func languageName(for code: String) -> String {
+        FocusLanguage.all.first(where: { $0.code == code })?.name ?? code
+    }
+
     var body: some View {
         SettingsStepContainer {
             Section {
                 Text("Choose focus languages by region for a cleaner multi-step flow.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
 
-                LabeledContent("Selected") {
-                    Text("\(selectedLanguageCodes.count)")
-                        .fontWeight(.semibold)
-                }
-
-                LabeledContent("Shown") {
-                    Text("\(filteredFocusLanguages.count)")
-                        .fontWeight(.semibold)
+            if !selectedLanguageCodes.isEmpty {
+                Section("Selected") {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(Array(selectedLanguageCodes).sorted(), id: \.self) { code in
+                                HStack(spacing: 4) {
+                                    Text(languageName(for: code))
+                                        .font(.caption.weight(.medium))
+                                    Button {
+                                        selectedLanguageCodes.remove(code)
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 9, weight: .bold))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+                                .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.2), lineWidth: 0.5))
+                                .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
             }
 
             Section("Search") {
-                TextField("Search name / code (en, eng)", text: $languageSearchText)
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    #if os(macOS)
+                    LeadingTextField(text: $languageSearchText, placeholder: "Name / code (en, eng)")
+                    #else
+                    TextField(text: $languageSearchText, prompt: Text("Name / code (en, eng)")) {
+                        EmptyView()
+                    }
+                    .textFieldStyle(.plain)
                     .laycaApplyTextInputAutocorrectionPolicy()
+                    #endif
+                }
             }
 
             Section("Regions") {
@@ -517,6 +582,7 @@ private struct SettingsLanguageFocusStepView: View {
         }
         .navigationTitle("Language Focus")
         .applyStepTitleDisplayMode()
+        .onAppear { languageSearchText = "" }
     }
 }
 
@@ -782,8 +848,6 @@ private struct SettingsSheetCloseControlModifier: ViewModifier {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 HStack {
                     Spacer()
-                    Button("Cancel", action: onClose)
-                        .keyboardShortcut(.cancelAction)
                     Button("OK", action: onClose)
                         .keyboardShortcut(.defaultAction)
                 }

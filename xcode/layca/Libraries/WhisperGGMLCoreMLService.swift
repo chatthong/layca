@@ -92,8 +92,8 @@ actor WhisperGGMLCoreMLService {
         static let lowConfidenceLanguageProbabilityThreshold: Float = 0.5
     }
 
-    private let fileManager: FileManager
-    private let rootDirectory: URL
+    nonisolated private let fileManager: FileManager
+    nonisolated private let rootDirectory: URL
     private var context: OpaquePointer?
     private var activeModelPath: String?
     private var didWarmupInference = false
@@ -936,7 +936,7 @@ actor WhisperGGMLCoreMLService {
         return nil
     }
 
-    private func isValidModelFile(at url: URL, minimumFileSizeBytes: Int64) -> Bool {
+    nonisolated private func isValidModelFile(at url: URL, minimumFileSizeBytes: Int64) -> Bool {
         guard fileManager.fileExists(atPath: url.path) else {
             return false
         }

@@ -96,27 +96,33 @@ struct WhisperModelPickerView: View {
     var onDismiss: () -> Void
 
     var body: some View {
-        NavigationStack {
+        Group {
+            #if os(macOS)
+            Form {
+                if context == .gate {
+                    gateBannerSection
+                }
+                modelCardsSection
+            }
+            .formStyle(.grouped)
+            #else
             List {
                 if context == .gate {
                     gateBannerSection
                 }
                 modelCardsSection
             }
-            #if os(iOS)
             .listStyle(.insetGrouped)
-            #else
-            .listStyle(.inset)
             #endif
-            .navigationTitle(context == .gate ? "Choose a Model" : "Whisper Models")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar { toolbarContent }
-            .interactiveDismissDisabled(context == .gate)
-            .task {
-                await manager.refreshStates(activeProfile: activeProfile)
-            }
+        }
+        .navigationTitle(context == .gate ? "Choose a Model" : "Whisper Models")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar { toolbarContent }
+        .interactiveDismissDisabled(context == .gate)
+        .task {
+            await manager.refreshStates(activeProfile: activeProfile)
         }
         #if os(iOS)
         .presentationDetents([.large])
@@ -164,7 +170,8 @@ struct WhisperModelPickerView: View {
                         if context == .gate {
                             onDismiss()
                         }
-                    }
+                    },
+                    onDelete: { manager.delete(profile: model.profile) }
                 )
             }
         }
@@ -174,27 +181,18 @@ struct WhisperModelPickerView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        #if os(iOS)
         if context == .settings {
-            #if os(iOS)
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .topBarTrailing) {
                 Button { onDismiss() } label: {
                     Image(systemName: "xmark")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.secondary)
                 }
                 .accessibilityLabel("Close")
             }
-            #elseif os(macOS)
-            ToolbarItem(placement: .cancellationAction) {
-                Button { onDismiss() } label: {
-                    Image(systemName: "xmark")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityLabel("Close")
-            }
-            #endif
         }
+        #else
+        ToolbarItem(placement: .automatic) { EmptyView() }
+        #endif
     }
 }
 
@@ -207,34 +205,42 @@ private struct WhisperModelCardRow: View {
     let onDownload: () -> Void
     let onCancel: () -> Void
     let onActivate: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            modelIcon
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(model.displayName)
-                        .font(.body.weight(.semibold))
-                    Text(model.fileSize)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                }
-                Text(model.description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                badgePills
-                if let error = errorMessage {
-                    Text(error)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(model.displayName)
+                            .font(.body.weight(.semibold))
+                        Text(model.fileSize)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
+                    Text(model.description)
                         .font(.caption)
-                        .foregroundStyle(.red)
-                        .padding(.top, 2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let error = errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .padding(.top, 2)
+                    }
+                }
+                Spacer(minLength: 8)
+                actionControl
+                    .frame(width: PickerLayout.actionControlWidth, alignment: .trailing)
+            }
+            HStack(alignment: .center, spacing: 0) {
+                badgePills
+                Spacer(minLength: 0)
+                if state == .downloaded || state == .active {
+                    deleteButton
                 }
             }
-            Spacer(minLength: 8)
-            actionControl
-                .frame(width: PickerLayout.actionControlWidth, alignment: .trailing)
         }
         .padding(.vertical, PickerLayout.rowVerticalPad)
         .accessibilityElement(children: .combine)
@@ -267,72 +273,67 @@ private struct WhisperModelCardRow: View {
         .padding(.top, 2)
     }
 
+    private var deleteButton: some View {
+        Button(action: onDelete) {
+            Text("Remove")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Remove \(model.displayName)")
+    }
+
     @ViewBuilder
     private var actionControl: some View {
         switch state {
         case .notDownloaded:
             Button(action: onDownload) {
-                Text("Download")
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(Capsule().fill(Color.accentColor))
-                    .foregroundStyle(.white)
+                Image(systemName: "arrow.down")
+                    .frame(width: 22, height: 22)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.circle)
             .accessibilityLabel("Download \(model.displayName)")
 
         case .downloading(let progress):
-            VStack(alignment: .center, spacing: 4) {
-                Button(action: onCancel) {
-                    ZStack {
-                        Circle()
-                            .stroke(Color.accentColor.opacity(0.2),
-                                    lineWidth: PickerLayout.progressRingLineWidth)
-                        Circle()
-                            .trim(from: 0, to: progress)
-                            .stroke(Color.accentColor,
-                                    style: StrokeStyle(lineWidth: PickerLayout.progressRingLineWidth,
-                                                       lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                            .animation(.linear(duration: 0.25), value: progress)
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.accentColor)
-                    }
-                    .frame(width: PickerLayout.progressRingSize,
-                           height: PickerLayout.progressRingSize)
+            Button(action: onCancel) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.accentColor.opacity(0.25),
+                                lineWidth: PickerLayout.progressRingLineWidth)
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(Color.accentColor,
+                                style: StrokeStyle(lineWidth: PickerLayout.progressRingLineWidth,
+                                                   lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 0.25), value: progress)
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Color.accentColor)
                 }
-                .buttonStyle(.plain)
-                Text("\(Int(progress * 100))%")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                .frame(width: 30, height: 30)
             }
+            .buttonStyle(.plain)
             .accessibilityLabel("Downloading \(model.displayName), \(Int(progress * 100)) percent. Tap to cancel.")
 
         case .downloaded:
-            Button(action: onActivate) {
-                Text("Use")
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(Capsule().strokeBorder(Color.accentColor, lineWidth: 1.5))
-                    .foregroundStyle(Color.accentColor)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Use \(model.displayName)")
+            Button("Use", action: onActivate)
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.regular)
+                .padding(.vertical, -3)
+                .accessibilityLabel("Use \(model.displayName)")
 
         case .active:
-            HStack(spacing: 4) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.green)
-                Text("Active")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.green)
-            }
-            .accessibilityLabel("\(model.displayName) is active")
+            Button("Active") {}
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.regular)
+                .padding(.vertical, -3)
+                .tint(.green)
+                .allowsHitTesting(false)
+                .accessibilityLabel("\(model.displayName) is active")
         }
     }
 }

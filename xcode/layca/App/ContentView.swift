@@ -35,18 +35,20 @@ struct ContentView: View {
             settingsSheetScreen
         }
         .sheet(isPresented: $backend.showModelPickerSheet) {
-            WhisperModelPickerView(
-                context: .gate,
-                activeProfile: backend.whisperModelProfile,
-                manager: backend.modelDownloadManager,
-                onActivate: { profile in
-                    backend.whisperModelProfile = profile
-                    backend.modelDownloadManager.markActive(profile)
-                },
-                onDismiss: {
-                    backend.showModelPickerSheet = false
-                }
-            )
+            NavigationStack {
+                WhisperModelPickerView(
+                    context: .gate,
+                    activeProfile: backend.whisperModelProfile,
+                    manager: backend.modelDownloadManager,
+                    onActivate: { profile in
+                        backend.whisperModelProfile = profile
+                        backend.modelDownloadManager.markActive(profile)
+                    },
+                    onDismiss: {
+                        backend.showModelPickerSheet = false
+                    }
+                )
+            }
         }
     }
 }

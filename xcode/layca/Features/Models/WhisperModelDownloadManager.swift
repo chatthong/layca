@@ -11,6 +11,60 @@ enum WhisperModelDownloadState: Equatable {
     case active
 }
 
+// MARK: - Download Delegate
+
+private final class ModelDownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+
+    private let destination: URL
+    private let minimumBytes: Int64
+    private let onProgress: (Double) -> Void
+    private let onComplete: (Result<Void, Error>) -> Void
+    private var finished = false
+
+    init(destination: URL, minimumBytes: Int64,
+         onProgress: @escaping (Double) -> Void,
+         onComplete: @escaping (Result<Void, Error>) -> Void) {
+        self.destination = destination
+        self.minimumBytes = minimumBytes
+        self.onProgress = onProgress
+        self.onComplete = onComplete
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didWriteData _: Int64, totalBytesWritten: Int64,
+                    totalBytesExpectedToWrite: Int64) {
+        let effectiveTotal = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : minimumBytes
+        let progress = min(Double(totalBytesWritten) / Double(effectiveTotal), 0.99)
+        onProgress(progress)
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didFinishDownloadingTo location: URL) {
+        guard !finished else { return }
+        finished = true
+        do {
+            let attrs = try FileManager.default.attributesOfItem(atPath: location.path)
+            let size = attrs[.size] as? Int64 ?? 0
+            guard size >= minimumBytes else {
+                throw URLError(.cannotDecodeContentData)
+            }
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.moveItem(at: location, to: destination)
+            onComplete(.success(()))
+        } catch {
+            onComplete(.failure(error))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard !finished, let error else { return }
+        finished = true
+        onComplete(.failure(error))
+    }
+}
+
 // MARK: - Download Manager
 
 @MainActor
@@ -41,6 +95,7 @@ final class WhisperModelDownloadManager: ObservableObject {
                 states[profile] = .notDownloaded
             }
         }
+        autoActivateIfOnlyOne()
     }
 
     /// True if any profile has a downloaded or active model on disk.
@@ -48,7 +103,7 @@ final class WhisperModelDownloadManager: ObservableObject {
         states.values.contains { $0 == .downloaded || $0 == .active }
     }
 
-    /// Begins downloading the model binary from HuggingFace with live progress.
+    /// Downloads the model binary using a native URLSessionDownloadTask for full speed.
     func download(profile: WhisperModelProfile) {
         guard downloadTasks[profile] == nil else { return }
         downloadErrors[profile] = nil
@@ -60,91 +115,35 @@ final class WhisperModelDownloadManager: ObservableObject {
                 try service.prepareCacheDirectory()
 
                 guard let remoteURL = service.remoteDownloadURL(for: profile) else {
-                    await MainActor.run {
-                        self.states[profile] = .notDownloaded
-                        self.downloadErrors[profile] = "No download URL configured for this model."
-                        self.downloadTasks[profile] = nil
-                    }
+                    states[profile] = .notDownloaded
+                    downloadErrors[profile] = "No download URL configured for this model."
+                    downloadTasks[profile] = nil
                     return
                 }
 
                 let (destination, minimumBytes) = service.cacheDestination(for: profile)
 
-                let (asyncBytes, response) = try await URLSession.shared.bytes(from: remoteURL)
-                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                    throw URLError(.badServerResponse)
-                }
+                var request = URLRequest(url: remoteURL)
+                request.setValue(
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+                    forHTTPHeaderField: "User-Agent")
+                request.setValue("*/*", forHTTPHeaderField: "Accept")
 
-                let totalBytes = response.expectedContentLength
-                let tempURL = destination.deletingLastPathComponent()
-                    .appendingPathComponent(destination.lastPathComponent + ".tmp")
+                try await withNativeDownload(request: request, destination: destination,
+                                             minimumBytes: minimumBytes, profile: profile)
 
-                FileManager.default.createFile(atPath: tempURL.path, contents: nil)
-                let handle = try FileHandle(forWritingTo: tempURL)
-                var buffer = Data(capacity: 262_144) // 256 KB write buffer
-                var receivedBytes: Int64 = 0
-
-                for try await byte in asyncBytes {
-                    buffer.append(byte)
-                    receivedBytes += 1
-
-                    if buffer.count >= 262_144 {
-                        try handle.write(contentsOf: buffer)
-                        buffer.removeAll(keepingCapacity: true)
-                    }
-
-                    if receivedBytes % 65_536 == 0 {
-                        let progress = totalBytes > 0 ? Double(receivedBytes) / Double(totalBytes) : 0
-                        await MainActor.run {
-                            self.states[profile] = .downloading(progress: progress)
-                        }
-                    }
-
-                    if Task.isCancelled { break }
-                }
-
-                // Flush remaining bytes
-                if !buffer.isEmpty {
-                    try handle.write(contentsOf: buffer)
-                }
-                try handle.close()
-
-                if Task.isCancelled {
-                    try? FileManager.default.removeItem(at: tempURL)
-                    await MainActor.run {
-                        self.states[profile] = .notDownloaded
-                        self.downloadTasks[profile] = nil
-                    }
-                    return
-                }
-
-                let attrs = try FileManager.default.attributesOfItem(atPath: tempURL.path)
-                let size = attrs[.size] as? Int64 ?? 0
-                guard size >= minimumBytes else {
-                    try? FileManager.default.removeItem(at: tempURL)
-                    throw URLError(.cannotDecodeContentData)
-                }
-
-                if FileManager.default.fileExists(atPath: destination.path) {
-                    try FileManager.default.removeItem(at: destination)
-                }
-                try FileManager.default.moveItem(at: tempURL, to: destination)
-
-                await MainActor.run {
-                    self.states[profile] = .downloaded
-                    self.downloadTasks[profile] = nil
-                }
+                states[profile] = .downloaded
+                downloadTasks[profile] = nil
+                autoActivateIfOnlyOne()
 
             } catch {
                 let isCancelled = error is CancellationError
                     || (error as? URLError)?.code == .cancelled
-                await MainActor.run {
-                    self.states[profile] = .notDownloaded
-                    if !isCancelled {
-                        self.downloadErrors[profile] = error.localizedDescription
-                    }
-                    self.downloadTasks[profile] = nil
+                states[profile] = .notDownloaded
+                if !isCancelled {
+                    downloadErrors[profile] = error.localizedDescription
                 }
+                downloadTasks[profile] = nil
             }
         }
     }
@@ -156,6 +155,16 @@ final class WhisperModelDownloadManager: ObservableObject {
         downloadErrors[profile] = nil
     }
 
+    /// Deletes the cached model file from disk and resets state to notDownloaded.
+    func delete(profile: WhisperModelProfile) {
+        guard downloadTasks[profile] == nil else { return }
+        let (destination, _) = service.cacheDestination(for: profile)
+        try? FileManager.default.removeItem(at: destination)
+        states[profile] = .notDownloaded
+        downloadErrors[profile] = nil
+        autoActivateIfOnlyOne()
+    }
+
     /// Marks a profile as the active model. Demotes any previously active profile to downloaded.
     func markActive(_ profile: WhisperModelProfile) {
         for p in WhisperModelProfile.allCases where states[p] == .active {
@@ -163,4 +172,50 @@ final class WhisperModelDownloadManager: ObservableObject {
         }
         states[profile] = .active
     }
+
+    // MARK: - Private
+
+    /// If exactly one model is on disk and none are active yet, mark it active automatically.
+    private func autoActivateIfOnlyOne() {
+        let hasActive = states.values.contains { $0 == .active }
+        guard !hasActive else { return }
+        let downloaded = states.filter { $0.value == .downloaded }
+        guard downloaded.count == 1, let profile = downloaded.keys.first else { return }
+        states[profile] = .active
+    }
+
+    private func withNativeDownload(request: URLRequest, destination: URL,
+                                    minimumBytes: Int64, profile: WhisperModelProfile) async throws {
+        // Wrap URLSessionDownloadTask in async/await with proper cancellation support.
+        let sessionBox = SessionBox()
+
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let delegate = ModelDownloadDelegate(
+                    destination: destination,
+                    minimumBytes: minimumBytes,
+                    onProgress: { [weak self] progress in
+                        Task { @MainActor [weak self] in
+                            self?.states[profile] = .downloading(progress: progress)
+                        }
+                    },
+                    onComplete: { result in
+                        continuation.resume(with: result)
+                    }
+                )
+                let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+                sessionBox.session = session
+                session.downloadTask(with: request).resume()
+            }
+        } onCancel: {
+            sessionBox.session?.invalidateAndCancel()
+        }
+    }
+}
+
+// MARK: - Helpers
+
+/// Sendable reference box so the cancellation handler can reach the session.
+private final class SessionBox: @unchecked Sendable {
+    var session: URLSession?
 }
